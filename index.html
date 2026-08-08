@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>班守 ShiftGuard｜醫護排班治理平台</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">SG</div>
+    <div class="brand-text">
+      <div class="brand-name">班守 ShiftGuard</div>
+      <div class="brand-sub">醫護排班治理平台 ／ 模組一：臨時缺班替補</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span class="badge badge-demo">模擬資料 · 非真實人員</span>
+    <span class="badge badge-llm" id="llm-mode-badge">LLM 模式：載入中</span>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-screen="intake"><span class="tab-no">1</span>缺班事件</button>
+  <button class="tab" data-screen="candidates"><span class="tab-no">2</span>替補候選人</button>
+  <button class="tab" data-screen="confirm"><span class="tab-no">3</span>主管確認</button>
+  <button class="tab" data-screen="dashboard"><span class="tab-no">4</span>公平性與留痕</button>
+  <button class="tab" data-screen="roster"><span class="tab-no">5</span>班表與人員</button>
+  <button class="tab" data-screen="rules"><span class="tab-no">6</span>規則庫</button>
+</nav>
+
+<main>
+
+  <!-- ══ 1. 缺班事件建立 ══════════════════════════════ -->
+  <section class="screen active" id="screen-intake">
+    <div class="screen-head">
+      <h1>缺班事件建立</h1>
+      <p class="lede">護理長把人員的請假訊息貼進來，Agent 負責解析成結構化事件；<strong>訊息沒寫的欄位一律留空並主動追問</strong>，不自行補完。</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <h2>原始通報訊息</h2>
+          <span class="tag tag-neutral">來源：單位 LINE 群組（轉貼）</span>
+        </div>
+        <textarea id="raw-message" rows="6" spellcheck="false"></textarea>
+        <div class="q-hint" style="margin:10px 0 4px;color:var(--ink-faint)">通報人員（代號）</div>
+        <select id="ans-reporter"></select>
+        <button class="btn btn-primary" id="btn-parse">以 AI 解析通報訊息</button>
+        <p class="fineprint">
+          可直接改寫上方訊息再解析——日期、班別、事由、單位與資格都是從文字內容比對而來，改了會跟著變。
+          解析由語言模型負責；所有工時、資格、班距的計算則由確定性規則引擎執行，模型不參與。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>解析結果</h2></div>
+        <div id="parse-result" class="empty-state">尚未解析。請點左側按鈕。</div>
+      </div>
+    </div>
+
+    <div class="card" id="followup-card" hidden>
+      <div class="card-head">
+        <h2>Agent 追問</h2>
+        <span class="tag tag-warn" id="followup-note">條件不完整，需主管補充</span>
+      </div>
+      <div id="followup-body"></div>
+      <button class="btn btn-primary" id="btn-evaluate">確認缺班條件，開始尋找替補</button>
+    </div>
+  </section>
+
+  <!-- ══ 2. 替補候選人 ════════════════════════════════ -->
+  <section class="screen" id="screen-candidates">
+    <div class="screen-head">
+      <h1>替補候選人</h1>
+      <p class="lede">硬性約束先排除，軟性偏好再排序。<strong>每一位的分數都可攤開，每一筆排除都寫明原因與規則代碼。</strong></p>
+    </div>
+    <div id="gap-banner"></div>
+    <div id="candidates-body" class="empty-state">請先在「缺班事件」頁完成解析與確認。</div>
+  </section>
+
+  <!-- ══ 3. 主管確認 ══════════════════════════════════ -->
+  <section class="screen" id="screen-confirm">
+    <div class="screen-head">
+      <h1>主管確認摘要</h1>
+      <p class="lede">Agent 只提供建議，正式調班仍由授權主管決定。<strong>通知一律停在草稿，系統不會自動發送給員工，也不會寫入正式班表。</strong></p>
+    </div>
+    <div id="confirm-body" class="empty-state">請先在「替補候選人」頁選定人選。</div>
+  </section>
+
+  <!-- ══ 4. 公平性與留痕 ══════════════════════════════ -->
+  <section class="screen" id="screen-dashboard">
+    <div class="screen-head">
+      <h1>公平性儀表板與決策留痕</h1>
+      <p class="lede">替補不只要快，還要交代得出「為什麼是他」。這一頁把分配狀況與每一次決策攤在陽光下。</p>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <h2>近 30 天被叫班替補次數</h2>
+          <span class="tag tag-neutral">分配愈平均愈健康</span>
+        </div>
+        <div id="fairness-chart"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>決策留痕 Audit Log</h2></div>
+        <div id="audit-log"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 5. 班表與人員 ════════════════════════════════ -->
+  <section class="screen" id="screen-roster">
+    <div class="screen-head">
+      <h1>班表與人員</h1>
+      <p class="lede">系統輸入的三份資料：匿名化人員主檔、1 週現有班表、請假紀錄。全部為虛構代號資料。</p>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>現有班表</h2><span class="tag tag-neutral" id="week-label"></span></div>
+      <div class="table-scroll"><table id="roster-table"></table></div>
+      <div class="legend">
+        <span><i class="dot dot-d"></i>白班 07:00–15:00</span>
+        <span><i class="dot dot-e"></i>小夜 15:00–23:00</span>
+        <span><i class="dot dot-n"></i>大夜 23:00–07:00（跨日）</span>
+        <span><i class="dot dot-l"></i>請假</span>
+        <span><i class="dot dot-g"></i>缺班待補</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>人員主檔</h2><span class="tag tag-neutral">代號化，不使用姓名</span></div>
+      <div class="table-scroll"><table id="staff-table"></table></div>
+    </div>
+  </section>
+
+  <!-- ══ 6. 規則庫 ════════════════════════════════════ -->
+  <section class="screen" id="screen-rules">
+    <div class="screen-head">
+      <h1>規則庫 Rule Registry</h1>
+      <p class="lede">排班規則是<strong>可維護的資料，不是寫死的程式碼</strong>。護理部主管可自行調整門檻與權重，決策結果即時重算——這是「制度化」與「一次性腳本」的分界。</p>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>硬性約束</h2><span class="tag tag-danger">違反即排除</span></div>
+      <div id="hard-rules"></div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h2>軟性偏好權重</h2>
+        <span class="tag tag-neutral">權重總和 <b id="weight-sum"></b> 分</span>
+      </div>
+      <div id="soft-rules"></div>
+      <button class="btn btn-primary" id="btn-recalc">套用規則並重新計算排序</button>
+      <div id="recalc-result"></div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  職游 NaviCareer × AWS × 伊雲谷｜AI 職涯實戰營 DEMO DAY　第 4 組　題目（三）AI 醫護臨時缺班替補 Agent
+  <span class="footer-note">本平台僅提供替補建議與風險提示，不重排完整月班表、不自動通知員工、不自動核准正式班表。</span>
+</footer>
+
+<script src="src/data.js"></script>
+<script src="src/rules.js"></script>
+<script src="src/engine.js"></script>
+<script src="src/llm.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 編輯器
+.vscode/
+.idea/
+*.swp
+
+# Claude Code 本機設定（launch.json 保留，供團隊共用開發伺服器設定）
+.claude/settings.local.json
+
+# 相依套件（本專案無相依，保留以防日後加入）
+node_modules/
+
+# 暫存
+*.log
+tmp/
