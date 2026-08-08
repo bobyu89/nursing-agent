@@ -137,6 +137,7 @@ tests/engine.test.js        引擎邊界條件測試（瀏覽器與 CI 共用同
 tests/run-node.js           CI 用的 Node 測試 runner
 .github/workflows/test.yml  GitHub Actions：每次 push 自動跑引擎測試
 docs/CONTEXT.md             領域語義定義（自然週、連續天數、生命週期…的權威出處）
+docs/DEMO-SCRIPT.md         Demo Day 台本（逐幕動作、預期數字、挑戰應對）
 docs/proposal.md            完整提案素材
 ```
 
@@ -165,6 +166,10 @@ docs/proposal.md            完整提案素材
 
 - **`mock`（預設）** — 以關鍵詞規則實際比對輸入文字，改寫訊息結果會跟著變。**不是預錄腳本**，但理解能力弱於真實模型。離線可跑，確保現場不因網路或額度中斷。
 - **`api`** — 接真實模型（AWS Bedrock 或相容端點），需設定 `LLM.endpoint`。
+  任何一次呼叫失敗（斷網、額度、端點錯誤）都會**自動退回 mock 並在畫面標示**，演示不中斷。
+
+規則庫的調整會自動保存在本機瀏覽器（localStorage），重新整理不會遺失；
+「還原預設規則」可回到出廠設定。上場演示流程與逐幕台詞見 [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md)。
 
 ## 資料聲明
 

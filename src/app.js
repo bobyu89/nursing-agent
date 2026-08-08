@@ -67,6 +67,48 @@ function logAction(action, detail, actor = '內科病房 3A 護理長') {
   renderAuditLog();
 }
 
+/* ══ 規則庫持久化（localStorage）═══════════════════════════
+ * 只保存主管可調整的欄位（權重、門檻、啟用狀態），不保存規則文字，
+ * 因此程式更新規則描述時不會被舊快照蓋掉。
+ * 班表寫回與 audit log 刻意不持久化：重新整理即可重置演示。
+ */
+const RULES_STORE_KEY = 'shiftguard.rules.v1';
+
+function saveRules() {
+  try {
+    localStorage.setItem(RULES_STORE_KEY, JSON.stringify({
+      hard: RULE_REGISTRY.hard.map((r) => ({ code: r.code, enabled: r.enabled, param: r.param ? r.param.value : null })),
+      soft: RULE_REGISTRY.soft.map((r) => ({ code: r.code, weight: r.weight, param: r.param ? r.param.value : null })),
+    }));
+  } catch (e) { /* 無痕模式等情況拿不到 localStorage，略過即可 */ }
+}
+
+function loadRules() {
+  try {
+    const raw = localStorage.getItem(RULES_STORE_KEY);
+    if (!raw) return false;
+    const saved = JSON.parse(raw);
+    (saved.hard || []).forEach((s) => {
+      const r = getHardRule(s.code);
+      if (!r) return;
+      if (typeof s.enabled === 'boolean') r.enabled = s.enabled;
+      if (r.param && Number.isFinite(s.param)) r.param.value = s.param;
+    });
+    (saved.soft || []).forEach((s) => {
+      const r = RULE_REGISTRY.soft.find((x) => x.code === s.code);
+      if (!r) return;
+      if (Number.isFinite(s.weight)) r.weight = s.weight;
+      if (r.param && Number.isFinite(s.param)) r.param.value = s.param;
+    });
+    return true;
+  } catch (e) { return false; }
+}
+
+function resetRules() {
+  try { localStorage.removeItem(RULES_STORE_KEY); } catch (e) {}
+  location.reload();
+}
+
 /* ══ 分頁切換 ═══════════════════════════════════════════ */
 
 function switchScreen(name) {
@@ -611,21 +653,25 @@ function renderRules() {
       rule.weight = Number(el.value);
       $(`#wv-${rule.code}`).textContent = rule.weight;
       $('#weight-sum').textContent = totalSoftWeight();
+      saveRules();
     });
   });
   $$('[data-soft-param]').forEach((el) => {
     el.addEventListener('change', () => {
       RULE_REGISTRY.soft.find((r) => r.code === el.dataset.softParam).param.value = Number(el.value);
+      saveRules();
     });
   });
   $$('[data-hard]').forEach((el) => {
     el.addEventListener('change', () => {
       getHardRule(el.dataset.hard).param.value = Number(el.value);
+      saveRules();
     });
   });
   $$('[data-hard-enable]').forEach((el) => {
     el.addEventListener('change', () => {
       getHardRule(el.dataset.hardEnable).enabled = el.checked;
+      saveRules();
     });
   });
 }
@@ -702,6 +748,15 @@ function init() {
   installErrorSurface();
   $('#llm-mode-badge').textContent = `LLM 模式：${LLM.modeLabel}`;
   $('#raw-message').value = RAW_MESSAGE;
+
+  if (loadRules()) {
+    logAction('載入本機保存的規則設定',
+      `軟性權重 ${RULE_REGISTRY.soft.map((r) => `${r.code}=${r.weight}`).join('、')}（可按「還原預設規則」清除）`,
+      '班守 ShiftGuard');
+  }
+  $('#btn-rules-reset').addEventListener('click', () => {
+    if (confirm('確定要清除本機保存的規則調整，回到預設值嗎？頁面將重新載入。')) resetRules();
+  });
 
   STAFF.forEach((s) => { BASELINE_STANDBY[s.id] = s.standbyCount30d; });
   $('#ans-reporter').innerHTML = '<option value="">（訊息未識別通報人員）</option>' +

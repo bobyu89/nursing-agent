@@ -92,7 +92,10 @@ function matchFirst(list, text) {
  * 訊息中沒寫的欄位一律留空並轉為追問，Agent 不臆測。
  */
 async function llmParseGapMessage(rawText) {
-  if (LLM.mode === 'api') return llmCallApi('parse_gap', { rawText });
+  if (LLM.mode === 'api') {
+    try { return await llmCallApi('parse_gap', { rawText }); }
+    catch (err) { llmFallbackToMock(err); }
+  }
 
   await tick(600);
   const text = String(rawText || '');
@@ -163,7 +166,10 @@ function completeGapEvent(extracted, answers) {
  * 不做任何數值判斷或推估。
  */
 async function llmExplainCandidate(candidate, gap) {
-  if (LLM.mode === 'api') return llmCallApi('explain_candidate', { candidate, gap });
+  if (LLM.mode === 'api') {
+    try { return await llmCallApi('explain_candidate', { candidate, gap }); }
+    catch (err) { llmFallbackToMock(err); }
+  }
 
   await tick(200);
   const s = candidate.staff;
@@ -197,7 +203,10 @@ async function llmExplainCandidate(candidate, gap) {
 /* ── 4. 主管確認摘要與通知草稿 ─────────────────────────── */
 
 async function llmSupervisorSummary(result, chosen, delta) {
-  if (LLM.mode === 'api') return llmCallApi('supervisor_summary', { result, chosen, delta });
+  if (LLM.mode === 'api') {
+    try { return await llmCallApi('supervisor_summary', { result, chosen, delta }); }
+    catch (err) { llmFallbackToMock(err); }
+  }
 
   await tick(400);
   const gap = result.gap;
@@ -229,7 +238,10 @@ async function llmSupervisorSummary(result, chosen, delta) {
 }
 
 async function llmNotificationDraft(gap, chosen) {
-  if (LLM.mode === 'api') return llmCallApi('notification_draft', { gap, chosen });
+  if (LLM.mode === 'api') {
+    try { return await llmCallApi('notification_draft', { gap, chosen }); }
+    catch (err) { llmFallbackToMock(err); }
+  }
 
   await tick(300);
   // 誠實原則：引擎標記需額外核准（F1）時，草稿不得聲稱「均在規範內」
@@ -257,6 +269,21 @@ async function llmNotificationDraft(gap, chosen) {
  * 架構對應：前端 → API Gateway → Lambda → Amazon Bedrock。
  * DEMO 預設不啟用；若要現場接真實模型，設定 LLM.endpoint 後把 LLM.mode 改為 'api'。
  */
+/**
+ * Demo 保險：api 模式任何一次呼叫失敗（斷網、額度、端點錯誤），
+ * 立即退回 mock 模式並更新畫面標示，演示不中斷。
+ * 退回後不會自動切回 api——由主管自行決定何時重試。
+ */
+function llmFallbackToMock(err) {
+  LLM.mode = 'mock';
+  LLM.fallbackReason = err && err.message ? err.message : String(err);
+  if (typeof document !== 'undefined') {
+    const el = document.getElementById('llm-mode-badge');
+    if (el) el.textContent = `LLM 模式：${LLM.modeLabel}（api 失敗，已自動退回）`;
+  }
+  console.warn('LLM api 模式呼叫失敗，已自動退回 mock：', err);
+}
+
 async function llmCallApi(task, payload) {
   if (!LLM.endpoint) throw new Error('LLM api 模式未設定 endpoint');
   const res = await fetch(LLM.endpoint, {

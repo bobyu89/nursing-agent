@@ -197,3 +197,22 @@ test('訊息解析（async）：「我不能上班了」四項關鍵欄位全數
     ['date', 'requiredCerts', 'shift', 'unit'],
     '日期／班別／單位／資格皆未載明，應全部追問而非臆測');
 });
+
+test('api 模式呼叫失敗時自動退回 mock，演示不中斷', async () => {
+  const origFetch = globalThis.fetch;
+  const origMode = LLM.mode, origEndpoint = LLM.endpoint;
+  try {
+    LLM.mode = 'api';
+    LLM.endpoint = 'https://example.invalid/llm';
+    globalThis.fetch = () => { throw new Error('網路中斷'); };
+    const parsed = await llmParseGapMessage('明天的白班沒辦法上');
+    assertEqual(LLM.mode, 'mock', 'api 失敗後應自動切回 mock');
+    assertEqual(parsed.extracted.shift.value, 'D', '退回後應以 mock 規則完成解析，不留空白畫面');
+    assertEqual(parsed.extracted.date.value, '2026-08-09');
+  } finally {
+    globalThis.fetch = origFetch;
+    LLM.mode = origMode;
+    LLM.endpoint = origEndpoint;
+    delete LLM.fallbackReason;
+  }
+});
