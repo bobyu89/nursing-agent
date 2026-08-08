@@ -25,16 +25,22 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: linear-gradient(180deg, #e9f0f3 0%, var(--bg) 260px) no-repeat, var(--bg);
   color: var(--ink);
   font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", -apple-system, "Segoe UI", sans-serif;
   font-size: 15px;
   line-height: 1.7;
   -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
 }
 
-h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -.01em; }
+h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -.015em; text-wrap: balance; }
 b, strong { font-weight: 700; }
+
+button:focus-visible, .tab:focus-visible, a:focus-visible,
+input[type="checkbox"]:focus-visible, input[type="range"]:focus-visible {
+  outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px;
+}
 
 /* ── 頂列 ─────────────────────────────────────────────── */
 .topbar {
@@ -64,14 +70,17 @@ b, strong { font-weight: 700; }
 .tabs {
   display: flex; gap: 2px; padding: 0 28px; overflow-x: auto;
   background: var(--surface); border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 30;
 }
 .tab {
   appearance: none; border: 0; background: none; cursor: pointer;
   padding: 11px 15px 13px; font: inherit; font-size: 14px;
   color: var(--ink-soft); border-bottom: 2.5px solid transparent;
   display: flex; align-items: center; gap: 8px; white-space: nowrap;
+  transition: color .15s ease, border-color .15s ease;
 }
 .tab:hover { color: var(--ink); }
+.tab:active { transform: translateY(1px); }
 .tab.active { color: var(--brand-dark); border-bottom-color: var(--brand); font-weight: 700; }
 .tab-no {
   width: 19px; height: 19px; border-radius: 50%; flex: none;
@@ -132,13 +141,14 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--brand-tint)
   appearance: none; font: inherit; font-size: 14px; font-weight: 600;
   padding: 9px 17px; border-radius: 7px; cursor: pointer;
   border: 1px solid var(--line); background: var(--surface); color: var(--ink);
-  transition: .12s;
+  transition: background .18s ease, border-color .18s ease, transform .1s ease, box-shadow .18s ease;
 }
 .btn:hover { border-color: var(--ink-faint); }
+.btn:active { transform: translateY(1px) scale(.99); }
 .btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; margin-top: 12px; }
-.btn-primary:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
+.btn-primary:hover { background: var(--brand-dark); border-color: var(--brand-dark); box-shadow: 0 2px 8px rgba(15,109,122,.25); }
 .btn-sm { padding: 5px 12px; font-size: 13px; }
-.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 
 .fineprint { font-size: 12.5px; color: var(--ink-faint); margin: 10px 0 0; }
 
@@ -177,11 +187,14 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--brand-tint)
   border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--surface); margin-bottom: 12px; overflow: hidden;
   box-shadow: var(--shadow);
+  transition: border-color .18s ease, box-shadow .18s ease;
 }
+.cand:hover { box-shadow: 0 2px 4px rgba(22,33,46,.07), 0 8px 24px rgba(22,33,46,.08); }
 .cand.top { border-color: var(--brand); border-width: 1.5px; }
 .cand-head {
   display: flex; align-items: center; gap: 16px; padding: 15px 18px;
   cursor: pointer; flex-wrap: wrap;
+  transition: background .15s ease;
 }
 .cand-head:hover { background: #fbfcfd; }
 .rank {
@@ -197,12 +210,18 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--brand-tint)
 .score-num { font-weight: 800; font-size: 16px; text-align: right; }
 .score-num small { font-weight: 500; color: var(--ink-faint); font-size: 12px; }
 .bar { height: 6px; background: var(--line-soft); border-radius: 3px; overflow: hidden; margin-top: 4px; }
-.bar > i { display: block; height: 100%; background: var(--brand); border-radius: 3px; }
+.bar > i {
+  display: block; height: 100%; background: var(--brand); border-radius: 3px;
+  transform-origin: left center; animation: grow-bar .5s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes grow-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .cand-flags { display: flex; gap: 6px; flex-wrap: wrap; width: 100%; }
-.chev { color: var(--ink-faint); font-size: 12px; }
+.chev { color: var(--ink-faint); font-size: 12px; display: flex; align-items: center; gap: 5px; }
+.chev-arrow { display: inline-block; transition: transform .2s ease; font-size: 10px; }
+.cand.open .chev-arrow { transform: rotate(180deg); }
 
 .cand-body { display: none; padding: 0 18px 18px; border-top: 1px solid var(--line-soft); }
-.cand.open .cand-body { display: block; }
+.cand.open .cand-body { display: block; animation: fade .2s ease; }
 
 .verdict {
   padding: 11px 14px; border-radius: 7px; margin: 14px 0;
@@ -316,6 +335,8 @@ table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
 th { font-size: 12px; color: var(--ink-faint); font-weight: 700; background: #fbfcfd; }
 td.center, th.center { text-align: center; }
+tbody tr { transition: background .12s ease; }
+tbody tr:hover td { background: #f7fafb; }
 
 .cell {
   display: inline-block; min-width: 30px; padding: 2px 7px;
@@ -372,3 +393,31 @@ td.center, th.center { text-align: center; }
   padding: 18px 28px; font-size: 12.5px; color: var(--ink-faint); text-align: center;
 }
 .footer-note { display: block; margin-top: 4px; }
+
+/* ── 解析中的骨架載入（形狀對應解析結果的欄位列）───────── */
+.skeleton-rows { padding: 4px 0; }
+.sk-row {
+  display: grid; grid-template-columns: 92px 1fr; gap: 12px;
+  padding: 13px 0; border-bottom: 1px solid var(--line-soft);
+}
+.sk-row:last-child { border-bottom: 0; }
+.sk {
+  display: block; height: 13px; border-radius: 4px;
+  background: linear-gradient(90deg, var(--line-soft) 25%, #e7edf2 45%, var(--line-soft) 65%);
+  background-size: 200% 100%; animation: shimmer 1.1s linear infinite;
+}
+.sk-key { width: 70%; }
+.sk-val { width: 55%; }
+.sk-row:nth-child(2) .sk-val { width: 72%; }
+.sk-row:nth-child(4) .sk-val { width: 40%; }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* ── 動效偏好：使用者要求減少動態時全部關閉 ──────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  html { scroll-behavior: auto; }
+}

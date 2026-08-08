@@ -123,7 +123,11 @@ async function handleParse() {
   const btn = $('#btn-parse');
   btn.disabled = true;
   btn.textContent = '解析中…';
-  $('#parse-result').innerHTML = '<div class="empty-state">Agent 解析中…</div>';
+  // 骨架載入：形狀對應即將出現的五列解析結果，而不是一行文字
+  $('#parse-result').innerHTML = '<div class="skeleton-rows">' +
+    Array.from({ length: 5 }, () =>
+      '<div class="sk-row"><i class="sk sk-key"></i><i class="sk sk-val"></i></div>').join('') +
+    '</div>';
 
   const parsed = await llmParseGapMessage($('#raw-message').value);
   state.parsed = parsed;
@@ -324,7 +328,7 @@ async function renderCandidates() {
             <div class="score-num">${c.score.total} <small>/ ${c.score.maxTotal}</small></div>
             <div class="bar"><i style="width:${pct}%"></i></div>
           </div>
-          <div class="chev">▼ 展開評分卡</div>
+          <div class="chev"><span class="chev-arrow">▼</span>展開評分卡</div>
           ${c.flags.length ? `<div class="cand-flags">${c.flags.map((f) =>
             `<span class="flag flag-${f.level}">${f.needsApproval ? '⚠ 需核准 · ' : ''}${esc(f.text)}</span>`).join('')}</div>` : ''}
         </div>
