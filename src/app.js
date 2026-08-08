@@ -17,6 +17,21 @@ const state = {
 /** 開場時的替補次數基準值，用來標示本次連線期間的變化 */
 const BASELINE_STANDBY = {};
 
+/**
+ * 決策引擎實例：把資料層明確注入引擎。
+ * staff／shifts／registry 傳的是同一份參照，
+ * 規則庫設定頁的調整與主管確認後的寫回都會即時反映。
+ */
+const engine = createEngine({
+  staff: STAFF,
+  shifts: SHIFTS,
+  shiftTypes: SHIFT_TYPES,
+  roleLevels: ROLE_LEVELS,
+  certs: CERTS,
+  units: UNITS,
+  registry: RULE_REGISTRY,
+});
+
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
@@ -122,7 +137,14 @@ async function handleParse() {
 
 function handleEvaluate() {
   const answers = { reporterStaffId: $('#ans-reporter').value || null };
-  if ($('#ans-date')) answers.date = $('#ans-date').value.trim();
+  if ($('#ans-date')) {
+    // 追問欄位被清空也要擋下來，否則會帶著 null 日期進引擎
+    answers.date = $('#ans-date').value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(answers.date)) {
+      alert('日期格式請填 YYYY-MM-DD。');
+      return;
+    }
+  }
   if ($('#ans-shift')) answers.shift = $('#ans-shift').value;
   if ($('#ans-unit')) answers.unit = $('#ans-unit').value;
   if ($$('.ans-cert').length) {
@@ -132,15 +154,11 @@ function handleEvaluate() {
       return;
     }
   }
-  if (answers.date && !/^\d{4}-\d{2}-\d{2}$/.test(answers.date)) {
-    alert('日期格式請填 YYYY-MM-DD。');
-    return;
-  }
 
   state.gap = completeGapEvent(state.parsed.extracted, answers);
   state.chosen = null;
   state.confirmed = false;
-  state.result = evaluateGap(state.gap);
+  state.result = engine.evaluateGap(state.gap);
 
   const g = state.gap;
   logAction('確認缺班條件',
@@ -181,7 +199,7 @@ function renderShortfall(candidates) {
   if (candidates.length >= 3) return '';
 
   const zero = candidates.length === 0;
-  const opts = relaxationAnalysis(state.gap);
+  const opts = engine.relaxationAnalysis(state.gap);
   const legal = opts.filter((o) => !o.relax.allowed);
   const soft = opts.filter((o) => o.relax.allowed);
 
@@ -220,6 +238,27 @@ function renderShortfall(candidates) {
     </div>`;
 }
 
+/**
+ * 「Excel 看不出來」的排除：班表上當日沒班、也沒請假，
+ * 卻因工時規則（H4／H5／H6）被排除的人。依當次評估結果動態產生，
+ * 缺班條件改變時這段話會跟著變，不會殘留與事實不符的敘述。
+ */
+function renderInvisibleExclusionNote(excluded) {
+  const invisible = excluded.filter((e) =>
+    !e.isOriginal &&
+    e.violations.length > 0 &&
+    e.violations.every((v) => ['H4', 'H5', 'H6'].includes(v.code)));
+  if (invisible.length === 0) return '';
+
+  const who = invisible.map((e) =>
+    `<b>${e.staff.id}</b>（${[...new Set(e.violations.map((v) => v.code))].join('、')}）`).join('、');
+  return `
+      <p class="fineprint">
+        ★ 特別注意 ${who}：班表上當日「沒有班」，用 Excel 篩「有空的人」都會被選出來，
+        但工時規則已將${invisible.length > 1 ? '他們' : '他'}排除——這正是規則引擎存在的意義。
+      </p>`;
+}
+
 async function renderCandidates() {
   renderGapBanner();
   const { candidates, excluded } = state.result;
@@ -228,7 +267,8 @@ async function renderCandidates() {
 
   const candHtml = candidates.map((c, i) => {
     const ex = explains[i];
-    const pct = (c.score.total / c.score.maxTotal) * 100;
+    // 權重全數歸零時 maxTotal 為 0，避免除以零產生 NaN
+    const pct = c.score.maxTotal > 0 ? (c.score.total / c.score.maxTotal) * 100 : 0;
     return `
       <div class="cand${c.rank === 1 ? ' top' : ''}" data-idx="${i}">
         <div class="cand-head js-toggle">
@@ -314,10 +354,7 @@ async function renderCandidates() {
         <span class="tag tag-danger">${excluded.length} 位遭排除，逐筆註明原因</span>
       </div>
       ${exclHtml}
-      <p class="fineprint">
-        ★ 特別注意 <b>N-07</b> 與 <b>N-09</b>：兩人在班表上當日都「沒有班」，用 Excel 篩選會被列為可用，
-        但一位是大夜剛下班、一位已連上 6 天——這正是規則引擎存在的意義。
-      </p>
+      ${renderInvisibleExclusionNote(excluded)}
     </div>`;
 
   $$('#candidates-body .js-toggle').forEach((h) => {
@@ -339,12 +376,17 @@ function renderConfirmPlaceholder() {
 }
 
 async function chooseCandidate(idx) {
+  // 生命週期鎖：已確認結案的缺班事件不得重新選人，避免重複寫回班表
+  if (state.confirmed) {
+    alert('本筆缺班事件已確認結案。若要重新評估，請回「缺班事件」頁重新確認條件，建立新的評估。');
+    return;
+  }
   const chosen = state.result.candidates[idx];
   state.chosen = chosen;
   state.confirmed = false;
   logAction('選定替補人選', `${chosen.staff.id}（排序第 ${chosen.rank} 名，加權總分 ${chosen.score.total}）`);
 
-  const delta = scheduleDelta(state.gap, chosen.staff.id);
+  const delta = engine.scheduleDelta(state.gap, chosen.staff.id);
   const [summary, draft] = await Promise.all([
     llmSupervisorSummary(state.result, chosen, delta),
     llmNotificationDraft(state.gap, chosen),
@@ -420,7 +462,7 @@ async function chooseCandidate(idx) {
     $('#btn-confirm').textContent = '已完成確認 ✓';
     $('#btn-confirm').disabled = true;
     // 寫回：班次進入班表、替補次數累計 → 下一次評估會看到新的公平性狀態
-    applyReplacement(state.gap, chosen.staff.id);
+    engine.applyReplacement(state.gap, chosen.staff.id);
     logAction('主管確認替補',
       `核定 ${chosen.staff.id} 替補 ${shortDate(state.gap.date)} ${SHIFT_TYPES[state.gap.shift].name}` +
       `${chosen.needsApproval ? '（含需額外核准事項）' : ''}；正式調班登錄由主管於院內系統執行`);
@@ -493,10 +535,10 @@ function renderRoster() {
       if (!gapFilled && gap.originalStaffId === s.id && d === gap.date) {
         return '<td class="center"><span class="cell cell-G">缺班</span></td>';
       }
-      if (isOnLeave(s, d)) return '<td class="center"><span class="cell cell-L">假</span></td>';
+      if (engine.isOnLeave(s, d)) return '<td class="center"><span class="cell cell-L">假</span></td>';
       return '<td class="center" style="color:var(--ink-faint)">·</td>';
     }).join('');
-    return `<tr><td><b>${s.id}</b></td><td>${s.role}</td>${cells}<td class="center">${weeklyHours(s.id)} 小時</td></tr>`;
+    return `<tr><td><b>${s.id}</b></td><td>${s.role}</td>${cells}<td class="center">${engine.weeklyHours(s.id, WEEK.start)} 小時</td></tr>`;
   }).join('');
 
   $('#roster-table').innerHTML = head + `<tbody>${body}</tbody>`;
@@ -594,8 +636,21 @@ function handleRecalc() {
       '<div class="recalc-out">請先在「缺班事件」頁完成解析與確認，再回來調整規則。</div>';
     return;
   }
+  // 生命週期鎖：已結案的事件不重算——替補班次已寫回班表，重算會把剛指派的人
+  // 因 H2 排除，出現「已補完卻顯示缺口」的矛盾畫面。規則調整仍已生效，
+  // 會套用在下一筆缺班評估。
+  if (state.confirmed) {
+    $('#recalc-result').innerHTML =
+      '<div class="recalc-out"><b>本筆缺班事件已確認結案，不再重算。</b>' +
+      '規則調整已儲存，將套用於下一筆缺班評估；' +
+      '若要重新評估，請回「缺班事件」頁重新確認條件，建立新的評估。</div>';
+    logAction('調整規則庫（事件已結案，未重算）',
+      `軟性權重 ${RULE_REGISTRY.soft.map((r) => `${r.code}=${r.weight}`).join('、')}`,
+      '護理部 排班規則管理員');
+    return;
+  }
   const before = state.result.candidates.map((c) => c.staff.id);
-  state.result = evaluateGap(state.gap);
+  state.result = engine.evaluateGap(state.gap);
   const after = state.result.candidates.map((c) => c.staff.id);
 
   $('#recalc-result').innerHTML = `

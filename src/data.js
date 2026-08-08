@@ -3,7 +3,7 @@
  *
  * 【重要聲明】
  * 本檔所有人員、班表、請假、資格資料皆為虛構，僅用於 DEMO DAY 演示。
- * 人員一律以代號呈現（N-01 ~ N-10），不使用任何真實或虛構姓名。
+ * 人員一律以代號呈現（N-01 ~ N-11），不使用任何真實或虛構姓名。
  * 不含任何病患資料、病歷或可識別個人之內容。
  */
 
@@ -231,5 +231,11 @@ const GAP_EVENT = {
   contextNote: '當日排定 2 名化學治療病人給藥，故需具備化療給藥資格。',
 };
 
-/* ── 中文星期 ───────────────────────────────────────────── */
-const WEEKDAY_TW = ['日', '一', '二', '三', '四', '五', '六'];
+/* 中文星期常數（WEEKDAY_TW）已移至 src/engine.js 的日期工具區 */
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    SHIFT_TYPES, UNITS, CERTS, ROLE_LEVELS, WEEK, WEEK_DATES,
+    STAFF, SHIFTS, RAW_MESSAGE, GAP_EVENT,
+  };
+}

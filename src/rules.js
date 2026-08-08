@@ -139,3 +139,7 @@ function getHardRule(code) {
 function totalSoftWeight() {
   return RULE_REGISTRY.soft.reduce((sum, r) => sum + r.weight, 0);
 }
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { RULE_REGISTRY, getHardParam, getSoftParam, getSoftWeight, getHardRule, totalSoftWeight };
+}

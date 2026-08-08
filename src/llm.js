@@ -75,7 +75,7 @@ function parseDateFromText(text, ref) {
     const refDow = parseDate(ref).getDay();
     let delta = (target - refDow + 7) % 7;
     if (delta === 0) delta = 7;               // 「禮拜X」指的是下一個，不是今天
-    if (wd[1]) delta += 7;                    // 「下禮拜X」再往後一週
+    delta += 7 * wd[1].length;                // 每一個「下」再往後一週（下下禮拜X = +14）
     return { value: addDays(ref, delta), source: `訊息中「${wd[0].replace(/\s/g, '')}」，以通報日 ${ref}（${weekdayOf(ref)}）推算` };
   }
   return null;
@@ -171,13 +171,13 @@ async function llmExplainCandidate(candidate, gap) {
   const strengths = [];
   const concerns = [];
 
-  if (bd.S2.ratio >= 0.75) strengths.push(`本週僅排 ${candidate.score.base} 小時，替補後 ${candidate.score.projected} 小時，工時餘裕充足`);
-  else if (bd.S2.ratio <= 0.4) concerns.push(`替補後週工時將達 ${candidate.score.projected} 小時，餘裕有限`);
+  if (bd.S2.ratio >= 0.75) strengths.push(`缺班當週僅排 ${candidate.score.base} 小時，替補後 ${candidate.score.projected} 小時，工時餘裕充足`);
+  else if (bd.S2.ratio <= 0.4) concerns.push(`替補後當週工時將達 ${candidate.score.projected} 小時，餘裕有限`);
 
   if (bd.S1.ratio >= 0.75) strengths.push(`近 30 天僅被叫班 ${s.standbyCount30d} 次，指派他有助於平衡班別分配`);
   else if (bd.S1.ratio <= 0.4) concerns.push(`近 30 天已被叫班 ${s.standbyCount30d} 次，再次指派會加深分配不均`);
 
-  if (bd.S3.ratio >= 0.75) strengths.push(`本週固定上${SHIFT_TYPES[gap.shift].name}，作息銜接自然`);
+  if (bd.S3.ratio >= 0.75) strengths.push(`缺班當週固定上${SHIFT_TYPES[gap.shift].name}，作息銜接自然`);
   if (bd.S4.ratio === 1) strengths.push('本人已自填願意支援此班別');
   else if (bd.S4.ratio === 0) concerns.push('本人未將此班別列入願意支援範圍');
   if (bd.S5.ratio === 1) strengths.push('本單位人員，熟悉病人與流程');
@@ -232,14 +232,20 @@ async function llmNotificationDraft(gap, chosen) {
   if (LLM.mode === 'api') return llmCallApi('notification_draft', { gap, chosen });
 
   await tick(300);
+  // 誠實原則：引擎標記需額外核准（F1）時，草稿不得聲稱「均在規範內」
+  const needsApproval = chosen.flags.some((f) => f.needsApproval);
+  const hoursLine = `系統試算您該週工時為 ${chosen.score.base} 小時，支援後為 ${chosen.score.projected} 小時，` +
+    `連續上班 ${chosen.consecutiveDays} 天，` +
+    (needsApproval
+      ? '因超過院內軟性工時上限，本次支援將先取得單位主管核准後才會確定。'
+      : '均在規範內。');
   return [
     `${chosen.staff.id} 您好，我是 ${UNITS[gap.unit]} 護理長。`,
     '',
     `${shortDate(gap.date)}（${weekdayOf(gap.date)}）${SHIFT_TYPES[gap.shift].name}（${SHIFT_TYPES[gap.shift].start}–${SHIFT_TYPES[gap.shift].end}）` +
       `因原班同仁臨時病假出現人力缺口，想請問您當天是否方便支援？`,
     '',
-    `系統試算您該週工時為 ${chosen.score.base} 小時，支援後為 ${chosen.score.projected} 小時，` +
-      `連續上班 ${chosen.consecutiveDays} 天，均在規範內。`,
+    hoursLine,
     '',
     '若您有困難請直接回覆，我會再安排其他同仁，不用勉強。謝謝您 🙏',
   ].join('\n');
@@ -264,4 +270,8 @@ async function llmCallApi(task, payload) {
 
 function tick(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { LLM, parseDateFromText, completeGapEvent, llmParseGapMessage };
 }
