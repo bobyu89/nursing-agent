@@ -143,36 +143,49 @@ async function handleParse() {
       </div>
     </div>`;
 
+  $('#parse-result').className = '';
   $('#parse-result').innerHTML =
     row('缺班日期', e.date) + row('缺班班別', e.shift) + row('缺班原因', e.reason) +
     row('照護單位', e.unit) + row('必要資格', e.requiredCerts);
 
+  /* 四項關鍵欄位一律可編輯：缺漏的轉為追問，已解析的預填並開放主管修正——
+   * Agent 解析可能出錯，最終認定權在主管，不能只靠改寫訊息重來 */
   const INPUTS = {
-    date: () => `<input type="text" id="ans-date" value="${GAP_EVENT.date}" placeholder="YYYY-MM-DD">`,
-    shift: () => `<select id="ans-shift">${Object.values(SHIFT_TYPES).map((t) =>
-      `<option value="${t.code}">${t.name} ${t.start}–${t.end}</option>`).join('')}</select>`,
-    unit: () => `<select id="ans-unit">${Object.entries(UNITS).map(([k, v]) =>
-      `<option value="${k}"${k === 'MED-3A' ? ' selected' : ''}>${v}（${k}）</option>`).join('')}</select>`,
-    requiredCerts: () => `<div class="checks">${Object.entries(CERTS).map(([k, v]) =>
+    date: (v) => `<input type="text" id="ans-date" value="${v || GAP_EVENT.date}" placeholder="YYYY-MM-DD">`,
+    shift: (v) => `<select id="ans-shift">${Object.values(SHIFT_TYPES).map((t) =>
+      `<option value="${t.code}"${t.code === (v || 'D') ? ' selected' : ''}>${t.name} ${t.start}–${t.end}</option>`).join('')}</select>`,
+    unit: (v) => `<select id="ans-unit">${Object.entries(UNITS).map(([k, nm]) =>
+      `<option value="${k}"${k === (v || 'MED-3A') ? ' selected' : ''}>${nm}（${k}）</option>`).join('')}</select>`,
+    requiredCerts: (v) => `<div class="checks">${Object.entries(CERTS).map(([k, nm]) =>
       `<label><input type="checkbox" class="ans-cert" value="${k}"
-        ${GAP_EVENT.requiredCerts.includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div>
+        ${(v || GAP_EVENT.requiredCerts).includes(k) ? 'checked' : ''}> ${nm}</label>`).join('')}</div>
       <div class="q-hint" style="margin:8px 0 0">${esc(GAP_EVENT.contextNote)}</div>`,
   };
+  const FIELD_LABELS = { date: '缺班日期', shift: '缺班班別', unit: '照護單位', requiredCerts: '必要資格' };
 
-  $('#followup-body').innerHTML = parsed.missing.length === 0
-    ? '<div class="q-block"><div class="q-text">訊息內容已完整，無需追問。</div>' +
-      '<div class="q-hint">仍請主管確認下方通報人員後再執行評估。</div></div>'
-    : parsed.missing.map((m) => `
+  $('#followup-body').innerHTML = ['date', 'shift', 'unit', 'requiredCerts'].map((f) => {
+    const m = parsed.missing.find((x) => x.field === f);
+    if (m) {
+      return `
         <div class="q-block">
           <div class="q-text">${esc(m.question)}</div>
           <div class="q-hint">${esc(m.hint)}</div>
-          ${INPUTS[m.field]()}
-        </div>`).join('');
+          ${INPUTS[f](null)}
+        </div>`;
+    }
+    const ex = parsed.extracted[f];
+    return `
+      <div class="q-block q-confirmed">
+        <div class="q-text">${FIELD_LABELS[f]}：${esc(ex.label)}</div>
+        <div class="q-hint">依據：${esc(ex.source)}。解析有誤可直接修正。</div>
+        ${INPUTS[f](ex.value)}
+      </div>`;
+  }).join('');
 
   $('#followup-card').hidden = false;
   $('#followup-note').textContent = parsed.missing.length === 0
-    ? '本次訊息四項關鍵欄位齊全，Agent 未觸發追問。'
-    : `Agent 判定 ${parsed.missing.length} 項欄位訊息未載明，已轉為追問而非自行推測。`;
+    ? '四項欄位皆已解析，請主管確認無誤後執行評估。'
+    : `${parsed.missing.length} 項未載明轉為追問；其餘已解析，請確認或修正。`;
 
   btn.disabled = false;
   btn.textContent = '重新解析';
@@ -317,7 +330,7 @@ async function renderCandidates() {
     const pct = c.score.maxTotal > 0 ? (c.score.total / c.score.maxTotal) * 100 : 0;
     return `
       <div class="cand${c.rank === 1 ? ' top' : ''}" data-idx="${i}">
-        <div class="cand-head js-toggle">
+        <div class="cand-head js-toggle" role="button" tabindex="0" aria-expanded="false">
           <div class="rank">${c.rank}</div>
           <div>
             <div class="cand-id">${c.staff.id}　<span class="cand-meta">${c.staff.role} · ${UNITS[c.staff.unit]}</span></div>
@@ -404,9 +417,20 @@ async function renderCandidates() {
     </div>`;
 
   $$('#candidates-body .js-toggle').forEach((h) => {
+    const toggle = () => {
+      const open = h.parentElement.classList.toggle('open');
+      h.setAttribute('aria-expanded', String(open));
+    };
     h.addEventListener('click', (ev) => {
       if (ev.target.closest('.js-choose')) return;
-      h.parentElement.classList.toggle('open');
+      toggle();
+    });
+    // 評分卡是本平台的核心證據，鍵盤使用者也要打得開
+    h.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      if (ev.target.closest('.js-choose')) return;
+      ev.preventDefault();
+      toggle();
     });
   });
   $$('#candidates-body .js-choose').forEach((b) => {
@@ -514,6 +538,15 @@ async function chooseCandidate(idx) {
       `${chosen.needsApproval ? '（含需額外核准事項）' : ''}；正式調班登錄由主管於院內系統執行`);
     renderFairness();
     renderRoster();
+
+    // 治理迴路的下一步：一鍵開始第二筆缺班，班表與公平性延續累計
+    const next = document.createElement('button');
+    next.className = 'btn';
+    next.id = 'btn-next-gap';
+    next.textContent = '處理下一筆缺班 →';
+    $('#btn-confirm').parentElement.appendChild(next);
+    next.addEventListener('click', startNextGap);
+
     switchScreen('dashboard');
   });
 
@@ -522,11 +555,41 @@ async function chooseCandidate(idx) {
 
 /* ══ 畫面 4：公平性與留痕 ═══════════════════════════════ */
 
+/** 主管確認結案後，一鍵重置評估狀態、開始下一筆缺班（班表與公平性延續） */
+function startNextGap() {
+  state.parsed = null;
+  state.gap = null;
+  state.result = null;
+  state.chosen = null;
+  state.confirmed = false;
+  $('#parse-result').className = 'empty-state';
+  $('#parse-result').textContent = '尚未解析。請貼上新的通報訊息後點左側按鈕。';
+  $('#followup-card').hidden = true;
+  $('#gap-banner').innerHTML = '';
+  $('#candidates-body').className = 'empty-state';
+  $('#candidates-body').textContent = '請先在「缺班事件」頁完成解析與確認。';
+  renderConfirmPlaceholder();
+  logAction('開始處理下一筆缺班', '評估狀態已重置；已寫回的班表與替補次數延續累計');
+  switchScreen('intake');
+}
+
 function renderFairness() {
   const max = Math.max(...STAFF.map((s) => s.standbyCount30d), 1);
   const changed = STAFF.filter((s) => s.standbyCount30d > BASELINE_STANDBY[s.id]);
 
-  $('#fairness-chart').innerHTML = STAFF.map((s) => {
+  const counts = STAFF.map((s) => s.standbyCount30d);
+  const maxC = Math.max(...counts);
+  const minC = Math.min(...counts);
+  const avg = (counts.reduce((a, b) => a + b, 0) / counts.length).toFixed(1);
+  const spread = maxC - minC;
+  const summary = `
+    <div class="fair-summary">
+      <span>平均 <b>${avg}</b> 次</span>
+      <span>最高 <b>${maxC}</b> 次 ／ 最低 <b>${minC}</b> 次</span>
+      <span>差距 <b class="${spread >= 4 ? 'expired' : ''}">${spread}</b> 次${spread >= 4 ? '（分配不均，建議優先指派低次數人員）' : ''}</span>
+    </div>`;
+
+  $('#fairness-chart').innerHTML = summary + STAFF.map((s) => {
     const base = BASELINE_STANDBY[s.id];
     const added = s.standbyCount30d - base;
     return `
@@ -760,6 +823,27 @@ function init() {
   }
   $('#btn-rules-reset').addEventListener('click', () => {
     if (confirm('確定要清除本機保存的規則調整，回到預設值嗎？頁面將重新載入。')) resetRules();
+  });
+
+  // 留痕匯出：勞檢或內部稽核時，決策依據要拿得出來
+  $('#btn-export-audit').addEventListener('click', () => {
+    const payload = {
+      platform: '班守 ShiftGuard（DEMO）',
+      exportedAt: nowStamp(),
+      note: '本檔為前端演示版之決策留痕匯出；正式導入時由後端以不可竄改方式儲存。',
+      rules: {
+        hard: RULE_REGISTRY.hard.map((r) => ({ code: r.code, name: r.name, enabled: r.enabled, param: r.param ? r.param.value : null })),
+        soft: RULE_REGISTRY.soft.map((r) => ({ code: r.code, name: r.name, weight: r.weight, param: r.param ? r.param.value : null })),
+      },
+      audit: state.audit,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `shiftguard-audit-${nowStamp().replace(/[: ]/g, '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    logAction('匯出決策留痕', `共 ${state.audit.length} 筆紀錄，含當前規則設定快照`);
   });
 
   STAFF.forEach((s) => { BASELINE_STANDBY[s.id] = s.standbyCount30d; });

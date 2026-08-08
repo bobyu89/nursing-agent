@@ -180,6 +180,21 @@ test('日期解析：以通報日 2026-08-08（六）推算「禮拜天／明天
   assertEqual(parseDateFromText('我不能上班了', ref), null, '沒有時間線索時不得臆測日期');
 });
 
+test('日期解析：多個時間線索指向不同日期時不臆測，標記為模糊並轉為追問', async () => {
+  const ref = '2026-08-08';
+  const amb = parseDateFromText('我從今天開始發燒，禮拜天的早班沒辦法上', ref);
+  assert(amb && amb.ambiguous === true,
+    '「今天」（8/08）與「禮拜天」（8/09）並存，Agent 不得自行挑一個');
+  assertEqual(parseDateFromText('今天的班沒辦法上', ref).value, '2026-08-08',
+    '單一線索「今天」仍正常解析');
+  assertEqual(parseDateFromText('明天，也就是禮拜天的班沒辦法上', ref).value, '2026-08-09',
+    '多個線索指向同一天時不算模糊');
+
+  const parsed = await llmParseGapMessage('我從今天開始發燒，禮拜天的早班沒辦法上了');
+  assertEqual(parsed.extracted.date.value, null, '模糊日期不得填入解析結果');
+  assert(parsed.missing.some((m) => m.field === 'date'), '模糊日期應轉為追問');
+});
+
 test('S3 遇到自訂班別代碼不得產生 NaN', () => {
   const types = Object.assign({}, SHIFT_TYPES, {
     X: { code: 'X', name: '自訂班', start: '08:00', end: '16:00', hours: 8, overnight: false },

@@ -64,7 +64,7 @@
 
     <div class="card" id="followup-card" hidden>
       <div class="card-head">
-        <h2>Agent 追問</h2>
+        <h2>Agent 追問與條件確認</h2>
         <span class="tag tag-warn" id="followup-note">條件不完整，需主管補充</span>
       </div>
       <div id="followup-body"></div>
@@ -106,8 +106,12 @@
         <div id="fairness-chart"></div>
       </div>
       <div class="card">
-        <div class="card-head"><h2>決策留痕 Audit Log</h2></div>
+        <div class="card-head">
+          <h2>決策留痕 Audit Log</h2>
+          <button class="btn btn-sm" id="btn-export-audit">匯出 JSON</button>
+        </div>
         <div id="audit-log"></div>
+        <p class="fineprint">匯出內容含全部操作紀錄與當前規則設定，可作為決策依據的留存檔。正式導入時將由後端以不可竄改方式儲存。</p>
       </div>
     </div>
   </section>

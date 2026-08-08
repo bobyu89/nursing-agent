@@ -57,17 +57,26 @@ const KW_CERT = [
 ];
 const KW_WEEKDAY = { 日: 0, 天: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6 };
 
-/** 從訊息推算日期；ref 為通報日（YYYY-MM-DD） */
+/**
+ * 從訊息推算日期；ref 為通報日（YYYY-MM-DD）。
+ * 蒐集訊息中「所有」時間線索：若全部指向同一天，回傳該日期；
+ * 若指向不同日期（例：「我從今天開始發燒，禮拜天的班……」），
+ * 回傳 { ambiguous: true }——Agent 不猜哪一個才是缺班日，轉為追問。
+ */
 function parseDateFromText(text, ref) {
+  const signals = [];
+
   const md = text.match(/(\d{1,2})\s*[\/月]\s*(\d{1,2})/);
   if (md) {
     const y = Number(ref.slice(0, 4));
-    const iso = `${y}-${String(md[1]).padStart(2, '0')}-${String(md[2]).padStart(2, '0')}`;
-    return { value: iso, source: `訊息中「${md[0]}」` };
+    signals.push({
+      value: `${y}-${String(md[1]).padStart(2, '0')}-${String(md[2]).padStart(2, '0')}`,
+      source: `訊息中「${md[0]}」`,
+    });
   }
-  if (/後天/.test(text)) return { value: addDays(ref, 2), source: `訊息中「後天」，以通報日 ${ref} 推算` };
-  if (/明天|明日/.test(text)) return { value: addDays(ref, 1), source: `訊息中「明天」，以通報日 ${ref} 推算` };
-  if (/今天|今日/.test(text)) return { value: ref, source: `訊息中「今天」，以通報日 ${ref} 推算` };
+  if (/後天/.test(text)) signals.push({ value: addDays(ref, 2), source: `訊息中「後天」，以通報日 ${ref} 推算` });
+  if (/明天|明日/.test(text)) signals.push({ value: addDays(ref, 1), source: `訊息中「明天」，以通報日 ${ref} 推算` });
+  if (/今天|今日/.test(text)) signals.push({ value: ref, source: `訊息中「今天」，以通報日 ${ref} 推算` });
 
   const wd = text.match(/(下*)\s*(?:禮拜|週|星期)\s*([日天一二三四五六])/);
   if (wd) {
@@ -76,8 +85,12 @@ function parseDateFromText(text, ref) {
     let delta = (target - refDow + 7) % 7;
     if (delta === 0) delta = 7;               // 「禮拜X」指的是下一個，不是今天
     delta += 7 * wd[1].length;                // 每一個「下」再往後一週（下下禮拜X = +14）
-    return { value: addDays(ref, delta), source: `訊息中「${wd[0].replace(/\s/g, '')}」，以通報日 ${ref}（${weekdayOf(ref)}）推算` };
+    signals.push({ value: addDays(ref, delta), source: `訊息中「${wd[0].replace(/\s/g, '')}」，以通報日 ${ref}（${weekdayOf(ref)}）推算` });
   }
+
+  const distinct = [...new Set(signals.map((s) => s.value))];
+  if (distinct.length === 1) return signals[0];
+  if (distinct.length > 1) return { ambiguous: true, sources: signals.map((s) => s.source) };
   return null;
 }
 
@@ -108,7 +121,7 @@ async function llmParseGapMessage(rawText) {
   const certs = KW_CERT.filter((c) => c.re.test(text)).map((c) => c.code);
 
   const extracted = {
-    date: d
+    date: d && !d.ambiguous
       ? { value: d.value, label: `${d.value}（${weekdayOf(d.value)}）`, source: d.source }
       : { value: null, label: null, source: null },
     shift: sh
@@ -134,7 +147,13 @@ async function llmParseGapMessage(rawText) {
   };
   const missing = ['date', 'shift', 'unit', 'requiredCerts']
     .filter((f) => !extracted[f].value)
-    .map((f) => ({ field: f, ...QUESTIONS[f] }));
+    .map((f) => {
+      const q = { field: f, ...QUESTIONS[f] };
+      if (f === 'date' && d && d.ambiguous) {
+        q.hint = `訊息中出現多個時間線索（${d.sources.join('；')}），Agent 不猜哪一個是缺班日，請主管指定`;
+      }
+      return q;
+    });
 
   return { extracted, missing };
 }
