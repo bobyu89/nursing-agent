@@ -29,6 +29,7 @@
   <button class="tab" data-screen="dashboard"><span class="tab-no">4</span>公平性與留痕</button>
   <button class="tab" data-screen="roster"><span class="tab-no">5</span>班表與人員</button>
   <button class="tab" data-screen="rules"><span class="tab-no">6</span>規則庫</button>
+  <button class="tab" data-screen="multi"><span class="tab-no">7</span>多筆缺班</button>
 </nav>
 
 <main>
@@ -160,6 +161,26 @@
       <div id="recalc-result"></div>
       <p class="fineprint">規則調整會自動保存在本機瀏覽器，重新整理不會遺失；「還原預設規則」可回到出廠設定。班表寫回與決策留痕則於重新整理時重置，方便重複演示。</p>
     </div>
+  </section>
+
+  <!-- ══ 7. 多筆缺班 ══════════════════════════════════ -->
+  <section class="screen" id="screen-multi">
+    <div class="screen-head">
+      <h1>多筆缺班：逐筆指派 vs 全局指派</h1>
+      <p class="lede">流感季一個晚上倒兩個人是常態。逐筆處理會把稀缺人力提早用掉；<strong>全局指派把所有缺班一起看——先求填補筆數最多，再求整體分數最高。</strong>兩種算法都是確定性運算，逐一比較給主管看。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>演示情境：同一晚兩筆缺班</h2>
+        <span class="tag tag-neutral">以目前班表即時計算</span>
+      </div>
+      <div id="multi-scenario"></div>
+      <button class="btn btn-primary" id="btn-multi-run">執行兩種指派方式並比較</button>
+      <p class="fineprint">情境重點：全院只有一位人員具備呼吸器照護資格，而他同時是第一筆缺班的最高分候選——考驗系統會不會把稀缺人力用錯地方。</p>
+    </div>
+
+    <div id="multi-result"></div>
   </section>
 
 </main>

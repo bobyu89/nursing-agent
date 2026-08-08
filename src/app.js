@@ -1,7 +1,7 @@
 /**
  * app.js — 畫面渲染與流程控制
  *
- * 六個畫面：缺班事件 → 替補候選人 → 主管確認 → 公平性與留痕 → 班表與人員 → 規則庫
+ * 七個畫面：缺班事件 → 替補候選人 → 主管確認 → 公平性與留痕 → 班表與人員 → 規則庫 → 多筆缺班
  * 所有決策數字來自 engine.js，所有敘述文字來自 llm.js，本檔只負責呈現。
  */
 
@@ -705,6 +705,72 @@ function renderStaffTable() {
   $('#staff-table').innerHTML = head + `<tbody>${body}</tbody>`;
 }
 
+/* ══ 畫面 7：多筆缺班（逐筆 vs 全局指派）═══════════════ */
+
+function multiGapLabel(g) {
+  return `${shortDate(g.date)}（${weekdayOf(g.date)}）${SHIFT_TYPES[g.shift].name} @ ${UNITS[g.unit]}`;
+}
+
+function renderMultiScenario() {
+  $('#multi-scenario').innerHTML = MULTI_GAP_SCENARIO.map((g, i) => `
+    <div class="excl">
+      <div><div class="excl-id">缺班 ${i + 1}</div></div>
+      <div>
+        <div class="excl-reason"><b>${multiGapLabel(g)}</b></div>
+        <div class="sc-evi">需求：${g.requiredRole}以上 ＋ ${g.requiredCerts.map((c) => CERTS[c]).join('、')}</div>
+        <div class="sc-evi">${esc(g.reason)}</div>
+      </div>
+    </div>`).join('');
+}
+
+function handleMultiRun() {
+  const gaps = MULTI_GAP_SCENARIO;
+  const greedy = engine.assignGreedy(gaps);
+  const joint = engine.assignJointly(gaps);
+  const gFilled = greedy.filter((s) => s.staffId).length;
+
+  const row = (label, staffId, score) => `
+    <div class="fact">
+      <span>${label}</span>
+      <span>${staffId
+        ? `${staffId}（${score} 分）`
+        : '<span class="expired">✗ 無人可指派</span>'}</span>
+    </div>`;
+
+  const rescued = gaps.filter((g, i) => !greedy[i].staffId && joint.assignment[i]);
+
+  $('#multi-result').innerHTML = `
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <h2>逐筆指派（每筆取當下最高分）</h2>
+          <span class="tag ${gFilled < gaps.length ? 'tag-danger' : 'tag-ok'}">填補 ${gFilled}／${gaps.length} 筆</span>
+        </div>
+        ${greedy.map((s, i) => row(multiGapLabel(gaps[i]), s.staffId, s.score)).join('')}
+        ${gFilled < gaps.length ? `<p class="fineprint">第一筆把分數較高的人用掉了——但他是後面缺班唯一具備必要資格的人。逐筆看每一步都「對」，整體卻補不滿。</p>` : ''}
+      </div>
+      <div class="card${joint.filled > gFilled ? '' : ''}" style="border-color:var(--brand)">
+        <div class="card-head">
+          <h2>全局指派（所有缺班一起看）</h2>
+          <span class="tag ${joint.filled < gaps.length ? 'tag-danger' : 'tag-ok'}">填補 ${joint.filled}／${gaps.length} 筆</span>
+        </div>
+        ${joint.details.map((d, i) => row(multiGapLabel(gaps[i]), d ? d.staffId : null, d ? d.score : null)).join('')}
+        ${joint.filled > gFilled ? `<p class="fineprint">全局指派改讓次高分者補第一筆，把稀缺人力留給只有他能補的缺口——${rescued.map(multiGapLabel).join('、')} 因此補得上。目標順序：先填補筆數、再總分。</p>` : ''}
+      </div>
+    </div>
+    <div class="card">
+      <p class="fineprint" style="margin:0">
+        兩種結果皆由確定性引擎計算（枚舉全部可行組合，含同一人接多筆時的班距與工時交互檢查），
+        數字可完整重現。指派建議仍需主管於「替補候選人」流程逐筆確認後才會寫回班表。
+      </p>
+    </div>`;
+
+  logAction('多筆缺班指派比較',
+    `${gaps.length} 筆缺班：逐筆指派填補 ${gFilled} 筆，全局指派填補 ${joint.filled} 筆` +
+    `（${joint.assignment.map((id, i) => `缺班${i + 1}→${id || '無'}`).join('、')}）`,
+    '班守 ShiftGuard 規則引擎');
+}
+
 /* ══ 畫面 6：規則庫 ═════════════════════════════════════ */
 
 function renderRules() {
@@ -881,12 +947,14 @@ function init() {
   $('#btn-parse').addEventListener('click', handleParse);
   $('#btn-evaluate').addEventListener('click', handleEvaluate);
   $('#btn-recalc').addEventListener('click', handleRecalc);
+  $('#btn-multi-run').addEventListener('click', handleMultiRun);
 
   renderRoster();
   renderStaffTable();
   renderRules();
   renderFairness();
   renderAuditLog();
+  renderMultiScenario();
 }
 
 document.addEventListener('DOMContentLoaded', init);

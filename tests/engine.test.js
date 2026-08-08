@@ -166,6 +166,32 @@ test('relaxationAnalysis：只試算、不改動規則庫，並正確找出鬆�
   assertEqual(e.evaluateGap(gap).candidates.length, 0, '試算結束後規則應復原，A 仍被排除');
 });
 
+/* ── 多筆缺班指派 ── */
+
+test('多筆缺班：逐筆貪心把稀缺人力用掉，全局指派兩筆都補得上', () => {
+  const e = mkEngine(STAFF, SHIFTS.slice(), { staffingMin: UNIT_MIN_STAFF });
+  const greedy = e.assignGreedy(MULTI_GAP_SCENARIO);
+  assertEqual(greedy[0].staffId, 'N-10',
+    '逐筆指派第一筆選當下分數較高的 N-10（69.5 > N-01 的 63.5）');
+  assertEqual(greedy[1].staffId, null,
+    'N-10 是全院唯一具呼吸器資格者，被第一筆用掉後 ICU 缺班無人可派');
+  const joint = e.assignJointly(MULTI_GAP_SCENARIO);
+  assertEqual(joint.filled, 2, '全局指派應兩筆都補得上');
+  assertEqual(joint.assignment, ['N-01', 'N-10'],
+    '第一筆改用 N-01，把 N-10 留給只有他能補的 ICU');
+});
+
+test('多筆缺班：同一人接兩筆的班距／同日衝突在模擬中被正確擋下', () => {
+  const A = mkStaff('A');
+  const gaps = [mkGap({ shift: 'D' }), mkGap({ shift: 'E' })];  // 同日白班＋小夜
+  const e = mkEngine([A], []);
+  const joint = e.assignJointly(gaps);
+  assertEqual(joint.filled, 1,
+    '只有一個人時，同日兩班（H2）不可同時指派，最多補一筆');
+  const greedy = e.assignGreedy(gaps);
+  assertEqual(greedy.filter((s) => s.staffId).length, 1);
+});
+
 /* ── 訊息日期解析（mock 模式）── */
 
 test('日期解析：以通報日 2026-08-08（六）推算「禮拜天／明天／下禮拜三／8/9」', () => {

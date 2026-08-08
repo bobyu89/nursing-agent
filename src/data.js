@@ -221,6 +221,25 @@ const SHIFTS = [
   { staffId: 'N-11', date: '2026-08-07', shift: 'D', unit: 'MED-3A' },
 ];
 
+/* ── 多筆缺班演示情境 ─────────────────────────────────────
+ * 同一晚兩筆缺班：第一筆需要資深護理師帶化療；第二筆在 ICU、
+ * 需要呼吸器照護資格——全院只有 N-10 具備。
+ * N-10 同時是第一筆的最高分候選：逐筆指派會把他用掉，
+ * 第二筆就無人可派；全局指派會把他留給只有他能補的缺口。
+ */
+const MULTI_GAP_SCENARIO = [
+  {
+    id: 'GAP-MULTI-1', date: '2026-08-09', shift: 'D', unit: 'MED-3A',
+    requiredRole: '資深護理師', requiredCerts: ['ACLS', 'CHEMO'],
+    originalStaffId: null, reason: '臨時病假，當班需資深人員督導化療給藥',
+  },
+  {
+    id: 'GAP-MULTI-2', date: '2026-08-09', shift: 'E', unit: 'ICU',
+    requiredRole: '護理師', requiredCerts: ['ACLS', 'VENT'],
+    originalStaffId: null, reason: '臨時事假，當班有使用呼吸器之病人',
+  },
+];
+
 /* ── 缺班事件的原始通報訊息（護理長轉貼）─────────────────
  * 刻意缺少「單位」與「必要資格」，用來演示 Agent 主動追問。
  */
@@ -248,6 +267,6 @@ const GAP_EVENT = {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SHIFT_TYPES, UNITS, CERTS, ROLE_LEVELS, WEEK, WEEK_DATES,
-    STAFF, SHIFTS, RAW_MESSAGE, GAP_EVENT, UNIT_MIN_STAFF,
+    STAFF, SHIFTS, RAW_MESSAGE, GAP_EVENT, UNIT_MIN_STAFF, MULTI_GAP_SCENARIO,
   };
 }

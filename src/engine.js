@@ -428,6 +428,80 @@ function createEngine(db) {
     return options;
   }
 
+  /** 供模擬用：複製人員與班表的獨立引擎，指派寫回不影響真實資料 */
+  function cloneForSimulation() {
+    return createEngine({
+      staff: structuredClone(db.staff),
+      shifts: db.shifts.map((s) => Object.assign({}, s)),
+      shiftTypes: db.shiftTypes, roleLevels: db.roleLevels,
+      certs: db.certs, units: db.units,
+      registry: db.registry, staffingMin: db.staffingMin,
+    });
+  }
+
+  /**
+   * 逐筆貪心指派（對照組）：依缺班順序，每一筆都拿「當下」最高分的
+   * 候選人並立即寫回模擬班表。快，但稀缺人力可能被前面的缺班用掉。
+   */
+  function assignGreedy(gaps) {
+    const sim = cloneForSimulation();
+    return gaps.map((gap) => {
+      const ev = sim.evaluateGap(gap);
+      if (ev.candidates.length === 0) return { gap, staffId: null, score: null };
+      const top = ev.candidates[0];
+      sim.applyReplacement(gap, top.staff.id);
+      return { gap, staffId: top.staff.id, score: top.score.total };
+    });
+  }
+
+  /**
+   * 全局指派：把所有缺班一起看，枚舉全部可行組合（每筆可指派或留空），
+   * 首要目標「填補筆數最多」、次要目標「總分最高」。
+   * 組合可行性經完整模擬驗證：同一人接多筆時，前一筆寫回後
+   * 會影響後一筆的 H2／H4／H5／H6 判定。
+   * 人數與缺班筆數都小（11 人 × 少數缺班），暴力枚舉即為確定性最佳解。
+   */
+  function assignJointly(gaps) {
+    const pools = gaps.map((gap) => evaluateGap(gap).candidates.map((c) => c.staff.id));
+
+    const simulate = (assignment) => {
+      const sim = cloneForSimulation();
+      const details = [];
+      let total = 0;
+      for (let i = 0; i < gaps.length; i++) {
+        const id = assignment[i];
+        if (id === null) { details.push(null); continue; }
+        const cand = sim.evaluateGap(gaps[i]).candidates.find((c) => c.staff.id === id);
+        if (!cand) return null; // 在累積指派後已不可行（例如同一人同日兩班）
+        total += cand.score.total;
+        details.push({ staffId: id, score: cand.score.total, flags: cand.flags });
+        sim.applyReplacement(gaps[i], id);
+      }
+      return { total, details };
+    };
+
+    let best = null;
+    const walk = (idx, current) => {
+      if (idx === gaps.length) {
+        const sim = simulate(current);
+        if (!sim) return;
+        const filled = current.filter((x) => x !== null).length;
+        if (!best || filled > best.filled || (filled === best.filled && sim.total > best.total)) {
+          best = { assignment: current.slice(), filled, total: sim.total, details: sim.details };
+        }
+        return;
+      }
+      for (const id of pools[idx].concat([null])) {
+        current.push(id);
+        walk(idx + 1, current);
+        current.pop();
+      }
+    };
+    walk(0, []);
+
+    return best || { assignment: gaps.map(() => null), filled: 0, total: 0, details: gaps.map(() => null) };
+  }
+
   /**
    * 主管確認後寫回：把替補班次寫入班表，並累計該人員的替補次數。
    * 這使得同一場 demo 連續處理多筆缺班時，公平性訊號會真實累積。
@@ -467,6 +541,7 @@ function createEngine(db) {
     checkHardConstraints, scoreCandidate, collectFlags,
     weeklyHours, shiftMix, isOnLeave, consecutiveDaysWithGap,
     minRestAfterGap, shiftInterval, unitCoverage,
+    assignGreedy, assignJointly,
   };
 }
 
