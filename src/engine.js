@@ -428,6 +428,103 @@ function createEngine(db) {
     return options;
   }
 
+  /**
+   * 主動預警：對「已排定的班表」做靜態掃描，不等有人請假才發現風險。
+   * 門檻全部取自規則庫（與 H4/H5/H6/S1/S2 同一份參數）。
+   * 回傳依嚴重度排序：high（已違規）→ medium（已達門檻）→ low（接近門檻）。
+   */
+  function rosterWarnings() {
+    const warnings = [];
+    const maxDays = getHardParam('H5', 6);
+    const minRest = getHardParam('H4', 11);
+    const softCap = getSoftParam('S2', 48);
+    const hardCap = getHardParam('H6', 60);
+    const saturation = getSoftParam('S1', 5);
+
+    db.staff.forEach((staff) => {
+      const ss = shiftsOf(staff.id).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+      if (ss.length === 0) return;
+
+      // 連續上班區段（已排定的最長連續天數）
+      let run = 1, maxRun = 1, runEnd = ss[0].date;
+      for (let i = 1; i < ss.length; i++) {
+        run = ss[i].date === addDays(ss[i - 1].date, 1) ? run + 1 : 1;
+        if (run > maxRun) { maxRun = run; runEnd = ss[i].date; }
+      }
+      if (maxRun > maxDays) {
+        warnings.push({ level: 'high', code: 'H5', staffId: staff.id,
+          text: `已排定連續上班 ${maxRun} 天（至 ${shortDate(runEnd)}），超過上限 ${maxDays} 天` });
+      } else if (maxRun === maxDays) {
+        warnings.push({ level: 'medium', code: 'H5', staffId: staff.id,
+          text: `已排定連續上班 ${maxRun} 天（至 ${shortDate(runEnd)}），達上限——再排一天即違規` });
+      }
+
+      // 相鄰班次的班間休息
+      for (let i = 1; i < ss.length; i++) {
+        const prevEnd = shiftInterval(ss[i - 1].date, ss[i - 1].shift).end;
+        const curStart = shiftInterval(ss[i].date, ss[i].shift).start;
+        const hours = (curStart - prevEnd) / HOUR_MS;
+        if (hours < minRest) {
+          warnings.push({ level: 'high', code: 'H4', staffId: staff.id,
+            text: `${shortDate(ss[i - 1].date)} ${db.shiftTypes[ss[i - 1].shift].name}接 ${shortDate(ss[i].date)} ${db.shiftTypes[ss[i].shift].name}，間隔僅 ${hours} 小時（法定 ${minRest}）` });
+        }
+      }
+
+      // 各自然週的已排工時
+      const weeks = {};
+      ss.forEach((s) => {
+        const wk = weekDatesOf(s.date)[0];
+        weeks[wk] = (weeks[wk] || 0) + db.shiftTypes[s.shift].hours;
+      });
+      Object.keys(weeks).forEach((wk) => {
+        if (weeks[wk] > hardCap) {
+          warnings.push({ level: 'high', code: 'H6', staffId: staff.id,
+            text: `${shortDate(wk)} 起當週已排 ${weeks[wk]} 小時，超過絕對上限 ${hardCap} 小時` });
+        } else if (weeks[wk] >= softCap) {
+          warnings.push({ level: 'medium', code: 'F1', staffId: staff.id,
+            text: `${shortDate(wk)} 起當週已排 ${weeks[wk]} 小時，已達軟性上限 ${softCap} 小時，不宜再指派` });
+        }
+      });
+
+      // 公平性飽和
+      if (staff.standbyCount30d >= saturation) {
+        warnings.push({ level: 'medium', code: 'S1', staffId: staff.id,
+          text: `近 30 天已被叫班 ${staff.standbyCount30d} 次，已達飽和門檻 ${saturation} 次，應停止指派` });
+      } else if (staff.standbyCount30d === saturation - 1) {
+        warnings.push({ level: 'low', code: 'S1', staffId: staff.id,
+          text: `近 30 天已被叫班 ${staff.standbyCount30d} 次，再一次即達飽和門檻 ${saturation} 次` });
+      }
+    });
+
+    const rank = { high: 0, medium: 1, low: 2 };
+    warnings.sort((a, b) => rank[a.level] - rank[b.level]);
+    return warnings;
+  }
+
+  /**
+   * 單位配置缺口掃描：指定日期範圍內，每單位每班別在班人數低於最低配置的時段。
+   * 完全沒有排班資料的單位回傳 noData（示範資料為部分名單時避免誤報一整週）。
+   */
+  function coverageGaps(dates) {
+    const gaps = [];
+    Object.keys(db.staffingMin || {}).forEach((unit) => {
+      const unitShifts = db.shifts.filter((s) => s.unit === unit);
+      if (unitShifts.length === 0) {
+        gaps.push({ unit, noData: true });
+        return;
+      }
+      dates.forEach((date) => {
+        Object.keys(db.shiftTypes).forEach((code) => {
+          const min = db.staffingMin[unit][code];
+          if (!min) return;
+          const count = unitShifts.filter((s) => s.date === date && s.shift === code).length;
+          if (count < min) gaps.push({ unit, date, shift: code, count, min });
+        });
+      });
+    });
+    return gaps;
+  }
+
   /** 供模擬用：複製人員與班表的獨立引擎，指派寫回不影響真實資料 */
   function cloneForSimulation() {
     return createEngine({
@@ -541,7 +638,7 @@ function createEngine(db) {
     checkHardConstraints, scoreCandidate, collectFlags,
     weeklyHours, shiftMix, isOnLeave, consecutiveDaysWithGap,
     minRestAfterGap, shiftInterval, unitCoverage,
-    assignGreedy, assignJointly,
+    assignGreedy, assignJointly, rosterWarnings, coverageGaps,
   };
 }
 

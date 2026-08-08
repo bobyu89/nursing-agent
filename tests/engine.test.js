@@ -192,6 +192,41 @@ test('多筆缺班：同一人接兩筆的班距／同日衝突在模擬中被�
   assertEqual(greedy.filter((s) => s.staffId).length, 1);
 });
 
+/* ── 主動預警 ── */
+
+test('主動預警：demo 班表掃出 N-09 連六天達上限與 48 小時軟性上限，且無「已違規」項', () => {
+  const e = mkEngine(STAFF, SHIFTS.slice(), { staffingMin: UNIT_MIN_STAFF });
+  const ws = e.rosterWarnings();
+  const n09 = ws.filter((w) => w.staffId === 'N-09').map((w) => w.code).sort();
+  assert(n09.includes('H5'), 'N-09 已排連續 6 天，應出現 H5 達上限預警');
+  assert(n09.includes('F1'), 'N-09 當週已排 48 小時，應出現軟性上限預警');
+  assert(ws.some((w) => w.staffId === 'N-01' && w.code === 'S1'),
+    'N-01 已被叫班 4 次，應出現接近公平性飽和預警');
+  assertEqual(ws.filter((w) => w.level === 'high').length, 0,
+    'demo 班表本身合法，不應有「已違規」等級的預警');
+});
+
+test('主動預警：排出小夜接白班的班表時，H4 違規要在掃描中現形', () => {
+  const A = mkStaff('A');
+  const e = mkEngine([A], [d('A', '2026-08-03', 'E'), d('A', '2026-08-04', 'D')]);
+  const ws = e.rosterWarnings();
+  const h4 = ws.find((w) => w.code === 'H4');
+  assert(h4 && h4.level === 'high', '23:00 下班接翌日 07:00 上班（8 小時）應為已違規等級');
+});
+
+test('配置缺口掃描：低於最低配置的時段被列出，無資料單位回報 noData', () => {
+  const A = mkStaff('A');
+  const shifts = [d('A', '2026-08-03', 'D')];
+  const e = mkEngine([A], shifts, {
+    staffingMin: { 'MED-3A': { D: 1 }, 'ICU': { D: 1 } },
+  });
+  const gaps = e.coverageGaps(['2026-08-03', '2026-08-04']);
+  assert(gaps.some((g) => g.unit === 'ICU' && g.noData), 'ICU 無排班資料應回報 noData');
+  const med = gaps.filter((g) => g.unit === 'MED-3A' && !g.noData);
+  assertEqual(med.map((g) => g.date), ['2026-08-04'],
+    '8/03 白班有 1 人達配置；8/04 無人在班應列為缺口');
+});
+
 /* ── 訊息日期解析（mock 模式）── */
 
 test('日期解析：以通報日 2026-08-08（六）推算「禮拜天／明天／下禮拜三／8/9」', () => {

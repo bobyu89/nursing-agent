@@ -562,6 +562,7 @@ async function chooseCandidate(idx) {
       `核定 ${chosen.staff.id} 替補 ${shortDate(state.gap.date)} ${SHIFT_TYPES[state.gap.shift].name}` +
       `${chosen.needsApproval ? '（含需額外核准事項）' : ''}；正式調班登錄由主管於院內系統執行`);
     renderFairness();
+    renderWarnings();
     renderRoster();
 
     // 治理迴路的下一步：一鍵開始第二筆缺班，班表與公平性延續累計
@@ -596,6 +597,53 @@ function startNextGap() {
   renderConfirmPlaceholder();
   logAction('開始處理下一筆缺班', '評估狀態已重置；已寫回的班表與替補次數延續累計');
   switchScreen('intake');
+}
+
+function renderWarnings() {
+  const warnings = engine.rosterWarnings();
+  const gaps = engine.coverageGaps(WEEK_DATES);
+
+  const levelTag = { high: 'flag-high', medium: 'flag-medium', low: 'flag-low' };
+  const levelName = { high: '已違規', medium: '達門檻', low: '接近門檻' };
+
+  const personRows = warnings.map((w) => `
+    <div class="excl">
+      <div>
+        <div class="excl-id">${w.staffId}</div>
+        <div class="excl-role"><span class="flag ${levelTag[w.level]}">${levelName[w.level]}</span></div>
+      </div>
+      <div>
+        <div class="excl-reason"><span class="rule-code${w.level === 'high' ? '' : ' neutral'}">${w.code}</span><span>${esc(w.text)}</span></div>
+      </div>
+    </div>`).join('');
+
+  // 配置缺口依單位彙整；無資料的單位一句話帶過，避免部分名單造成整週誤報
+  const byUnit = {};
+  const noData = [];
+  gaps.forEach((g) => {
+    if (g.noData) { noData.push(g.unit); return; }
+    (byUnit[g.unit] = byUnit[g.unit] || []).push(g);
+  });
+  const coverageRows = Object.keys(byUnit).map((unit) => `
+    <div class="excl">
+      <div><div class="excl-id">${esc(UNITS[unit])}</div></div>
+      <div>
+        <div class="excl-reason"><span class="rule-code neutral">配置</span>
+          <span>本週 ${byUnit[unit].length} 個時段在班人數低於最低配置：
+            ${byUnit[unit].slice(0, 6).map((g) => `${shortDate(g.date)} ${SHIFT_TYPES[g.shift].name}`).join('、')}${byUnit[unit].length > 6 ? '…' : ''}${byUnit[unit].length >= 10 ? '（示範資料僅含該單位部分名單）' : ''}</span>
+        </div>
+      </div>
+    </div>`).join('');
+  const noDataNote = noData.length
+    ? `<p class="fineprint">${noData.map((u) => UNITS[u]).join('、')}本週無排班資料（示範資料為部分名單），不列入配置掃描。</p>` : '';
+
+  const total = warnings.length + Object.keys(byUnit).length;
+  $('#warn-count').textContent = total === 0 ? '本週無風險訊號' : `${total} 項風險訊號`;
+  $('#warn-count').className = 'tag ' + (warnings.some((w) => w.level === 'high') ? 'tag-danger' : total ? 'tag-warn' : 'tag-ok');
+
+  $('#warnings-body').innerHTML =
+    (personRows || '<div class="empty-state">人員工時與公平性皆無風險訊號。</div>') +
+    coverageRows + noDataNote;
 }
 
 function renderFairness() {
@@ -877,6 +925,7 @@ function handleRecalc() {
   renderConfirmPlaceholder();
   renderCandidates();
   renderFairness();
+  renderWarnings();
   renderRoster();
 }
 
@@ -953,6 +1002,7 @@ function init() {
   renderStaffTable();
   renderRules();
   renderFairness();
+  renderWarnings();
   renderAuditLog();
   renderMultiScenario();
 }
