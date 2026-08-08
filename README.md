@@ -11,12 +11,20 @@
 
 ## 快速開始
 
+**線上版（免安裝）**：
+
+- 平台：https://bobyu89.github.io/nursing-agent/
+- 引擎測試：https://bobyu89.github.io/nursing-agent/tests.html
+
+或本機執行：
+
 ```bash
 git clone https://github.com/bobyu89/nursing-agent.git
 cd nursing-agent
 ```
 
 直接**雙擊 `index.html`** 就能跑。無需安裝、無需編譯、無需網路。
+線上版與本機版行為完全相同（mock 模式本來就不需要網路）；每次 push 後 GitHub Pages 會自動更新。
 
 若偏好本機伺服器：
 
