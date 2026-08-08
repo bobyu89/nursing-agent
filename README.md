@@ -125,15 +125,39 @@ F1 週工時超過 48 小時軟性上限（需額外核准）／F2 連續上班�
 ## 檔案結構
 
 ```
-index.html            六個畫面
-assets/styles.css     樣式
-src/data.js           模擬資料（人員／班表／請假／缺班事件）
-src/rules.js          規則庫 Rule Registry
-src/engine.js         確定性決策引擎
-src/llm.js            語言模型轉接層（mock／api）
-src/app.js            畫面渲染與流程
-docs/proposal.md      完整提案素材
+index.html                  六個畫面
+tests.html                  引擎測試頁（雙擊即可跑，零依賴）
+assets/styles.css           樣式
+src/data.js                 模擬資料（人員／班表／請假／缺班事件）
+src/rules.js                規則庫 Rule Registry
+src/engine.js               確定性決策引擎（createEngine，資料由外部注入）
+src/llm.js                  語言模型轉接層（mock／api）
+src/app.js                  畫面渲染與流程
+tests/engine.test.js        引擎邊界條件測試（瀏覽器與 CI 共用同一份）
+tests/run-node.js           CI 用的 Node 測試 runner
+.github/workflows/test.yml  GitHub Actions：每次 push 自動跑引擎測試
+docs/CONTEXT.md             領域語義定義（自然週、連續天數、生命週期…的權威出處）
+docs/proposal.md            完整提案素材
 ```
+
+## 測試
+
+「確定性歸程式」的前提是程式算得對。**雙擊 `tests.html`** 即可離線執行引擎測試，
+釘住合規事故等級的邊界條件：
+
+- 班間休息剛好 11 小時（過）與 10.5 小時（不過）、大夜接白班間隔 0 小時
+- 連續上班第 6 天（過）與第 7 天（不過）
+- 週工時一律以**缺班日所在的自然週**計算——下週的缺班不會誤算本週的工時
+- Demo 資料集的完整結果（4 位候選、7 位排除、排除原因逐筆比對）
+- 訊息解析不臆測：沒有時間線索就不給日期，「下下禮拜三」不會被當成下禮拜三，缺漏欄位全數轉為追問
+
+同一份測試也會在 **GitHub Actions** 上以 Node 自動執行（`tests/run-node.js`），
+每次 push 都會重新驗證；本機不需要安裝任何東西。
+
+引擎以 `createEngine(db)` 建立，人員／班表／規則皆由外部注入，
+同一份程式碼可在瀏覽器、測試頁與未來的 Lambda 端點上運行。
+所有計算背後的語義定義（自然週怎麼算、連續天數怎麼定義、缺班事件的生命週期）
+集中在 [docs/CONTEXT.md](docs/CONTEXT.md)——文件與程式不一致時，以文件為準修程式。
 
 ## 關於 LLM 模式
 

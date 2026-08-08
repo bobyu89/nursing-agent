@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>班守 ShiftGuard｜引擎測試</title>
+  <style>
+    body { font-family: "Noto Sans TC", system-ui, sans-serif; margin: 0; padding: 32px; background: #f6f7f9; color: #1c2733; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    .sub { color: #66788c; font-size: 13px; margin-bottom: 20px; }
+    #summary { font-size: 15px; font-weight: 700; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; }
+    #summary.ok { background: #e5f6ec; color: #16794c; }
+    #summary.bad { background: #fdebec; color: #b3261e; }
+    .t { padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; font-size: 13.5px; background: #fff; border: 1px solid #e3e8ee; white-space: pre-wrap; }
+    .t.pass { border-left: 4px solid #2ba36b; }
+    .t.fail { border-left: 4px solid #d64545; background: #fff5f5; }
+  </style>
+</head>
+<body>
+  <h1>班守 ShiftGuard — 確定性引擎測試</h1>
+  <p class="sub">零依賴、離線可跑：跟 index.html 一樣，雙擊本檔即可執行。工時、班距、連續天數的邊界條件在這裡被釘死——引擎改壞任何一條，這頁會直接變紅。</p>
+  <div id="summary">執行中…</div>
+  <div id="results"></div>
+
+  <script src="src/data.js"></script>
+  <script src="src/rules.js"></script>
+  <script src="src/engine.js"></script>
+  <script src="src/llm.js"></script>
+
+  <script>
+    /* ── 迷你測試框架 ── */
+    const TESTS = [];
+    function test(name, fn) { TESTS.push({ name, fn }); }
+    function assert(cond, msg) { if (!cond) throw new Error(msg || '條件不成立'); }
+    function assertEqual(actual, expected, msg) {
+      const a = JSON.stringify(actual), b = JSON.stringify(expected);
+      if (a !== b) throw new Error(`${msg || '值不相等'}\n  期望：${b}\n  實際：${a}`);
+    }
+    async function runTests() {
+      const out = document.getElementById('results');
+      const summary = document.getElementById('summary');
+      let pass = 0, fail = 0;
+      for (const t of TESTS) {
+        const li = document.createElement('div');
+        try {
+          await t.fn();
+          pass += 1; li.className = 't pass'; li.textContent = '✓ ' + t.name;
+        } catch (err) {
+          fail += 1; li.className = 't fail'; li.textContent = '✗ ' + t.name + '\n' + err.message;
+          console.error(t.name, err);
+        }
+        out.appendChild(li);
+      }
+      summary.className = fail ? 'bad' : 'ok';
+      summary.textContent = fail
+        ? `✗ ${fail} 項失敗（${pass} 項通過）——引擎行為與規格不符，請勿上場 demo`
+        : `✓ 全數通過（${pass} 項）`;
+      document.title = fail ? `✗ ${fail} 失敗｜引擎測試` : `✓ ${pass} 通過｜引擎測試`;
+    }
+  </script>
+  <script src="tests/engine.test.js"></script>
+  <script>runTests();</script>
+</body>
+</html>
