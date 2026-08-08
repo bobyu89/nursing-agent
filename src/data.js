@@ -247,6 +247,16 @@ const RAW_MESSAGE =
   '護理長不好意思，我從昨天開始發燒到 38.5 度，剛剛看完醫生說要休息，' +
   '禮拜天的早班我真的沒辦法上了，很抱歉造成大家困擾 🙏';
 
+/* ── 範例訊息（一鍵帶入並解析，降低輸入摩擦）─────────────
+ * 四種刻意設計的情境：欄位齊全度不同，展示解析與追問的各種行為。
+ */
+const SAMPLE_MESSAGES = [
+  { label: '典型病假', text: RAW_MESSAGE },
+  { label: '下週進修', text: '護理長，我下週三大夜要去進修，那天沒辦法上班，麻煩您了' },
+  { label: '日期模糊', text: '護理長，我從今天開始發燒，禮拜天的早班沒辦法上了，很抱歉' },
+  { label: '什麼都沒說', text: '護理長不好意思，我臨時有事，班沒辦法上了 🙏' },
+];
+
 /* ── 缺班事件（Agent 解析 + 主管補充後的完整版）─────────── */
 const GAP_EVENT = {
   id: 'GAP-20260809-D-MED3A',
@@ -268,5 +278,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SHIFT_TYPES, UNITS, CERTS, ROLE_LEVELS, WEEK, WEEK_DATES,
     STAFF, SHIFTS, RAW_MESSAGE, GAP_EVENT, UNIT_MIN_STAFF, MULTI_GAP_SCENARIO,
+    SAMPLE_MESSAGES,
   };
 }

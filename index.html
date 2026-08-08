@@ -47,12 +47,14 @@
           <h2>原始通報訊息</h2>
           <span class="tag tag-neutral">來源：單位 LINE 群組（轉貼）</span>
         </div>
+        <div class="chips" id="sample-chips"></div>
         <textarea id="raw-message" rows="6" spellcheck="false"></textarea>
         <div class="q-hint" style="margin:10px 0 4px;color:var(--ink-faint)">通報人員（代號）</div>
         <select id="ans-reporter"></select>
         <button class="btn btn-primary" id="btn-parse">以 AI 解析通報訊息</button>
         <p class="fineprint">
-          可直接改寫上方訊息再解析——日期、班別、事由、單位與資格都是從文字內容比對而來，改了會跟著變。
+          從 LINE <b>貼上訊息會自動解析</b>；也可點上方範例一鍵帶入，或直接改寫再解析——
+          日期、班別、事由、單位與資格都是從文字內容比對而來，改了會跟著變。
           解析由語言模型負責；所有工時、資格、班距的計算則由確定性規則引擎執行，模型不參與。
         </p>
       </div>

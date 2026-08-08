@@ -152,6 +152,16 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--brand-tint)
 
 .fineprint { font-size: 12.5px; color: var(--ink-faint); margin: 10px 0 0; }
 
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.chip {
+  appearance: none; font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--line-soft); color: var(--ink-soft);
+  transition: border-color .15s ease, color .15s ease, background .15s ease, transform .1s ease;
+}
+.chip:hover { border-color: var(--brand); color: var(--brand-dark); background: var(--brand-tint); }
+.chip:active { transform: translateY(1px); }
+
 /* ── 解析結果 ─────────────────────────────────────────── */
 .field-row {
   display: grid; grid-template-columns: 92px 1fr; gap: 12px;

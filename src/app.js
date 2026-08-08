@@ -994,6 +994,17 @@ function init() {
 
   $$('.tab').forEach((t) => t.addEventListener('click', () => switchScreen(t.dataset.screen)));
   $('#btn-parse').addEventListener('click', handleParse);
+
+  // 範例訊息一鍵帶入並解析
+  $('#sample-chips').innerHTML = SAMPLE_MESSAGES.map((m, i) =>
+    `<button class="chip" data-sample="${i}">${esc(m.label)}</button>`).join('');
+  $$('#sample-chips .chip').forEach((b) => b.addEventListener('click', () => {
+    $('#raw-message').value = SAMPLE_MESSAGES[Number(b.dataset.sample)].text;
+    handleParse();
+  }));
+
+  // 從 LINE 貼上訊息即自動解析（貼上內容於事件後才進入 value，延後一拍）
+  $('#raw-message').addEventListener('paste', () => setTimeout(handleParse, 0));
   $('#btn-evaluate').addEventListener('click', handleEvaluate);
   $('#btn-recalc').addEventListener('click', handleRecalc);
   $('#btn-multi-run').addEventListener('click', handleMultiRun);
