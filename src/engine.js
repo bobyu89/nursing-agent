@@ -438,6 +438,18 @@ function createEngine(db) {
     if (s) s.standbyCount30d += 1;
   }
 
+  /**
+   * 缺班班別的單位人力狀態：目前在班人數、替補後人數、最低配置。
+   * min 為 null 代表該單位未設定最低配置（不做判定）。
+   */
+  function unitCoverage(gap) {
+    const current = db.shifts.filter(
+      (s) => s.date === gap.date && s.unit === gap.unit && s.shift === gap.shift).length;
+    const byUnit = db.staffingMin ? db.staffingMin[gap.unit] : null;
+    const min = byUnit && typeof byUnit[gap.shift] === 'number' ? byUnit[gap.shift] : null;
+    return { current, afterReplacement: current + 1, min };
+  }
+
   /** 替補後的班表變化（僅影響缺班當日該單位） */
   function scheduleDelta(gap, staffId) {
     const dayShifts = db.shifts.filter((s) => s.date === gap.date && s.unit === gap.unit);
@@ -454,7 +466,7 @@ function createEngine(db) {
     evaluateGap, relaxationAnalysis, applyReplacement, scheduleDelta,
     checkHardConstraints, scoreCandidate, collectFlags,
     weeklyHours, shiftMix, isOnLeave, consecutiveDaysWithGap,
-    minRestAfterGap, shiftInterval,
+    minRestAfterGap, shiftInterval, unitCoverage,
   };
 }
 

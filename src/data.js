@@ -21,6 +21,18 @@ const UNITS = {
   'ICU': '加護病房',
 };
 
+/**
+ * 各單位每班別的最低配置人力。
+ * 本 demo 的班表只是單位的「部分名單」（命題要求 8–12 名），
+ * 故以 1 計，用來呈現「缺班＝當班人力低於配置」的判定機制；
+ * 正式導入時應對接院內護病比與實際最低配置人數。
+ */
+const UNIT_MIN_STAFF = {
+  'MED-3A': { D: 1, E: 1, N: 1 },
+  'SUR-5B': { D: 1, E: 1, N: 1 },
+  'ICU':    { D: 1, E: 1, N: 1 },
+};
+
 /* ── 資格／證照定義 ─────────────────────────────────────── */
 const CERTS = {
   ACLS: '高級心臟救命術 ACLS',
@@ -236,6 +248,6 @@ const GAP_EVENT = {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SHIFT_TYPES, UNITS, CERTS, ROLE_LEVELS, WEEK, WEEK_DATES,
-    STAFF, SHIFTS, RAW_MESSAGE, GAP_EVENT,
+    STAFF, SHIFTS, RAW_MESSAGE, GAP_EVENT, UNIT_MIN_STAFF,
   };
 }

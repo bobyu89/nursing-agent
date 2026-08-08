@@ -30,6 +30,7 @@ const engine = createEngine({
   certs: CERTS,
   units: UNITS,
   registry: RULE_REGISTRY,
+  staffingMin: UNIT_MIN_STAFF,
 });
 
 const $ = (sel) => document.querySelector(sel);
@@ -62,9 +63,32 @@ async function copyToClipboard(text) {
   return ok;
 }
 
+/**
+ * 留痕採雜湊鏈結（tamper-evident）：每筆紀錄的雜湊包含前一筆的雜湊，
+ * 事後修改任何一筆都會讓後續整條鏈驗證失敗。
+ * 這是前端 demo 能誠實做到的防竄改；正式導入時改由後端 append-only 儲存。
+ */
+function chainHash(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
+  return h.toString(16).padStart(8, '0');
+}
+
 function logAction(action, detail, actor = '內科病房 3A 護理長') {
-  state.audit.unshift({ time: nowStamp(), action, detail, actor });
+  const time = nowStamp();
+  const prev = state.audit.length ? state.audit[0].hash : 'genesis';
+  const hash = chainHash(prev + time + action + detail + actor);
+  state.audit.unshift({ time, action, detail, actor, prev, hash });
   renderAuditLog();
+}
+
+/** 由最早一筆往回重算整條鏈，任何一筆被改過都會驗出斷鏈 */
+function verifyAuditChain() {
+  const chrono = [...state.audit].reverse();
+  return chrono.every((e, i) => {
+    const prev = i === 0 ? 'genesis' : chrono[i - 1].hash;
+    return e.prev === prev && e.hash === chainHash(prev + e.time + e.action + e.detail + e.actor);
+  });
 }
 
 /* ══ 規則庫持久化（localStorage）═══════════════════════════
@@ -457,8 +481,9 @@ async function chooseCandidate(idx) {
   logAction('選定替補人選', `${chosen.staff.id}（排序第 ${chosen.rank} 名，加權總分 ${chosen.score.total}）`);
 
   const delta = engine.scheduleDelta(state.gap, chosen.staff.id);
+  const coverage = engine.unitCoverage(state.gap);
   const [summary, draft] = await Promise.all([
-    llmSupervisorSummary(state.result, chosen, delta),
+    llmSupervisorSummary(state.result, chosen, delta, coverage),
     llmNotificationDraft(state.gap, chosen),
   ]);
 
@@ -617,7 +642,7 @@ function renderAuditLog() {
   }
   el.innerHTML = state.audit.map((a) => `
     <div class="log-item">
-      <div class="log-time">${a.time}　·　${esc(a.actor)}</div>
+      <div class="log-time">${a.time}　·　${esc(a.actor)}　·　<span class="log-hash" title="鏈式雜湊：本筆內容 + 前一筆雜湊">#${a.hash}</span></div>
       <div class="log-action">${esc(a.action)}</div>
       <div class="log-detail">${esc(a.detail)}</div>
     </div>`).join('');
@@ -830,7 +855,8 @@ function init() {
     const payload = {
       platform: '班守 ShiftGuard（DEMO）',
       exportedAt: nowStamp(),
-      note: '本檔為前端演示版之決策留痕匯出；正式導入時由後端以不可竄改方式儲存。',
+      note: '本檔為前端演示版之決策留痕匯出。留痕採雜湊鏈結（每筆含前筆雜湊），修改任一筆即斷鏈；正式導入時由後端 append-only 儲存。',
+      chainValid: verifyAuditChain(),
       rules: {
         hard: RULE_REGISTRY.hard.map((r) => ({ code: r.code, name: r.name, enabled: r.enabled, param: r.param ? r.param.value : null })),
         soft: RULE_REGISTRY.soft.map((r) => ({ code: r.code, name: r.name, weight: r.weight, param: r.param ? r.param.value : null })),

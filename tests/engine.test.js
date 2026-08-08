@@ -213,6 +213,43 @@ test('訊息解析（async）：「我不能上班了」四項關鍵欄位全數
     '日期／班別／單位／資格皆未載明，應全部追問而非臆測');
 });
 
+test('unitCoverage：計算缺班班別的單位當班人力與最低配置比對', () => {
+  const A = mkStaff('A');
+  const shifts = [
+    d('B', '2026-08-09', 'E'),            // 同單位同日小夜 1 人
+    d('C', '2026-08-09', 'D', 'SUR-5B'),  // 他單位，不得計入
+  ];
+  const e = mkEngine([A], shifts, {
+    staffingMin: { 'MED-3A': { D: 1, E: 2, N: 1 } },
+  });
+  const dCov = e.unitCoverage(mkGap());
+  assertEqual([dCov.current, dCov.afterReplacement, dCov.min], [0, 1, 1],
+    '白班目前 0 人、替補後 1 人，達最低配置 1 人');
+  const eCov = e.unitCoverage(mkGap({ shift: 'E' }));
+  assertEqual([eCov.current, eCov.afterReplacement, eCov.min], [1, 2, 2],
+    '小夜已有 1 人、替補後 2 人，恰達配置 2 人');
+  const noMin = mkEngine([A], [], {}).unitCoverage(mkGap());
+  assertEqual(noMin.min, null, '未設定最低配置時不做判定');
+});
+
+test('api 回應不符合約格式時視同失敗，退回 mock', async () => {
+  const origFetch = globalThis.fetch;
+  const origMode = LLM.mode, origEndpoint = LLM.endpoint;
+  try {
+    LLM.mode = 'api';
+    LLM.endpoint = 'https://example.invalid/llm';
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ 不是合約形狀: true }) });
+    const parsed = await llmParseGapMessage('明天的白班沒辦法上');
+    assertEqual(LLM.mode, 'mock', '合約驗證失敗應自動退回 mock');
+    assertEqual(parsed.extracted.date.value, '2026-08-09', '退回後仍以 mock 完成解析');
+  } finally {
+    globalThis.fetch = origFetch;
+    LLM.mode = origMode;
+    LLM.endpoint = origEndpoint;
+    delete LLM.fallbackReason;
+  }
+});
+
 test('api 模式呼叫失敗時自動退回 mock，演示不中斷', async () => {
   const origFetch = globalThis.fetch;
   const origMode = LLM.mode, origEndpoint = LLM.endpoint;

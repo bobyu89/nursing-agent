@@ -335,6 +335,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--brand-tint)
 .log-item { padding: 11px 0; border-bottom: 1px solid var(--line-soft); font-size: 13.5px; }
 .log-item:last-child { border-bottom: 0; }
 .log-time { font-size: 12px; color: var(--ink-faint); font-family: ui-monospace, Menlo, Consolas, monospace; }
+.log-hash { color: var(--brand); cursor: help; }
 .log-action { font-weight: 700; }
 .log-detail { color: var(--ink-soft); font-size: 13px; }
 
@@ -420,6 +421,33 @@ tbody tr:hover td { background: #f7fafb; }
 .sk-row:nth-child(2) .sk-val { width: 72%; }
 .sk-row:nth-child(4) .sk-val { width: 40%; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* ── 響應式：手機（≤ 640px）───────────────────────────────
+ * 護理長的真實場景是手機看到 LINE 訊息、當場處理。
+ * 原則：單欄堆疊、觸控目標放大、表格容器內橫捲、頁面本身不橫向溢出。 */
+@media (max-width: 640px) {
+  .topbar { padding: 10px 14px; flex-wrap: wrap; }
+  .tabs { padding: 0 8px; }
+  .tab { padding: 10px 10px 12px; font-size: 13px; gap: 6px; }
+  main { padding: 16px 14px 48px; }
+  .screen-head h1 { font-size: 20px; }
+  .lede { font-size: 13.5px; }
+  .card { padding: 14px 14px 16px; }
+  .grid-2 { gap: 14px; }
+  .cand-head { padding: 12px 14px; gap: 10px; }
+  .score-wrap { min-width: 132px; }
+  .sc-row { grid-template-columns: 1fr 72px 52px; gap: 8px; padding: 10px 10px; }
+  .gap-banner { gap: 12px 22px; padding: 14px 16px; }
+  .rule { grid-template-columns: 38px 1fr; }
+  .rule-ctrl { grid-column: 2; white-space: normal; flex-wrap: wrap; }
+  .fair-row { grid-template-columns: 44px 1fr 70px; gap: 8px; }
+  .fair-summary { gap: 8px 16px; padding: 10px 12px; }
+  .excl { grid-template-columns: 60px 1fr; gap: 10px; }
+  .field-row { grid-template-columns: 74px 1fr; gap: 10px; }
+  .btn-row .btn { flex: 1 1 auto; }
+  .reasons { gap: 10px; }
+  .footer { padding: 14px 16px; }
+}
 
 /* ── 動效偏好：使用者要求減少動態時全部關閉 ──────────── */
 @media (prefers-reduced-motion: reduce) {

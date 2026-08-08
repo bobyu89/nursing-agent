@@ -221,19 +221,23 @@ async function llmExplainCandidate(candidate, gap) {
 
 /* ── 4. 主管確認摘要與通知草稿 ─────────────────────────── */
 
-async function llmSupervisorSummary(result, chosen, delta) {
+async function llmSupervisorSummary(result, chosen, delta, coverage) {
   if (LLM.mode === 'api') {
-    try { return await llmCallApi('supervisor_summary', { result, chosen, delta }); }
+    try { return await llmCallApi('supervisor_summary', { result, chosen, delta, coverage }); }
     catch (err) { llmFallbackToMock(err); }
   }
 
   await tick(400);
   const gap = result.gap;
   const s = chosen.staff;
+  const underStaffed = coverage && coverage.min !== null && coverage.afterReplacement < coverage.min;
   const checklist = [
     `確認 ${s.id} 本人可配合並完成口頭應允`,
     `確認 ${UNITS[gap.unit]} 當日 ${SHIFT_TYPES[gap.shift].name}人力配置無其他缺口`,
   ];
+  if (underStaffed) {
+    checklist.push(`單位當班人力替補後仍低於最低配置（${coverage.afterReplacement}／${coverage.min} 人），需另行調度或通報護理部`);
+  }
   chosen.flags.forEach((f) => {
     if (f.needsApproval) checklist.push(`取得單位主管加簽：${f.text}`);
     else checklist.push(`知悉並評估：${f.text}`);
@@ -248,6 +252,10 @@ async function llmSupervisorSummary(result, chosen, delta) {
       { label: '缺班原因', value: gap.reason },
       { label: '必要資格', value: gap.requiredCerts.map((c) => CERTS[c]).join('、') },
       { label: '評估人數', value: `${STAFF.length} 名，排除 ${result.excluded.length} 名，合格候選 ${result.candidates.length} 名` },
+      ...(coverage && coverage.min !== null ? [{
+        label: '單位當班人力',
+        value: `${coverage.current} 人 → 替補後 ${coverage.afterReplacement} 人（最低配置 ${coverage.min} 人${coverage.afterReplacement < coverage.min ? '，仍不足' : '，達標'}）`,
+      }] : []),
       { label: '替補後週工時', value: `${chosen.score.base} → ${chosen.score.projected} 小時` },
       { label: '替補後連續上班', value: `${chosen.consecutiveDays} 天` },
       { label: '班間休息', value: chosen.restHours === Infinity ? '本週無鄰近班次' : `最短 ${chosen.restHours} 小時` },
@@ -303,6 +311,18 @@ function llmFallbackToMock(err) {
   console.warn('LLM api 模式呼叫失敗，已自動退回 mock：', err);
 }
 
+/**
+ * api 回應合約：每個任務的回傳必須長成 mock 相同的形狀，
+ * 否則視同呼叫失敗（丟出錯誤 → 上層自動退回 mock）。
+ * 模型輸出永遠可能跑格式，畫面不能因此壞掉。
+ */
+const LLM_CONTRACTS = {
+  parse_gap: (r) => r && typeof r === 'object' && r.extracted && Array.isArray(r.missing),
+  explain_candidate: (r) => r && typeof r.verdict === 'string' && Array.isArray(r.strengths) && Array.isArray(r.concerns),
+  supervisor_summary: (r) => r && typeof r.headline === 'string' && Array.isArray(r.facts) && Array.isArray(r.checklist),
+  notification_draft: (r) => typeof r === 'string' && r.length > 0,
+};
+
 async function llmCallApi(task, payload) {
   if (!LLM.endpoint) throw new Error('LLM api 模式未設定 endpoint');
   const res = await fetch(LLM.endpoint, {
@@ -311,7 +331,10 @@ async function llmCallApi(task, payload) {
     body: JSON.stringify({ task, modelId: LLM.modelId, payload }),
   });
   if (!res.ok) throw new Error(`LLM 端點回應 ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  const valid = LLM_CONTRACTS[task];
+  if (valid && !valid(data)) throw new Error(`LLM 回應不符合「${task}」的合約格式`);
+  return data;
 }
 
 function tick(ms) {
