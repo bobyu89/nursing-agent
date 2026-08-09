@@ -383,6 +383,64 @@ test('sanitizeParsed：合法值放行，label／source 截斷至 200 字', () =
   assertEqual(clean.missing, [], '欄位齊全時不應產生追問');
 });
 
+/* ── 任務重分配（第三層：韌性模式）── */
+
+test('任務重分配：資格是硬性條件——需 VENT 的任務絕不指派給無資格者', () => {
+  const r = reallocateTasks(TASK_REALLOC_SCENARIO);
+  r.plan.forEach((p) => {
+    p.tasks.forEach((t) => {
+      (t.requiredCerts || []).forEach((c) =>
+        assert(p.staff.certs.includes(c), `${p.staff.id} 無 ${c} 資格卻被指派 ${t.name}`));
+    });
+  });
+  const t1 = r.uncovered.find((u) => u.task.id === 'T1');
+  assert(t1, '無人具 VENT 資格，T1 應為未覆蓋');
+  assertEqual(t1.reason, 'no_qualified', 'T1 未覆蓋原因應為「無人具資格」');
+});
+
+test('任務重分配：負荷上限被嚴格遵守，量能不足以 over_capacity 標示', () => {
+  const r = reallocateTasks(TASK_REALLOC_SCENARIO);
+  r.plan.forEach((p) =>
+    assert(p.extraLoad <= r.maxExtraLoad, `${p.staff.id} 負荷 ${p.extraLoad} 超過上限 ${r.maxExtraLoad}`));
+  const overCap = r.uncovered.filter((u) => u.reason === 'over_capacity');
+  assert(overCap.length >= 1, '情境總量能 6 點 < 非 VENT 任務 8 點，應有任務因量能不足未覆蓋');
+  // 只能由 I-01 承接的中央靜脈導管給藥（IV）必須被覆蓋
+  const t2Holder = r.plan.find((p) => p.tasks.some((t) => t.id === 'T2'));
+  assert(t2Holder && t2Holder.staff.id === 'I-01', 'T2 需 IV 資格，應由 I-01 承接');
+});
+
+test('任務重分配：關鍵任務優先於非關鍵任務——不會為了覆蓋衛教而犧牲給藥', () => {
+  // 量能充足時全部覆蓋；量能極度受限時，未覆蓋的應盡量是非關鍵任務
+  const tight = reallocateTasks({
+    tasks: [
+      { id: 'A', name: '給藥', requiredCerts: [], workload: 2, critical: true },
+      { id: 'B', name: '衛教', requiredCerts: [], workload: 2, critical: false },
+    ],
+    onDuty: [{ id: 'X', role: '護理師', certs: [] }],
+    maxExtraLoad: 2,
+  });
+  assertEqual(tight.uncovered.map((u) => u.task.id), ['B'], '量能只夠一項時，應保關鍵任務、捨非關鍵');
+  const ample = reallocateTasks({
+    tasks: [
+      { id: 'A', name: '給藥', requiredCerts: [], workload: 2, critical: true },
+      { id: 'B', name: '衛教', requiredCerts: [], workload: 2, critical: false },
+    ],
+    onDuty: [{ id: 'X', role: '護理師', certs: [] }, { id: 'Y', role: '護理師', certs: [] }],
+    maxExtraLoad: 2,
+  });
+  assertEqual(ample.uncovered, [], '量能充足時應全數覆蓋');
+});
+
+test('任務重分配：結果確定性且誠實——缺口數量與覆蓋數相加等於任務總數', () => {
+  const r1 = reallocateTasks(TASK_REALLOC_SCENARIO);
+  const r2 = reallocateTasks(TASK_REALLOC_SCENARIO);
+  assertEqual(
+    r1.plan.map((p) => p.tasks.map((t) => t.id)),
+    r2.plan.map((p) => p.tasks.map((t) => t.id)),
+    '同輸入必得同結果');
+  assertEqual(r1.coveredCount + r1.uncovered.length, r1.totalCount, '覆蓋＋缺口必須交代全部任務');
+});
+
 test('completeGapEvent：不合法的缺班條件不得進入引擎（最後一道閘門）', () => {
   const noneExtracted = {
     date: { value: null }, shift: { value: null }, unit: { value: null },

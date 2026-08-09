@@ -917,6 +917,84 @@ function startQueuedGap() {
   switchScreen('candidates');
 }
 
+/* ── 畫面 7 第三層：任務重新分配（韌性模式）── */
+
+function renderReallocScenario() {
+  const sc = TASK_REALLOC_SCENARIO;
+  $('#realloc-scenario').innerHTML = `
+    <div class="excl">
+      <div><div class="excl-id">情境</div></div>
+      <div>
+        <div class="excl-reason"><b>${esc(sc.gapLabel)}｜${esc(sc.absent.id)}（${esc(sc.absent.note)}）無法出勤且查無合格替補</b></div>
+        <div class="sc-evi">缺班者任務 ${sc.tasks.length} 項（關鍵 ${sc.tasks.filter((t) => t.critical).length} 項）；
+          在班人力 ${sc.onDuty.map((s) => esc(s.id)).join('、')} 共 ${sc.onDuty.length} 位；
+          每人最多可多承接 ${sc.maxExtraLoad} 點工作量</div>
+      </div>
+    </div>`;
+}
+
+function handleReallocRun() {
+  const sc = TASK_REALLOC_SCENARIO;
+  const r = reallocateTasks(sc);
+
+  const REASON = {
+    no_qualified: '無人具必要資格',
+    over_capacity: '在班人力量能不足',
+  };
+
+  const planHtml = r.plan.map((p) => `
+    <div class="excl">
+      <div>
+        <div class="excl-id">${esc(p.staff.id)}</div>
+        <div class="excl-role">${esc(p.staff.role)}</div>
+      </div>
+      <div>
+        ${p.tasks.map((t) => `
+          <div class="excl-reason">
+            <span class="rule-code neutral">${t.critical ? '關鍵' : '一般'}</span>
+            <span>${esc(t.name)}（${t.workload} 點${(t.requiredCerts || []).length ? '，需 ' + t.requiredCerts.map((c) => esc(CERTS[c] || c)).join('、') : ''}）</span>
+          </div>`).join('') || '<div class="sc-evi">未承接額外任務</div>'}
+        <div class="sc-evi">承接負荷 ${p.extraLoad}／${r.maxExtraLoad} 點${p.extraLoad >= r.maxExtraLoad ? '（已達上限，照護風險升高）' : ''}</div>
+      </div>
+    </div>`).join('');
+
+  const uncoveredHtml = r.uncovered.map((u) => `
+    <div class="excl">
+      <div><span class="rule-code">缺口</span></div>
+      <div>
+        <div class="excl-reason"><b class="expired">${esc(u.task.name)}${u.task.critical ? '（關鍵任務）' : ''}</b></div>
+        <div class="sc-evi">原因：${REASON[u.reason] || esc(u.reason)}${(u.task.requiredCerts || []).length ? '——需 ' + u.task.requiredCerts.map((c) => esc(CERTS[c] || c)).join('、') : ''}</div>
+      </div>
+    </div>`).join('');
+
+  $('#realloc-result').innerHTML = `
+    <div class="card" style="margin-top:14px">
+      <div class="card-head">
+        <h2>重分配結果</h2>
+        <span class="tag ${r.uncovered.length ? 'tag-danger' : 'tag-ok'}">覆蓋 ${r.coveredCount}／${r.totalCount} 項${r.uncoveredCritical ? '，含 ' + r.uncoveredCritical + ' 項關鍵缺口' : ''}</span>
+      </div>
+      ${planHtml}
+      ${r.uncovered.length ? `
+        <h4 style="margin:14px 0 4px;font-size:13px;color:var(--ink-faint)">未覆蓋缺口——系統不粉飾，這是需要主管決策的訊號</h4>
+        ${uncoveredHtml}
+        <h4 style="margin:14px 0 4px;font-size:13px;color:var(--ink-faint)">建議的主管決策選項</h4>
+        <ul style="margin:0;padding-left:18px;font-size:13.5px">
+          <li>通報護理部調度中心，啟動院級人力調度（缺資格之關鍵任務的正解）</li>
+          <li>申請鄰近院區具資格人員跨區支援，並同步加強交班</li>
+          <li>評估非緊急任務延後至下一班，並於交班紀錄明確註記</li>
+        </ul>` : ''}
+      <p class="fineprint">
+        分配由確定性引擎計算：資格為硬性條件、負荷上限嚴格遵守、關鍵任務優先；
+        系統不自動刪任務、不假裝缺口不存在——第三層的價值是把「降級運作方案」與「殘餘缺口」同時攤開。
+      </p>
+    </div>`;
+
+  logAction('任務重分配試算（韌性模式）',
+    `${sc.gapLabel}：${sc.onDuty.length} 位在班人員承接 ${r.coveredCount}／${r.totalCount} 項任務，` +
+    `未覆蓋 ${r.uncovered.length} 項（關鍵 ${r.uncoveredCritical} 項）——由主管決定上報或調度`,
+    '班守 ShiftGuard 規則引擎');
+}
+
 /* ══ 畫面 6：規則庫 ═════════════════════════════════════ */
 
 /**
@@ -1120,6 +1198,7 @@ function init() {
   $('#btn-evaluate').addEventListener('click', handleEvaluate);
   $('#btn-recalc').addEventListener('click', handleRecalc);
   $('#btn-multi-run').addEventListener('click', handleMultiRun);
+  $('#btn-realloc-run').addEventListener('click', handleReallocRun);
 
   renderRoster();
   renderStaffTable();
@@ -1128,6 +1207,7 @@ function init() {
   renderWarnings();
   renderAuditLog();
   renderMultiScenario();
+  renderReallocScenario();
 }
 
 document.addEventListener('DOMContentLoaded', init);

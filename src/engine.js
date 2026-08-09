@@ -654,10 +654,93 @@ function createEngine(db) {
   };
 }
 
+/**
+ * 任務重新分配（第三層：韌性模式）——連替補都無解時，缺的不再是
+ * 「一個人」，而是「一班的任務」。把缺班者的任務拆解，重分配給在班人力。
+ *
+ * 純函式、資料全部由參數注入（與 createEngine 同一哲學）：
+ *   tasks        缺班者任務清單 [{id, name, requiredCerts, workload, critical}]
+ *   onDuty       在班人員 [{id, role, certs: [代碼]}]
+ *   maxExtraLoad 每人最多可多承接的工作量點數
+ *
+ * 演算法與 assignJointly 同宗：枚舉全部可行組合（每項任務指派給一位
+ * 合格且尚有量能者，或留空），字典序最佳化——
+ *   (1) 未覆蓋的「關鍵任務」數最少 → (2) 未覆蓋任務總數最少
+ *   → (3) 最大個人負荷最小（平衡）→ 同分取先枚舉者（結果確定性）。
+ *
+ * 誠實原則：無人可承接的任務不會被隱藏或自動刪除——逐筆標示未覆蓋
+ * 原因（no_qualified：無人具資格／over_capacity：量能不足），交主管決策。
+ */
+function reallocateTasks({ tasks, onDuty, maxExtraLoad }) {
+  const qualified = (staff, task) =>
+    (task.requiredCerts || []).every((c) => (staff.certs || []).includes(c));
+
+  // 每項任務的可承接者（資格為硬性條件，量能於枚舉時檢查）
+  const pools = tasks.map((task) => onDuty.filter((s) => qualified(s, task)).map((s) => s.id));
+
+  let best = null;
+  const loads = Object.fromEntries(onDuty.map((s) => [s.id, 0]));
+
+  const evaluate = (assignment) => {
+    const uncoveredCritical = tasks.filter((t, i) => assignment[i] === null && t.critical).length;
+    const uncoveredTotal = assignment.filter((a) => a === null).length;
+    const maxLoad = Math.max(0, ...Object.values(loads));
+    return { uncoveredCritical, uncoveredTotal, maxLoad };
+  };
+
+  const better = (a, b) =>
+    a.uncoveredCritical !== b.uncoveredCritical ? a.uncoveredCritical < b.uncoveredCritical
+      : a.uncoveredTotal !== b.uncoveredTotal ? a.uncoveredTotal < b.uncoveredTotal
+        : a.maxLoad < b.maxLoad;
+
+  const walk = (idx, assignment) => {
+    if (idx === tasks.length) {
+      const score = evaluate(assignment);
+      if (!best || better(score, best.score)) {
+        best = { assignment: assignment.slice(), score };
+      }
+      return;
+    }
+    for (const staffId of pools[idx].concat([null])) {
+      if (staffId !== null) {
+        if (loads[staffId] + tasks[idx].workload > maxExtraLoad) continue;
+        loads[staffId] += tasks[idx].workload;
+      }
+      assignment.push(staffId);
+      walk(idx + 1, assignment);
+      assignment.pop();
+      if (staffId !== null) loads[staffId] -= tasks[idx].workload;
+    }
+  };
+  walk(0, []);
+
+  // 整理輸出：各在班人員的承接清單與負荷、未覆蓋任務與原因
+  const plan = onDuty.map((s) => ({ staff: s, tasks: [], extraLoad: 0 }));
+  const uncovered = [];
+  best.assignment.forEach((staffId, i) => {
+    const task = tasks[i];
+    if (staffId === null) {
+      uncovered.push({ task, reason: pools[i].length === 0 ? 'no_qualified' : 'over_capacity' });
+    } else {
+      const entry = plan.find((p) => p.staff.id === staffId);
+      entry.tasks.push(task);
+      entry.extraLoad += task.workload;
+    }
+  });
+
+  return {
+    plan, uncovered,
+    coveredCount: tasks.length - uncovered.length,
+    totalCount: tasks.length,
+    uncoveredCritical: uncovered.filter((u) => u.task.critical).length,
+    maxExtraLoad,
+  };
+}
+
 /* 讓測試頁（tests.html）以外的環境（如 Node）也能載入 */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     createEngine, parseDate, formatDate, addDays, weekdayOf,
-    shortDate, weekDatesOf, WEEKDAY_TW, isValidDateStr,
+    shortDate, weekDatesOf, WEEKDAY_TW, isValidDateStr, reallocateTasks,
   };
 }

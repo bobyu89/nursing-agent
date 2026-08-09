@@ -240,6 +240,30 @@ const MULTI_GAP_SCENARIO = [
   },
 ];
 
+/* ── 任務重分配演示情境（第三層：韌性模式）─────────────────
+ * 假設情境：畫面 7 的 ICU 缺班連唯一具呼吸器資格的 N-10 也請假——
+ * 全院無人可替補。此時缺的不再是「一個人」，而是「一班的任務」：
+ * 把缺班者的任務拆解，重分配給在班人力，無人可承接的誠實標示為缺口。
+ * onDuty 為該班別在班人員（獨立情境資料，不與 STAFF 合併，certs 為代碼陣列）。
+ */
+const TASK_REALLOC_SCENARIO = {
+  gapLabel: '2026-08-09（日）小夜 @ 加護病房',
+  absent: { id: 'N-10', role: '資深護理師', note: '唯一具呼吸器照護資格者' },
+  maxExtraLoad: 3,   // 每位在班人員最多可多承接的工作量點數
+  tasks: [
+    { id: 'T1', name: '呼吸器參數監測與抽痰（2 床）', requiredCerts: ['VENT'], workload: 3, critical: true },
+    { id: 'T2', name: '中央靜脈導管給藥', requiredCerts: ['IV'], workload: 2, critical: true },
+    { id: 'T3', name: '生命徵象與意識評估（每 2 小時）', requiredCerts: [], workload: 2, critical: true },
+    { id: 'T4', name: '常規口服與管灌給藥', requiredCerts: [], workload: 2, critical: true },
+    { id: 'T5', name: '護理紀錄與交班準備', requiredCerts: [], workload: 1, critical: false },
+    { id: 'T6', name: '家屬溝通與衛教', requiredCerts: [], workload: 1, critical: false },
+  ],
+  onDuty: [
+    { id: 'I-01', role: '護理師', certs: ['ACLS', 'IV'] },
+    { id: 'I-02', role: '護理師', certs: ['ACLS'] },
+  ],
+};
+
 /* ── 缺班事件的原始通報訊息（護理長轉貼）─────────────────
  * 刻意缺少「單位」與「必要資格」，用來演示 Agent 主動追問。
  */
@@ -278,6 +302,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SHIFT_TYPES, UNITS, CERTS, ROLE_LEVELS, WEEK, WEEK_DATES,
     STAFF, SHIFTS, RAW_MESSAGE, GAP_EVENT, UNIT_MIN_STAFF, MULTI_GAP_SCENARIO,
-    SAMPLE_MESSAGES,
+    SAMPLE_MESSAGES, TASK_REALLOC_SCENARIO,
   };
 }
