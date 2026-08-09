@@ -409,5 +409,5 @@ function tick(ms) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { LLM, parseDateFromText, completeGapEvent, llmParseGapMessage };
+  module.exports = { LLM, parseDateFromText, completeGapEvent, llmParseGapMessage, sanitizeParsed };
 }

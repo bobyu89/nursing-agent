@@ -12,6 +12,8 @@ const state = {
   chosen: null,        // 主管選定的候選人
   confirmed: false,    // 是否已完成主管確認
   audit: [],           // 決策留痕
+  multiQueue: [],      // 畫面 7 帶入的缺班佇列（{gap, suggestedId}）
+  suggestedId: null,   // 當前評估中，全局指派建議的人選（畫面標示用）
 };
 
 /** 開場時的替補次數基準值，用來標示本次連線期間的變化 */
@@ -278,6 +280,7 @@ function handleEvaluate() {
   state.gap = completeGapEvent(state.parsed.extracted, answers);
   state.chosen = null;
   state.confirmed = false;
+  state.suggestedId = null;   // 一般流程沒有全局建議標示
   state.result = engine.evaluateGap(state.gap);
 
   const g = state.gap;
@@ -292,6 +295,7 @@ function handleEvaluate() {
   renderCandidates();
   renderConfirmPlaceholder();
   renderRoster();
+  renderStaffTable();   // 證照效期以本次事件日期重新判定
   switchScreen('candidates');
 }
 
@@ -394,7 +398,7 @@ async function renderCandidates() {
         <div class="cand-head js-toggle" role="button" tabindex="0" aria-expanded="false">
           <div class="rank">${c.rank}</div>
           <div>
-            <div class="cand-id">${esc(c.staff.id)}　<span class="cand-meta">${esc(c.staff.role)} · ${esc(UNITS[c.staff.unit])}</span></div>
+            <div class="cand-id">${esc(c.staff.id)}　<span class="cand-meta">${esc(c.staff.role)} · ${esc(UNITS[c.staff.unit])}</span>${state.suggestedId === c.staff.id ? '　<span class="tag tag-brand">全局建議</span>' : ''}</div>
             <div class="cand-meta">週工時 ${c.score.base} → ${c.score.projected} 小時 ｜ 替補後連續上班 ${c.consecutiveDays} 天 ｜ 近 30 天代班 ${c.staff.standbyCount30d} 次</div>
           </div>
           <div class="cand-spacer"></div>
@@ -610,6 +614,16 @@ async function chooseCandidate(idx) {
     $('#btn-confirm').parentElement.appendChild(next);
     next.addEventListener('click', startNextGap);
 
+    // 畫面 7 帶入的佇列還有待辦時，提供一鍵繼續（以最新班表重新評估）
+    if (state.multiQueue.length > 0) {
+      const cont = document.createElement('button');
+      cont.className = 'btn btn-primary';
+      cont.style.marginTop = '0';
+      cont.textContent = `繼續佇列：下一筆缺班（剩 ${state.multiQueue.length} 筆）`;
+      $('#btn-confirm').parentElement.appendChild(cont);
+      cont.addEventListener('click', startQueuedGap);
+    }
+
     switchScreen('dashboard');
   });
 
@@ -625,6 +639,8 @@ function startNextGap() {
   state.result = null;
   state.chosen = null;
   state.confirmed = false;
+  state.suggestedId = null;
+  state.multiQueue = [];   // 手動開新事件即放棄剩餘佇列，避免殘留過期建議
   $('#parse-result').className = 'empty-state';
   $('#parse-result').textContent = '尚未解析。請貼上新的通報訊息後點左側按鈕。';
   $('#followup-card').hidden = true;
@@ -770,9 +786,12 @@ function renderStaffTable() {
     <th>願意支援班別</th><th class="center">近 30 天代班</th><th>狀態</th>
   </tr></thead>`;
 
+  // 效期判定基準：當前評估中事件的日期；尚無事件時以今天計（不再寫死初始示範日）
+  const certRefDate = (state.gap && state.gap.date) || formatDate(new Date());
+
   const body = STAFF.map((s) => {
     const certs = Object.entries(s.certs).map(([k, exp]) => {
-      const expired = exp < GAP_EVENT.date;
+      const expired = exp < certRefDate;
       return `<span class="${expired ? 'expired' : ''}">${CERTS[k].replace(/\s.*/, '')}${expired ? `（已於 ${exp} 到期）` : ''}</span>`;
     }).join('、');
     const willing = s.willingShifts === null
@@ -845,11 +864,19 @@ function handleMultiRun() {
       </div>
     </div>
     <div class="card">
-      <p class="fineprint" style="margin:0">
+      <p class="fineprint" style="margin:0 0 ${joint.filled > 0 ? '12px' : '0'}">
         兩種結果皆由確定性引擎計算（枚舉全部可行組合，含同一人接多筆時的班距與工時交互檢查），
         數字可完整重現。指派建議仍需主管於「替補候選人」流程逐筆確認後才會寫回班表。
       </p>
+      ${joint.filled > 0 ? `
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-multi-apply" style="margin-top:0">將全局建議帶入主流程，逐筆確認</button>
+      </div>
+      <p class="fineprint">帶入後仍走完整的候選評估與主管確認；每筆確認寫回後，下一筆會以最新班表重新評估，建議人選以「全局建議」標示。</p>` : ''}
     </div>`;
+
+  const applyBtn = $('#btn-multi-apply');
+  if (applyBtn) applyBtn.addEventListener('click', () => startMultiQueue(gaps, joint));
 
   logAction('多筆缺班指派比較',
     `${gaps.length} 筆缺班：逐筆指派填補 ${gFilled} 筆，全局指派填補 ${joint.filled} 筆` +
@@ -857,7 +884,54 @@ function handleMultiRun() {
     '班守 ShiftGuard 規則引擎');
 }
 
+/**
+ * 畫面 7 → 主流程：把全局指派建議排成佇列，逐筆走完整的評估與主管確認。
+ * 佇列只是「帶路」：每一筆仍以最新班表即時重新評估，主管仍可改選他人；
+ * 前一筆的確認寫回可能使後一筆的建議人選失效，此時標示自然消失。
+ */
+function startMultiQueue(gaps, joint) {
+  state.multiQueue = gaps
+    .map((g, i) => ({ gap: g, suggestedId: joint.assignment[i] }))
+    .filter((q) => q.suggestedId);
+  logAction('全局建議帶入主流程',
+    `${state.multiQueue.length} 筆缺班將依全局指派建議逐筆確認（${state.multiQueue.map((q) => `${multiGapLabel(q.gap)}→${q.suggestedId}`).join('、')}）`);
+  startQueuedGap();
+}
+
+function startQueuedGap() {
+  const item = state.multiQueue.shift();
+  if (!item) return;
+  // 佇列缺班補上主流程需要的通報欄位；評估一律用最新班表即時計算
+  state.gap = { raisedBy: '多筆缺班情境', raisedAt: nowStamp(), contextNote: '', ...item.gap };
+  state.suggestedId = item.suggestedId;
+  state.chosen = null;
+  state.confirmed = false;
+  state.result = engine.evaluateGap(state.gap);
+  logAction('執行替補評估（佇列）',
+    `${multiGapLabel(state.gap)}：評估 ${STAFF.length} 名人員，合格候選 ${state.result.candidates.length} 名；全局建議人選 ${state.suggestedId}`,
+    '班守 ShiftGuard 規則引擎');
+  renderCandidates();
+  renderConfirmPlaceholder();
+  renderRoster();
+  renderStaffTable();
+  switchScreen('candidates');
+}
+
 /* ══ 畫面 6：規則庫 ═════════════════════════════════════ */
+
+/**
+ * 權重總和不等於 100 時提醒主管：排序仍然有效（分數以總和為滿分等比呈現），
+ * 但「94／100」與「94／85」的溝通意義不同，主管應是有意為之而非沒注意到。
+ */
+function updateWeightSum() {
+  const sum = totalSoftWeight();
+  $('#weight-sum').textContent = sum;
+  const tag = $('#weight-sum-tag');
+  const note = $('#weight-sum-note');
+  if (!tag || !note) return;
+  tag.className = 'tag ' + (sum === 100 ? 'tag-neutral' : 'tag-warn');
+  note.textContent = sum === 100 ? '' : '（非 100：評分將以此總和為滿分，排序仍有效）';
+}
 
 function renderRules() {
   $('#hard-rules').innerHTML = RULE_REGISTRY.hard.map((r) => `
@@ -889,14 +963,14 @@ function renderRules() {
         <input type="number" data-soft-param="${r.code}" value="${r.param.value}" min="1" step="1"> ${r.param.unit}</label></div>` : ''}
     </div>`).join('');
 
-  $('#weight-sum').textContent = totalSoftWeight();
+  updateWeightSum();
 
   $$('[data-soft]').forEach((el) => {
     el.addEventListener('input', () => {
       const rule = RULE_REGISTRY.soft.find((r) => r.code === el.dataset.soft);
       rule.weight = Number(el.value);
       $(`#wv-${rule.code}`).textContent = rule.weight;
-      $('#weight-sum').textContent = totalSoftWeight();
+      updateWeightSum();
       saveRules();
     });
   });

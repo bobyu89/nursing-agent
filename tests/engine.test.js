@@ -329,3 +329,78 @@ test('api 模式呼叫失敗時自動退回 mock，演示不中斷', async () =>
     delete LLM.fallbackReason;
   }
 });
+
+/* ── 輸入驗證與消毒（資安補強的邊界，改壞任何一條會直接變紅）── */
+
+test('isValidDateStr：格式看似正確但不存在的日期一律拒絕', () => {
+  assert(isValidDateStr('2026-08-09'), '真實日期應通過');
+  assert(isValidDateStr('2028-02-29'), '閏年 2/29 應通過');
+  assert(!isValidDateStr('2026-02-31'), '2026-02-31 不存在，應拒絕（JS Date 會無聲進位成 3/3）');
+  assert(!isValidDateStr('2026-13-01'), '13 月不存在，應拒絕');
+  assert(!isValidDateStr('2026-02-29'), '2026 非閏年，2/29 應拒絕');
+  assert(!isValidDateStr('abc'), '非日期字串應拒絕');
+  assert(!isValidDateStr(null), 'null 應拒絕');
+});
+
+test('mock 解析：訊息中的「13/45」不是真日期，不得當成線索（轉為追問）', async () => {
+  const parsed = await llmParseGapMessage('護理長，13/45 的白班我沒辦法上');
+  assertEqual(parsed.extracted.date.value, null, '無效的月日組合不得產生日期');
+  assert(parsed.missing.some((m) => m.field === 'date'), '日期應轉為追問');
+});
+
+test('sanitizeParsed：api 模式的模型輸出必須通過白名單，不合法值降級為追問', () => {
+  const dirty = {
+    extracted: {
+      date: { value: '2026-02-31', label: 'x', source: 'x' },              // 不存在的日期
+      shift: { value: '"><script>', label: 'x', source: 'x' },             // 非法班別代碼（注入嘗試）
+      reason: { value: '病假', label: '病假', source: 'ok' },
+      unit: { value: 'HACK', label: 'x', source: 'x' },                    // 非白名單單位
+      requiredCerts: { value: ['ACLS', 'EVIL'], label: 'x', source: 'x' }, // 混入非白名單資格
+    },
+    missing: [],
+  };
+  const clean = sanitizeParsed(dirty);
+  assertEqual(clean.extracted.date.value, null, '不存在的日期應被消毒為 null');
+  assertEqual(clean.extracted.shift.value, null, '非法班別代碼應被消毒為 null');
+  assertEqual(clean.extracted.unit.value, null, '非白名單單位應被消毒為 null');
+  assertEqual(clean.extracted.requiredCerts.value, null, '含非白名單資格的清單應整組拒絕');
+  assertEqual(clean.missing.map((m) => m.field).sort(),
+    ['date', 'requiredCerts', 'shift', 'unit'], '被消毒的欄位應全數轉為追問');
+});
+
+test('sanitizeParsed：合法值放行，label／source 截斷至 200 字', () => {
+  const clean = sanitizeParsed({
+    extracted: {
+      date: { value: '2026-08-09', label: 'L'.repeat(500), source: 's' },
+      shift: { value: 'D', label: '白班', source: 's' },
+      reason: { value: '病假', label: '病假', source: 's' },
+      unit: { value: 'MED-3A', label: 'u', source: 's' },
+      requiredCerts: { value: ['ACLS'], label: 'c', source: 's' },
+    },
+  });
+  assertEqual(clean.extracted.date.value, '2026-08-09', '合法日期應原樣通過');
+  assertEqual(clean.extracted.date.label.length, 200, '超長 label 應截斷至 200 字');
+  assertEqual(clean.missing, [], '欄位齊全時不應產生追問');
+});
+
+test('completeGapEvent：不合法的缺班條件不得進入引擎（最後一道閘門）', () => {
+  const noneExtracted = {
+    date: { value: null }, shift: { value: null }, unit: { value: null },
+    requiredCerts: { value: null }, reason: { value: '病假' },
+  };
+  let threw = false;
+  try {
+    completeGapEvent(noneExtracted, { date: '2026-02-31', shift: 'D', unit: 'MED-3A', requiredCerts: ['ACLS'] });
+  } catch (e) { threw = true; }
+  assert(threw, '不存在的日期應在最後閘門被擋下');
+
+  threw = false;
+  try {
+    completeGapEvent(noneExtracted, { date: '2026-08-10', shift: 'X', unit: 'MED-3A', requiredCerts: ['ACLS'] });
+  } catch (e) { threw = true; }
+  assert(threw, '非法班別代碼應在最後閘門被擋下');
+
+  const gap = completeGapEvent(noneExtracted, { date: '2026-08-10', shift: 'D', unit: 'MED-3A', requiredCerts: ['ACLS'] });
+  assertEqual(gap.date, '2026-08-10', '合法條件應正常組裝');
+  assertEqual(gap.shift, 'D');
+});
