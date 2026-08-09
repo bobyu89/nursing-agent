@@ -1,0 +1,10 @@
+{
+  "name": "shiftguard-llm-proxy",
+  "version": "1.0.0",
+  "description": "班守 ShiftGuard 的 LLM Proxy（AWS Lambda + Amazon Bedrock）",
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "@anthropic-ai/bedrock-sdk": "^0.32.1"
+  }
+}

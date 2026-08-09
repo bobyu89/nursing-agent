@@ -21,12 +21,35 @@
 const LLM = {
   mode: 'mock',                       // 'mock' | 'api'
   endpoint: '',                       // api 模式：模型端點
+  token: '',                          // api 模式：demo 通行碼（x-demo-token）
   modelId: 'claude-sonnet-5',         // api 模式：模型 ID（架構圖對應 AWS Bedrock）
 
   get modeLabel() {
     return this.mode === 'mock' ? '模擬（離線）' : `即時推論（${this.modelId}）`;
   },
 };
+
+/**
+ * 部署後的 endpoint 切換：?llm=<Lambda Function URL>（部署步驟見 aws/README.md）。
+ * 安全考量：只接受 Lambda Function URL 網域（*.on.aws）與本機開發端點——
+ * 不接受任意網域，避免惡意連結把含病情描述的通報訊息導向第三方端點。
+ */
+if (typeof location !== 'undefined' && typeof URLSearchParams !== 'undefined') {
+  try {
+    const qs = new URLSearchParams(location.search);
+    const ep = qs.get('llm');
+    if (ep) {
+      const u = new URL(ep);
+      const isLambdaUrl = u.protocol === 'https:' && u.hostname.endsWith('.on.aws');
+      const isLocalDev = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+      if (isLambdaUrl || isLocalDev) {
+        LLM.endpoint = ep;
+        LLM.token = qs.get('llmtoken') || '';
+        LLM.mode = 'api';
+      }
+    }
+  } catch (e) { /* 非法參數一律忽略，維持 mock */ }
+}
 
 /* ── 1. 解析通報訊息 ────────────────────────────────────── */
 
@@ -146,7 +169,8 @@ function sanitizeParsed(parsed) {
 
 async function llmParseGapMessage(rawText) {
   if (LLM.mode === 'api') {
-    try { return sanitizeParsed(await llmCallApi('parse_gap', { rawText })); }
+    // refDate：後端據此建立日期換算表（「明天」「禮拜天」的推算基準）
+    try { return sanitizeParsed(await llmCallApi('parse_gap', { rawText, refDate: GAP_EVENT.raisedAt.slice(0, 10) })); }
     catch (err) { llmFallbackToMock(err); }
   }
 
@@ -390,7 +414,10 @@ async function llmCallApi(task, payload) {
   try {
     res = await fetch(LLM.endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(LLM.token ? { 'x-demo-token': LLM.token } : {}),
+      },
       body: JSON.stringify({ task, modelId: LLM.modelId, payload }),
       signal: ctrl.signal,
     });
