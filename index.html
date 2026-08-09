@@ -35,6 +35,7 @@
   <button class="tab" data-screen="roster"><span class="tab-no">5</span>班表與人員</button>
   <button class="tab" data-screen="rules"><span class="tab-no">6</span>規則庫</button>
   <button class="tab" data-screen="multi"><span class="tab-no">7</span>多筆缺班</button>
+  <button class="tab" data-screen="generate"><span class="tab-no">8</span>班表生成</button>
 </nav>
 
 <main>
@@ -217,6 +218,30 @@
       <button class="btn btn-primary" id="btn-realloc-run">模擬：唯一合格者也倒下，啟動任務重分配</button>
       <div id="realloc-result"></div>
     </div>
+  </section>
+
+  <!-- ══ 8. 班表生成 ══════════════════════════════════ -->
+  <section class="screen" id="screen-generate">
+    <div class="screen-head">
+      <h1>班表生成：第 0 層源頭治理</h1>
+      <p class="lede">缺班替補做得再好，都是事後補救。<strong>把同一套 H1–H6 規則放進排班源頭，讓班表「排出來的那一刻」就合規</strong>——下游的替補、放寬、任務重分配，被觸發得越少越好。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>生成條件：下一週人力需求</h2>
+        <span class="tag tag-neutral">門檻與規則庫連動</span>
+      </div>
+      <div id="gen-scenario"></div>
+      <button class="btn btn-primary" id="btn-gen-run">生成下週班表</button>
+      <p class="fineprint">
+        生成使用與缺班替補<b>完全相同的一份 H1–H6 檢查程式碼</b>與規則庫參數；
+        現有班表作為邊界條件——週日大夜的殘影（H4）、跨週的連續上班天數（H5）都會約束下週的生成。
+        到「規則庫」調整門檻後重新生成，班表會跟著改變。
+      </p>
+    </div>
+
+    <div id="gen-result"></div>
   </section>
 
 </main>

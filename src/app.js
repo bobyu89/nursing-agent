@@ -1,7 +1,7 @@
 /**
  * app.js — 畫面渲染與流程控制
  *
- * 七個畫面：缺班事件 → 替補候選人 → 主管確認 → 公平性與留痕 → 班表與人員 → 規則庫 → 多筆缺班
+ * 八個畫面：缺班事件 → 替補候選人 → 主管確認 → 公平性與留痕 → 班表與人員 → 規則庫 → 多筆缺班 → 班表生成
  * 所有決策數字來自 engine.js，所有敘述文字來自 llm.js，本檔只負責呈現。
  */
 
@@ -995,6 +995,113 @@ function handleReallocRun() {
     '班守 ShiftGuard 規則引擎');
 }
 
+/* ══ 畫面 8：班表生成（第 0 層：源頭治理）═══════════════ */
+
+function renderGenScenario() {
+  const sc = GEN_SCENARIO;
+  const pool = STAFF.filter((s) => s.unit === sc.unit);
+  const onLeave = pool.filter((s) => s.leaves.some((lv) => lv.to >= sc.dates[0]));
+  $('#gen-scenario').innerHTML = `
+    <div class="excl">
+      <div><div class="excl-id">情境</div></div>
+      <div>
+        <div class="excl-reason"><b>${esc(UNITS[sc.unit])}｜${esc(sc.label)}</b></div>
+        <div class="sc-evi">每日需求：${sc.requirements.map((r) =>
+          `${SHIFT_TYPES[r.shift].name}×${r.count}`).join('、')}
+          ——共 ${sc.dates.length * sc.requirements.reduce((n, r) => n + r.count, 0)} 格；
+          全部班別需 ${sc.requirements[0].requiredCerts.map((c) => esc(CERTS[c])).join('、')} 有效</div>
+        <div class="sc-evi">可排人力：本單位 ${pool.length} 名${onLeave.length
+          ? `（其中 ${onLeave.map((s) => `${esc(s.id)} ${esc(s.leaves[0].type)}至 ${shortDate(s.leaves[0].to)}`).join('、')}）` : ''}</div>
+      </div>
+    </div>`;
+}
+
+function handleGenRun() {
+  const sc = GEN_SCENARIO;
+  const r = engine.generateSchedule(sc);
+  const pool = STAFF.filter((s) => s.unit === sc.unit);
+  const hardName = (code) => {
+    const rule = RULE_REGISTRY.hard.find((x) => x.code === code);
+    return rule ? rule.name : code;
+  };
+
+  // 班表格子：列＝人員、欄＝日期，樣式沿用畫面 5 的班表
+  const head = `<thead><tr><th>人員</th><th>職務</th>${
+    sc.dates.map((d) => `<th class="center">${shortDate(d)}<br>（${weekdayOf(d)}）</th>`).join('')
+  }<th class="center">班數</th><th class="center">工時</th></tr></thead>`;
+  const body = pool.map((s) => {
+    const stats = r.perStaff.find((p) => p.staffId === s.id);
+    const cells = sc.dates.map((d) => {
+      const a = r.assignments.find((x) => x.staffId === s.id && x.date === d);
+      if (a) return `<td class="center"><span class="cell cell-${a.shift}">${a.shift}</span></td>`;
+      if (engine.isOnLeave(s, d)) return '<td class="center"><span class="cell cell-L">假</span></td>';
+      return '<td class="center" style="color:var(--ink-faint)">·</td>';
+    }).join('');
+    return `<tr><td><b>${esc(s.id)}</b></td><td>${esc(s.role)}</td>${cells}
+      <td class="center">${stats.total}</td><td class="center">${stats.hours} 小時</td></tr>`;
+  }).join('');
+
+  const uncoveredHtml = r.uncovered.map((u) => `
+    <div class="excl">
+      <div><span class="rule-code">缺格</span></div>
+      <div>
+        <div class="excl-reason"><b class="expired">${shortDate(u.date)}（${weekdayOf(u.date)}）${SHIFT_TYPES[u.shift].name}</b></div>
+        <div class="sc-evi">${u.blockers.map((b) =>
+          `${b.code}${esc(hardName(b.code))} 擋下 ${b.count} 人`).join('；')}——需主管決策（跨單位支援、外部調度）</div>
+      </div>
+    </div>`).join('');
+
+  const v = r.verification;
+  const newSoft = v.newMedium.concat(v.newLow);
+  const idle = pool.filter((s) => r.perStaff.find((p) => p.staffId === s.id).total === 0);
+
+  $('#gen-result').innerHTML = `
+    <div class="card" style="margin-top:14px">
+      <div class="card-head">
+        <h2>生成結果（草稿）</h2>
+        <span class="tag ${r.uncovered.length ? 'tag-danger' : 'tag-ok'}">填滿 ${r.filled}／${r.slotCount} 格</span>
+      </div>
+      <div class="table-scroll"><table>${head}<tbody>${body}</tbody></table></div>
+      <div class="legend">
+        <span><i class="dot dot-d"></i>白班</span>
+        <span><i class="dot dot-e"></i>小夜</span>
+        <span><i class="dot dot-n"></i>大夜</span>
+        <span><i class="dot dot-l"></i>請假</span>
+      </div>
+      ${idle.length ? `<p class="fineprint">${idle.map((s) => esc(s.id)).join('、')} 整週未被排入——${
+        idle.map((s) => {
+          const expired = Object.entries(s.certs).find(([, exp]) => exp < sc.dates[0]);
+          return expired ? `${esc(s.id)} 的 ${esc(CERTS[expired[0]].replace(/\s.*/, ''))} 已於 ${expired[1]} 到期（H1，與替補同一份檢查）` : `${esc(s.id)} 受硬性約束限制`;
+        }).join('；')}。</p>` : ''}
+      ${r.uncovered.length ? `
+        <h4 style="margin:14px 0 4px;font-size:13px;color:var(--ink-faint)">排不出的格子——系統不硬塞、不放寬，交主管決策</h4>
+        ${uncoveredHtml}` : ''}
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h2>第二道驗證：疊上現有班表重新掃描</h2>
+        <span class="tag ${v.newHigh.length ? 'tag-danger' : 'tag-ok'}">新增已違規 ${v.newHigh.length} 條</span>
+      </div>
+      <div class="fact"><span>把生成班表疊上 8/03–8/09 現有班表，用「主動預警」掃描器（畫面 4 同一套）整表重掃</span>
+        <span>${v.newHigh.length === 0 ? '✓ 含跨週邊界，零新增違規' : '✗ 生成器有 bug，請回報'}</span></div>
+      <div class="fact"><span>新增「達門檻」提醒</span><span>${v.newMedium.length} 條</span></div>
+      <div class="fact"><span>新增「接近門檻」提醒</span><span>${v.newLow.length} 條</span></div>
+      ${newSoft.length ? newSoft.map((w) => `
+        <div class="sc-evi" style="margin-top:6px">（${w.level === 'medium' ? '達門檻' : '接近門檻'}）${esc(w.staffId)}：${esc(w.text)}</div>`).join('') : ''}
+      <div class="fact"><span>班數分佈（公平輪值）</span><span>最多 ${r.spread.max} 班／最少 ${r.spread.min} 班（不計整週不合格者）</span></div>
+      <p class="fineprint">
+        逐格檢查與整表掃描是<b>兩條獨立的驗證路徑</b>，互相印證。
+        生成結果為建議草稿，不寫入正式班表——正式導入時由護理長逐格調整後發布，調整仍受同一套規則即時檢查。
+      </p>
+    </div>`;
+
+  logAction('班表生成（第 0 層源頭治理）',
+    `${UNITS[sc.unit]} ${sc.label}：填滿 ${r.filled}／${r.slotCount} 格，` +
+    `疊上現有班表重掃新增違規 ${v.newHigh.length} 條、達門檻 ${v.newMedium.length} 條；` +
+    `班數分佈最多 ${r.spread.max}／最少 ${r.spread.min}`,
+    '班守 ShiftGuard 規則引擎');
+}
+
 /* ══ 畫面 6：規則庫 ═════════════════════════════════════ */
 
 /**
@@ -1199,6 +1306,7 @@ function init() {
   $('#btn-recalc').addEventListener('click', handleRecalc);
   $('#btn-multi-run').addEventListener('click', handleMultiRun);
   $('#btn-realloc-run').addEventListener('click', handleReallocRun);
+  $('#btn-gen-run').addEventListener('click', handleGenRun);
 
   renderRoster();
   renderStaffTable();
@@ -1208,6 +1316,7 @@ function init() {
   renderAuditLog();
   renderMultiScenario();
   renderReallocScenario();
+  renderGenScenario();
 }
 
 document.addEventListener('DOMContentLoaded', init);

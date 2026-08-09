@@ -264,6 +264,22 @@ const TASK_REALLOC_SCENARIO = {
   ],
 };
 
+/* ── 班表生成演示情境（第 0 層：源頭治理）─────────────────
+ * 為內科病房 3A 生成「下一週」班表：每日白班 2 人、小夜 1 人、大夜 1 人，
+ * 全部需 ACLS 有效（病房安全政策）。現有班表（8/03–8/09）作為邊界條件：
+ * 8/09 的小夜與跨週的連續上班天數會約束 8/10 起的生成。
+ */
+const GEN_SCENARIO = {
+  unit: 'MED-3A',
+  label: '2026 年 8 月第 2 週（8/10 一 – 8/16 日）',
+  dates: ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14', '2026-08-15', '2026-08-16'],
+  requirements: [
+    { shift: 'D', count: 2, requiredRole: '護理師', requiredCerts: ['ACLS'] },
+    { shift: 'E', count: 1, requiredRole: '護理師', requiredCerts: ['ACLS'] },
+    { shift: 'N', count: 1, requiredRole: '護理師', requiredCerts: ['ACLS'] },
+  ],
+};
+
 /* ── 缺班事件的原始通報訊息（護理長轉貼）─────────────────
  * 刻意缺少「單位」與「必要資格」，用來演示 Agent 主動追問。
  */
@@ -302,6 +318,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SHIFT_TYPES, UNITS, CERTS, ROLE_LEVELS, WEEK, WEEK_DATES,
     STAFF, SHIFTS, RAW_MESSAGE, GAP_EVENT, UNIT_MIN_STAFF, MULTI_GAP_SCENARIO,
-    SAMPLE_MESSAGES, TASK_REALLOC_SCENARIO,
+    SAMPLE_MESSAGES, TASK_REALLOC_SCENARIO, GEN_SCENARIO,
   };
 }

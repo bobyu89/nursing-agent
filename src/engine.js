@@ -537,6 +537,131 @@ function createEngine(db) {
     return gaps;
   }
 
+  /**
+   * 第 0 層（源頭治理）：班表生成。
+   * 給定日期範圍與各班別人力需求，為單一單位生成班表草稿——
+   * 讓班表「排出來的那一刻」就合規，讓下游的缺班替補越來越少被觸發。
+   *
+   * 硬性約束完全重用 checkHardConstraints：與缺班替補是同一份 H1–H6
+   * 程式碼、同一份規則庫參數——規則調整後重新生成即生效。
+   * 既有班表作為邊界條件注入：上週日的大夜殘影（H4）、跨週的連續
+   * 上班天數（H5）都會約束本週的生成。
+   *
+   * 排序目標（生成專屬的公平性，全部確定性）：
+   *   (1) 本次生成班數最少者優先（總量均衡）
+   *   (2) 該班別被排次數最少者優先（夜班等輪值均衡）
+   *   (3) 意願相符 > 未表態 > 不符（S4 的生成版）
+   *   (4) 代號字典序（結果可重現）
+   *
+   * 誠實原則：排不出來的格子不硬塞、不放寬——逐格彙整「各規則擋下
+   * 幾人」，交主管決策。生成結果為建議草稿，不寫入正式班表。
+   *
+   * @param {object} spec { unit, dates: [YYYY-MM-DD...],
+   *   requirements: [{ shift, count, requiredRole, requiredCerts }] }
+   */
+  function generateSchedule({ unit, dates, requirements }) {
+    // 工作副本：生成逐格寫入副本供後續格子的 H2/H4/H5/H6 判定，不動真實資料
+    const workStaff = db.staff.filter((s) => s.unit === unit);
+    const workShifts = db.shifts.map((s) => Object.assign({}, s));
+    const sim = createEngine({
+      staff: workStaff, shifts: workShifts,
+      shiftTypes: db.shiftTypes, roleLevels: db.roleLevels,
+      certs: db.certs, units: db.units,
+      registry: db.registry, staffingMin: db.staffingMin,
+    });
+
+    const totalCount = {};
+    const typeCount = {};
+    workStaff.forEach((s) => {
+      totalCount[s.id] = 0;
+      typeCount[s.id] = {};
+      Object.keys(db.shiftTypes).forEach((c) => { typeCount[s.id][c] = 0; });
+    });
+
+    const assignments = [];
+    const uncovered = [];
+    const everEligible = new Set();   // 整週至少有一格合格者——公平性分佈只對他們有意義
+    const wish = (staff, shiftCode) =>
+      staff.willingShifts === null ? 1 : (staff.willingShifts.includes(shiftCode) ? 0 : 2);
+
+    dates.forEach((date) => {
+      requirements.forEach((req) => {
+        for (let slot = 0; slot < req.count; slot++) {
+          const pseudoGap = {
+            date, shift: req.shift, unit,
+            requiredRole: req.requiredRole,
+            requiredCerts: req.requiredCerts || [],
+            originalStaffId: null,
+          };
+          const checked = workStaff.map((st) => ({
+            st, violations: sim.checkHardConstraints(st, pseudoGap),
+          }));
+          const ok = checked.filter((c) => c.violations.length === 0);
+          ok.forEach((c) => everEligible.add(c.st.id));
+
+          if (ok.length === 0) {
+            // 每條規則各擋下幾人（同一人違反多條時每條各計一次）
+            const byCode = {};
+            checked.forEach((c) => {
+              [...new Set(c.violations.map((v) => v.code))].forEach((code) => {
+                byCode[code] = (byCode[code] || 0) + 1;
+              });
+            });
+            uncovered.push({
+              date, shift: req.shift, unit,
+              blockers: Object.entries(byCode).map(([code, count]) => ({ code, count })),
+            });
+            continue;
+          }
+
+          ok.sort((a, b) =>
+            totalCount[a.st.id] - totalCount[b.st.id] ||
+            typeCount[a.st.id][req.shift] - typeCount[b.st.id][req.shift] ||
+            wish(a.st, req.shift) - wish(b.st, req.shift) ||
+            (a.st.id < b.st.id ? -1 : 1));
+          const pick = ok[0].st;
+          workShifts.push({ staffId: pick.id, date, shift: req.shift, unit, generated: true });
+          totalCount[pick.id] += 1;
+          typeCount[pick.id][req.shift] += 1;
+          assignments.push({ staffId: pick.id, date, shift: req.shift, unit });
+        }
+      });
+    });
+
+    // 第二道獨立驗證：把生成班表疊上現有班表，用主動預警掃描器（M2）
+    // 重掃一次，與生成前比對——逐格檢查與整表掃描是兩套獨立的檢查路徑，
+    // 互相印證。新增的「已違規（high）」必須為 0；達門檻（medium）與
+    // 接近門檻（low）如實列出，交主管參考。
+    const key = (w) => `${w.level}|${w.code}|${w.staffId}|${w.text}`;
+    const beforeKeys = new Set(rosterWarnings().map(key));
+    const newWarnings = sim.rosterWarnings().filter((w) => !beforeKeys.has(key(w)));
+
+    const perStaff = workStaff.map((s) => ({
+      staffId: s.id, role: s.role,
+      total: totalCount[s.id],
+      byType: typeCount[s.id],
+      hours: Object.entries(typeCount[s.id])
+        .reduce((sum, [c, n]) => sum + n * db.shiftTypes[c].hours, 0),
+    }));
+    // 公平性分佈只計「整週至少有一格合格」者——證照過期等整週不合格的人
+    // 本來就排不進來，把他的 0 班算進「最少」會誤導公平性判讀
+    const totals = perStaff.filter((p) => everEligible.has(p.staffId)).map((p) => p.total);
+    const slotCount = dates.length * requirements.reduce((sum, r) => sum + r.count, 0);
+
+    return {
+      unit, dates, requirements, assignments, uncovered, perStaff,
+      filled: assignments.length, slotCount,
+      spread: totals.length
+        ? { max: Math.max(...totals), min: Math.min(...totals) }
+        : { max: 0, min: 0 },
+      verification: {
+        newHigh: newWarnings.filter((w) => w.level === 'high'),
+        newMedium: newWarnings.filter((w) => w.level === 'medium'),
+        newLow: newWarnings.filter((w) => w.level === 'low'),
+      },
+    };
+  }
+
   /** 供模擬用：複製人員與班表的獨立引擎，指派寫回不影響真實資料 */
   function cloneForSimulation() {
     return createEngine({
@@ -651,6 +776,7 @@ function createEngine(db) {
     weeklyHours, shiftMix, isOnLeave, consecutiveDaysWithGap,
     minRestAfterGap, shiftInterval, unitCoverage,
     assignGreedy, assignJointly, rosterWarnings, coverageGaps,
+    generateSchedule,
   };
 }
 

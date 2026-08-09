@@ -462,3 +462,84 @@ test('completeGapEvent：不合法的缺班條件不得進入引擎（最後一�
   assertEqual(gap.date, '2026-08-10', '合法條件應正常組裝');
   assertEqual(gap.shift, 'D');
 });
+
+/* ── 班表生成（第 0 層：源頭治理）── */
+
+test('班表生成：示範情境全填滿、疊上現有班表重掃後零新增風險', () => {
+  const e = mkEngine(STAFF, SHIFTS);
+  const r = e.generateSchedule(GEN_SCENARIO);
+  assertEqual(r.uncovered, [], '示範情境人力充足，應無未覆蓋格子');
+  assertEqual(r.filled, r.slotCount, '28 格應全數填滿');
+  assertEqual(r.verification.newHigh, [], '生成不得引入任何新的「已違規」');
+  assertEqual(r.verification.newMedium, [], '示範情境亦不應引入新的「達門檻」');
+  // 誠實邊界：ACLS 已過期的 N-04 一班都不得被排入（H1 與替補同一份程式碼）
+  assert(r.assignments.every((a) => a.staffId !== 'N-04'), 'ACLS 過期者不得被排入需 ACLS 的班');
+  // 請假期間不得排班（H3）
+  r.assignments.forEach((a) => {
+    const st = STAFF.find((s) => s.id === a.staffId);
+    assert(!st.leaves.some((lv) => a.date >= lv.from && a.date <= lv.to),
+      `${a.staffId} 於請假日 ${a.date} 被排班`);
+  });
+  // 每一格都符合需求定義的班別與數量
+  GEN_SCENARIO.dates.forEach((date) => {
+    GEN_SCENARIO.requirements.forEach((req) => {
+      const n = r.assignments.filter((a) => a.date === date && a.shift === req.shift).length;
+      assertEqual(n, req.count, `${date} ${req.shift} 應排入 ${req.count} 人`);
+    });
+  });
+});
+
+test('班表生成：跨週邊界——上週日大夜的殘影會擋掉本週一的白班（H4）', () => {
+  const A = mkStaff('A', { willingShifts: ['N'] });
+  const shifts = [d('A', '2026-08-09', 'N')];   // 週日大夜，8/10 07:00 才下班
+  const gen = (shift) => mkEngine([A], shifts.map((s) => Object.assign({}, s))).generateSchedule({
+    unit: 'MED-3A', dates: ['2026-08-10'],
+    requirements: [{ shift, count: 1, requiredRole: '護理師', requiredCerts: [] }],
+  });
+  const dayR = gen('D');
+  assertEqual(dayR.assignments, [], '8/10 白班 07:00 開始，與大夜下班間隔 0 小時，不得排入');
+  assert(dayR.uncovered[0].blockers.some((b) => b.code === 'H4'), '缺口原因應標示 H4');
+  const nightR = gen('N');
+  assertEqual(nightR.assignments.length, 1, '8/10 大夜 23:00 開始，間隔 16 小時，可排入');
+});
+
+test('班表生成：跨週邊界——連續上班天數跨週累計（H5）', () => {
+  const A = mkStaff('A');
+  const shifts = ['2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07', '2026-08-08', '2026-08-09']
+    .map((day) => d('A', day));                 // 上週已連上 6 天，至週日
+  const r = mkEngine([A], shifts).generateSchedule({
+    unit: 'MED-3A', dates: ['2026-08-10'],
+    requirements: [{ shift: 'D', count: 1, requiredRole: '護理師', requiredCerts: [] }],
+  });
+  assertEqual(r.assignments, [], '排入 8/10 將連上第 7 天，不得排入');
+  assert(r.uncovered[0].blockers.some((b) => b.code === 'H5'), '缺口原因應標示 H5');
+});
+
+test('班表生成：誠實缺口——無人具必要資格時不硬塞、不放寬，逐格標示原因', () => {
+  const A = mkStaff('A');                        // 無 VENT 資格
+  const r = mkEngine([A], []).generateSchedule({
+    unit: 'MED-3A', dates: ['2026-08-10', '2026-08-11'],
+    requirements: [{ shift: 'D', count: 1, requiredRole: '護理師', requiredCerts: ['VENT'] }],
+  });
+  assertEqual(r.assignments, [], '無資格者不得被排入');
+  assertEqual(r.uncovered.length, 2, '每一個排不出的格子都要標示');
+  r.uncovered.forEach((u) =>
+    assert(u.blockers.some((b) => b.code === 'H1'), '缺口原因應標示 H1 資格'));
+});
+
+test('班表生成：結果確定性——同輸入同班表', () => {
+  const e = mkEngine(STAFF, SHIFTS);
+  assertEqual(e.generateSchedule(GEN_SCENARIO).assignments,
+    e.generateSchedule(GEN_SCENARIO).assignments, '同輸入必得同班表');
+});
+
+test('班表生成：公平輪值——三人輪六天白班，每人恰好兩班', () => {
+  const trio = ['A', 'B', 'C'].map((id) => mkStaff(id));
+  const r = mkEngine(trio, []).generateSchedule({
+    unit: 'MED-3A',
+    dates: ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14', '2026-08-15'],
+    requirements: [{ shift: 'D', count: 1, requiredRole: '護理師', requiredCerts: [] }],
+  });
+  assertEqual(r.spread.max, 2, '最多 2 班');
+  assertEqual(r.spread.min, 2, '最少 2 班——完全均衡');
+});
