@@ -66,15 +66,22 @@ input[type="checkbox"]:focus-visible, input[type="range"]:focus-visible {
 .badge-demo { background: var(--warn-tint); border-color: #f0dcb8; color: var(--warn); font-weight: 600; }
 .badge-llm  { background: var(--line-soft); color: var(--ink-soft); }
 
-/* ── 分頁 ─────────────────────────────────────────────── */
+/* ── 分頁（依決策階梯分組）───────────────────────────── */
 .tabs {
-  display: flex; gap: 2px; padding: 0 28px; overflow-x: auto;
+  display: flex; gap: 16px; padding: 0 28px; overflow-x: auto;
   background: var(--surface); border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 30;
 }
+.tab-group { display: flex; flex-direction: column; flex: none; }
+.tab-group + .tab-group { border-left: 1px solid var(--line-soft); padding-left: 16px; }
+.tab-group-label {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .07em;
+  color: var(--ink-faint); padding: 7px 2px 1px; white-space: nowrap;
+}
+.tab-group-row { display: flex; gap: 2px; }
 .tab {
   appearance: none; border: 0; background: none; cursor: pointer;
-  padding: 11px 15px 13px; font: inherit; font-size: 14px;
+  padding: 3px 15px 11px; font: inherit; font-size: 14px;
   color: var(--ink-soft); border-bottom: 2.5px solid transparent;
   display: flex; align-items: center; gap: 8px; white-space: nowrap;
   transition: color .15s ease, border-color .15s ease;
@@ -437,8 +444,9 @@ tbody tr:hover td { background: #f7fafb; }
  * 原則：單欄堆疊、觸控目標放大、表格容器內橫捲、頁面本身不橫向溢出。 */
 @media (max-width: 640px) {
   .topbar { padding: 10px 14px; flex-wrap: wrap; }
-  .tabs { padding: 0 8px; }
-  .tab { padding: 10px 10px 12px; font-size: 13px; gap: 6px; }
+  .tabs { padding: 0 8px; gap: 10px; }
+  .tab-group + .tab-group { padding-left: 10px; }
+  .tab { padding: 3px 10px 11px; font-size: 13px; gap: 6px; }
   main { padding: 16px 14px 48px; }
   .screen-head h1 { font-size: 20px; }
   .lede { font-size: 13.5px; }
