@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- CSP：只允許同源資源；file: 是為了保留「雙擊 index.html 離線可跑」的流程；
+       connect-src 保留 https 供 api 模式呼叫 LLM 端點；不載入任何第三方資源 -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'">
+  <meta name="referrer" content="no-referrer">
   <title>班守 ShiftGuard｜醫護排班治理平台</title>
   <link rel="stylesheet" href="assets/styles.css">
 </head>

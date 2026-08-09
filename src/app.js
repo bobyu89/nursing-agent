@@ -98,6 +98,24 @@ function verifyAuditChain() {
  */
 const RULES_STORE_KEY = 'shiftguard.rules.v1';
 
+/**
+ * localStorage 是可被任意改寫的儲存（devtools、同源其他程式都動得到），
+ * 載回的數值必須夾限在合理範圍——H4 班間休息被塞成 0 或負數，
+ * 等於無聲關掉法定下限檢查，這在本平台是合規事故等級的錯誤。
+ */
+const PARAM_RANGE = {
+  H4: [0, 24],    // 班間休息時數
+  H5: [1, 14],    // 連續上班天數上限
+  H6: [8, 168],   // 週工時絕對上限
+  S1: [1, 99],    // 公平性飽和次數
+  S2: [8, 168],   // 週工時軟性上限
+};
+const WEIGHT_RANGE = [0, 50];  // 與規則庫頁滑桿的 min/max 一致
+
+function clampTo(value, [lo, hi]) {
+  return Math.min(hi, Math.max(lo, value));
+}
+
 function saveRules() {
   try {
     localStorage.setItem(RULES_STORE_KEY, JSON.stringify({
@@ -116,13 +134,17 @@ function loadRules() {
       const r = getHardRule(s.code);
       if (!r) return;
       if (typeof s.enabled === 'boolean') r.enabled = s.enabled;
-      if (r.param && Number.isFinite(s.param)) r.param.value = s.param;
+      if (r.param && Number.isFinite(s.param)) {
+        r.param.value = clampTo(s.param, PARAM_RANGE[r.code] || [0, 999]);
+      }
     });
     (saved.soft || []).forEach((s) => {
       const r = RULE_REGISTRY.soft.find((x) => x.code === s.code);
       if (!r) return;
-      if (Number.isFinite(s.weight)) r.weight = s.weight;
-      if (r.param && Number.isFinite(s.param)) r.param.value = s.param;
+      if (Number.isFinite(s.weight)) r.weight = clampTo(s.weight, WEIGHT_RANGE);
+      if (r.param && Number.isFinite(s.param)) {
+        r.param.value = clampTo(s.param, PARAM_RANGE[r.code] || [0, 999]);
+      }
     });
     return true;
   } catch (e) { return false; }
@@ -143,10 +165,26 @@ function switchScreen(name) {
 
 /* ══ 畫面 1：缺班事件建立 ═══════════════════════════════ */
 
+let parsing = false;
+
 async function handleParse() {
+  // 重入保護：貼上事件與按鈕點擊可能重疊觸發，同時跑兩次會互相覆蓋畫面
+  if (parsing) return;
+  parsing = true;
   const btn = $('#btn-parse');
   btn.disabled = true;
   btn.textContent = '解析中…';
+  try {
+    await doParse();
+  } finally {
+    // 不論成功失敗，按鈕都要回復可用——解析失敗時畫面不能卡在「解析中」
+    parsing = false;
+    btn.disabled = false;
+    btn.textContent = '重新解析';
+  }
+}
+
+async function doParse() {
   // 骨架載入：形狀對應即將出現的五列解析結果，而不是一行文字
   $('#parse-result').innerHTML = '<div class="skeleton-rows">' +
     Array.from({ length: 5 }, () =>
@@ -175,7 +213,7 @@ async function handleParse() {
   /* 四項關鍵欄位一律可編輯：缺漏的轉為追問，已解析的預填並開放主管修正——
    * Agent 解析可能出錯，最終認定權在主管，不能只靠改寫訊息重來 */
   const INPUTS = {
-    date: (v) => `<input type="text" id="ans-date" value="${v || GAP_EVENT.date}" placeholder="YYYY-MM-DD">`,
+    date: (v) => `<input type="text" id="ans-date" value="${esc(v || GAP_EVENT.date)}" placeholder="YYYY-MM-DD">`,
     shift: (v) => `<select id="ans-shift">${Object.values(SHIFT_TYPES).map((t) =>
       `<option value="${t.code}"${t.code === (v || 'D') ? ' selected' : ''}>${t.name} ${t.start}–${t.end}</option>`).join('')}</select>`,
     unit: (v) => `<select id="ans-unit">${Object.entries(UNITS).map(([k, nm]) =>
@@ -211,8 +249,6 @@ async function handleParse() {
     ? '四項欄位皆已解析，請主管確認無誤後執行評估。'
     : `${parsed.missing.length} 項未載明轉為追問；其餘已解析，請確認或修正。`;
 
-  btn.disabled = false;
-  btn.textContent = '重新解析';
   const got = ['date', 'shift', 'unit', 'requiredCerts'].filter((f) => parsed.extracted[f].value);
   logAction('解析通報訊息',
     `自訊息抽出 ${got.length} 項欄位（${got.join('、')}）；${parsed.missing.length} 項未載明，轉為追問`);
@@ -221,10 +257,11 @@ async function handleParse() {
 function handleEvaluate() {
   const answers = { reporterStaffId: $('#ans-reporter').value || null };
   if ($('#ans-date')) {
-    // 追問欄位被清空也要擋下來，否則會帶著 null 日期進引擎
+    // 追問欄位被清空也要擋下來，否則會帶著 null 日期進引擎；
+    // 格式對但不存在的日期（2026-02-31）也要擋——JS Date 會自動進位成別的日子
     answers.date = $('#ans-date').value.trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(answers.date)) {
-      alert('日期格式請填 YYYY-MM-DD。');
+    if (!isValidDateStr(answers.date)) {
+      alert('日期請填實際存在的日期，格式 YYYY-MM-DD。');
       return;
     }
   }
@@ -357,7 +394,7 @@ async function renderCandidates() {
         <div class="cand-head js-toggle" role="button" tabindex="0" aria-expanded="false">
           <div class="rank">${c.rank}</div>
           <div>
-            <div class="cand-id">${c.staff.id}　<span class="cand-meta">${c.staff.role} · ${UNITS[c.staff.unit]}</span></div>
+            <div class="cand-id">${esc(c.staff.id)}　<span class="cand-meta">${esc(c.staff.role)} · ${esc(UNITS[c.staff.unit])}</span></div>
             <div class="cand-meta">週工時 ${c.score.base} → ${c.score.projected} 小時 ｜ 替補後連續上班 ${c.consecutiveDays} 天 ｜ 近 30 天代班 ${c.staff.standbyCount30d} 次</div>
           </div>
           <div class="cand-spacer"></div>
@@ -408,8 +445,8 @@ async function renderCandidates() {
   const exclHtml = excluded.map((e) => `
     <div class="excl">
       <div>
-        <div class="excl-id">${e.staff.id}</div>
-        <div class="excl-role">${e.staff.role}</div>
+        <div class="excl-id">${esc(e.staff.id)}</div>
+        <div class="excl-role">${esc(e.staff.role)}</div>
       </div>
       <div>
         ${e.violations.map((v) => `
@@ -594,6 +631,7 @@ function startNextGap() {
   $('#gap-banner').innerHTML = '';
   $('#candidates-body').className = 'empty-state';
   $('#candidates-body').textContent = '請先在「缺班事件」頁完成解析與確認。';
+  $('#recalc-result').innerHTML = '';   // 上一筆事件的重算結果不得殘留到新事件
   renderConfirmPlaceholder();
   logAction('開始處理下一筆缺班', '評估狀態已重置；已寫回的班表與替補次數延續累計');
   switchScreen('intake');
@@ -720,7 +758,7 @@ function renderRoster() {
       if (engine.isOnLeave(s, d)) return '<td class="center"><span class="cell cell-L">假</span></td>';
       return '<td class="center" style="color:var(--ink-faint)">·</td>';
     }).join('');
-    return `<tr><td><b>${s.id}</b></td><td>${s.role}</td>${cells}<td class="center">${engine.weeklyHours(s.id, WEEK.start)} 小時</td></tr>`;
+    return `<tr><td><b>${esc(s.id)}</b></td><td>${esc(s.role)}</td>${cells}<td class="center">${engine.weeklyHours(s.id, WEEK.start)} 小時</td></tr>`;
   }).join('');
 
   $('#roster-table').innerHTML = head + `<tbody>${body}</tbody>`;
@@ -740,9 +778,9 @@ function renderStaffTable() {
     const willing = s.willingShifts === null
       ? '<span style="color:var(--ink-faint)">未表態</span>'
       : s.willingShifts.map((c) => SHIFT_TYPES[c].name).join('、');
-    const leave = s.leaves.map((l) => `${l.type} ${shortDate(l.from)}–${shortDate(l.to)}`).join('；');
+    const leave = s.leaves.map((l) => `${esc(l.type)} ${shortDate(l.from)}–${shortDate(l.to)}`).join('；');
     return `<tr>
-      <td><b>${s.id}</b></td><td>${s.role}</td><td>${UNITS[s.unit]}</td>
+      <td><b>${esc(s.id)}</b></td><td>${esc(s.role)}</td><td>${esc(UNITS[s.unit])}</td>
       <td style="white-space:normal">${certs}</td>
       <td>${willing}</td>
       <td class="center">${s.standbyCount30d} 次</td>
@@ -826,12 +864,12 @@ function renderRules() {
     <div class="rule">
       <div><span class="rule-code">${r.code}</span></div>
       <div>
-        <div class="rule-name">${r.name}</div>
-        <div class="rule-desc">${r.desc}</div>
-        <div class="rule-basis">依據：${r.basis}</div>
+        <div class="rule-name">${esc(r.name)}</div>
+        <div class="rule-desc">${esc(r.desc)}</div>
+        <div class="rule-basis">依據：${esc(r.basis)}</div>
       </div>
       <div class="rule-ctrl">
-        ${r.param ? `<label>${r.param.label}
+        ${r.param ? `<label>${esc(r.param.label)}
           <input type="number" data-hard="${r.code}" value="${r.param.value}" min="0" step="1"> ${r.param.unit}</label>` : ''}
         <label><input type="checkbox" data-hard-enable="${r.code}" ${r.enabled ? 'checked' : ''}> 啟用</label>
       </div>
@@ -841,13 +879,13 @@ function renderRules() {
     <div class="weight-row">
       <div class="weight-top">
         <span class="rule-code neutral">${r.code}</span>
-        <span class="rule-name">${r.name}</span>
+        <span class="rule-name">${esc(r.name)}</span>
         <span class="weight-val" id="wv-${r.code}">${r.weight}</span>
       </div>
-      <div class="rule-desc">${r.desc}</div>
-      <div class="weight-why">為什麼要有這條：${r.rationale}</div>
+      <div class="rule-desc">${esc(r.desc)}</div>
+      <div class="weight-why">為什麼要有這條：${esc(r.rationale)}</div>
       <input type="range" min="0" max="50" step="5" value="${r.weight}" data-soft="${r.code}">
-      ${r.param ? `<div class="rule-ctrl" style="margin-top:6px"><label>${r.param.label}
+      ${r.param ? `<div class="rule-ctrl" style="margin-top:6px"><label>${esc(r.param.label)}
         <input type="number" data-soft-param="${r.code}" value="${r.param.value}" min="1" step="1"> ${r.param.unit}</label></div>` : ''}
     </div>`).join('');
 

@@ -47,6 +47,18 @@ function shortDate(dateStr) {
   return `${Number(m)}/${Number(d)}`;
 }
 
+/**
+ * 嚴格日曆驗證：格式正確且真實存在的日期才通過。
+ * 「2026-02-31」「2026-13-01」格式看似正確，但 JS Date 會自動進位成別的日期，
+ * 引擎的字串比對（H2、週工時）與日期運算會因此各算各的——必須在入口擋下。
+ */
+function isValidDateStr(dateStr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return false;
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
+
 /** 該日期所在的自然週（週一起算）之 7 個日期 */
 function weekDatesOf(dateStr) {
   const dow = (parseDate(dateStr).getDay() + 6) % 7; // 週一 = 0
@@ -646,6 +658,6 @@ function createEngine(db) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     createEngine, parseDate, formatDate, addDays, weekdayOf,
-    shortDate, weekDatesOf, WEEKDAY_TW,
+    shortDate, weekDatesOf, WEEKDAY_TW, isValidDateStr,
   };
 }

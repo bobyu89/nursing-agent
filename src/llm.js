@@ -69,10 +69,11 @@ function parseDateFromText(text, ref) {
   const md = text.match(/(\d{1,2})\s*[\/月]\s*(\d{1,2})/);
   if (md) {
     const y = Number(ref.slice(0, 4));
-    signals.push({
-      value: `${y}-${String(md[1]).padStart(2, '0')}-${String(md[2]).padStart(2, '0')}`,
-      source: `訊息中「${md[0]}」`,
-    });
+    const value = `${y}-${String(md[1]).padStart(2, '0')}-${String(md[2]).padStart(2, '0')}`;
+    // 「13/45」這類寫法組出來的不是真日期，不能當線索——略過即轉為追問
+    if (isValidDateStr(value)) {
+      signals.push({ value, source: `訊息中「${md[0]}」` });
+    }
   }
   if (/後天/.test(text)) signals.push({ value: addDays(ref, 2), source: `訊息中「後天」，以通報日 ${ref} 推算` });
   if (/明天|明日/.test(text)) signals.push({ value: addDays(ref, 1), source: `訊息中「明天」，以通報日 ${ref} 推算` });
@@ -104,9 +105,48 @@ function matchFirst(list, text) {
  * mock 模式使用上方關鍵詞表實際比對輸入文字——改寫訊息，解析結果會跟著改變。
  * 訊息中沒寫的欄位一律留空並轉為追問，Agent 不臆測。
  */
+/**
+ * api 模式的解析結果消毒：模型輸出是不可信輸入（通報訊息本身可能夾帶
+ * prompt injection），每個欄位值都必須通過白名單才能進入引擎與畫面。
+ * 不合法的值一律降級為「未解析」並轉為追問——與 mock 的不臆測原則一致。
+ */
+function sanitizeParsed(parsed) {
+  const cleanField = (f, check) => {
+    if (!f || f.value === null || f.value === undefined) return { value: null, label: null, source: null };
+    if (!check(f.value)) return { value: null, label: null, source: null };
+    return {
+      value: f.value,
+      label: String(f.label || '').slice(0, 200),
+      source: String(f.source || '').slice(0, 200),
+    };
+  };
+  const e = parsed.extracted || {};
+  const extracted = {
+    date: cleanField(e.date, (v) => isValidDateStr(v)),
+    shift: cleanField(e.shift, (v) => Object.prototype.hasOwnProperty.call(SHIFT_TYPES, v)),
+    reason: cleanField(e.reason, (v) => typeof v === 'string' && v.length <= 20),
+    unit: cleanField(e.unit, (v) => Object.prototype.hasOwnProperty.call(UNITS, v)),
+    requiredCerts: cleanField(e.requiredCerts, (v) =>
+      Array.isArray(v) && v.length > 0 && v.every((c) => Object.prototype.hasOwnProperty.call(CERTS, c))),
+  };
+  if (!extracted.reason.value) {
+    extracted.reason = { value: null, label: '未載明，以「臨時請假」記錄', source: '訊息未提及具體事由' };
+  }
+  const QUESTIONS = {
+    date: { question: '這筆缺班是哪一天？', hint: '訊息中的時間說法無法明確換算，請主管指定日期' },
+    shift: { question: '缺的是哪一個班別？', hint: '訊息未指明班別，需確認才能計算班間休息時間' },
+    unit: { question: '這筆缺班是哪一個照護單位？', hint: '訊息未提及單位，需確認以套用該單位的資格要求' },
+    requiredCerts: { question: '當班需要哪些必要資格？', hint: '不同單位、不同日期的治療排程，必要資格會不同' },
+  };
+  const missing = ['date', 'shift', 'unit', 'requiredCerts']
+    .filter((f) => !extracted[f].value)
+    .map((f) => ({ field: f, ...QUESTIONS[f] }));
+  return { extracted, missing };
+}
+
 async function llmParseGapMessage(rawText) {
   if (LLM.mode === 'api') {
-    try { return await llmCallApi('parse_gap', { rawText }); }
+    try { return sanitizeParsed(await llmCallApi('parse_gap', { rawText })); }
     catch (err) { llmFallbackToMock(err); }
   }
 
@@ -166,6 +206,13 @@ function completeGapEvent(extracted, answers) {
   const unit = answers.unit || extracted.unit.value;
   const requiredCerts = answers.requiredCerts || extracted.requiredCerts.value || [];
   const reason = extracted.reason.value || '臨時請假';
+  // 最後一道閘門：不合法的缺班條件不得進入引擎（UI 與 api 消毒之外的保險）
+  if (!isValidDateStr(date)
+    || !Object.prototype.hasOwnProperty.call(SHIFT_TYPES, shift)
+    || !Object.prototype.hasOwnProperty.call(UNITS, unit)
+    || !requiredCerts.every((c) => Object.prototype.hasOwnProperty.call(CERTS, c))) {
+    throw new Error('缺班條件不完整或格式錯誤，請回「缺班事件」頁重新確認');
+  }
   return {
     ...GAP_EVENT,
     id: `GAP-${date.replace(/-/g, '')}-${shift}-${unit}`,
@@ -323,13 +370,33 @@ const LLM_CONTRACTS = {
   notification_draft: (r) => typeof r === 'string' && r.length > 0,
 };
 
+/** 端點只接受 https（本機開發例外）：金鑰與人員資料不得走明文 */
+function assertEndpointAllowed(endpoint) {
+  let u;
+  try { u = new URL(endpoint); } catch (e) { throw new Error('LLM endpoint 不是合法的 URL'); }
+  const isLocalhost = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+  if (u.protocol !== 'https:' && !isLocalhost) {
+    throw new Error('LLM endpoint 必須使用 https（本機開發除外）');
+  }
+}
+
 async function llmCallApi(task, payload) {
   if (!LLM.endpoint) throw new Error('LLM api 模式未設定 endpoint');
-  const res = await fetch(LLM.endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ task, modelId: LLM.modelId, payload }),
-  });
+  assertEndpointAllowed(LLM.endpoint);
+  // 逾時保險：端點無回應時 15 秒內中止並退回 mock，畫面不得卡死
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  let res;
+  try {
+    res = await fetch(LLM.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task, modelId: LLM.modelId, payload }),
+      signal: ctrl.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) throw new Error(`LLM 端點回應 ${res.status}`);
   const data = await res.json();
   const valid = LLM_CONTRACTS[task];
