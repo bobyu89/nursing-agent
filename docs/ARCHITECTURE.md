@@ -1,25 +1,42 @@
 # 班守 ShiftGuard — 系統架構書
 
-> 版本：1.0（2026-08-09）
+> 版本：2.0（2026-08-09）
+> 相對 1.0 的主要變化：決策模型從「單筆替補」擴為**第 0–3 層決策階梯**
+> （新增第 0 層班表生成、第三層任務重分配）、Bedrock LLM Proxy 完成實作（`aws/lambda/`）、
+> 引擎測試 22 → 37 項、新增系統藍圖（本文件講**現在**，[BLUEPRINT.md](BLUEPRINT.md) 講**未來**）。
+>
 > 關聯文件：[README.md](../README.md)（快速開始）、[CONTEXT.md](CONTEXT.md)（領域語義權威定義）、
-> [proposal.md](proposal.md)（提案素材）、[REVIEW.md](REVIEW.md)（功能與資安審查紀錄）
+> [BLUEPRINT.md](BLUEPRINT.md)（平台藍圖）、[REVIEW.md](REVIEW.md)（功能與資安審查紀錄）、
+> [aws/README.md](../aws/README.md)（Bedrock 部署步驟）
 
 ---
 
 ## 1. 系統定位
 
-**醫護排班治理平台，模組一：臨時缺班替補。**
-當醫護人員臨時請假，系統在幾秒內給出合格替補候選人、排序理由與風險提示，
-且每一個判斷都交代得出依據（規則代碼、法規條文、分數構成）。
+**醫護排班治理平台。** 讓每一次人力調度——排班、替補、調度、重分配——都做到
+**算得準、說得清、留得下**。當醫護人員臨時請假，系統在幾秒內給出合格替補候選人、
+排序理由與風險提示，且每一個判斷都交代得出依據（規則代碼、法規條文、分數構成）。
+
+系統的決策模型是一條**四層決策階梯**，從源頭治理到極端情境的韌性降級：
+
+```
+第 0 層  班表生成（generateSchedule）──── 源頭治理：排出來的那一刻就合規（畫面 8）
+第 1 層  找合格替補（evaluateGap）─────── 硬性排除＋軟性排序（畫面 1–3）
+第 2 層  放寬試算＋全局指派 ───────────── 只試算不放寬；多筆缺班整體最佳（畫面 2、7）
+第 3 層  任務重新分配（reallocateTasks）─ 缺的不是「一個人」，是「一班的任務」（畫面 7）
+```
+
+上層做得越好，下層被觸發得越少——平台的北極星指標是
+**「第三層韌性模式的啟動次數逐季下降」**（詳見 BLUEPRINT.md §3）。
 
 ### 1.1 系統邊界（明確不做的事）
 
 | 不做 | 原因 |
 |---|---|
-| 不重排完整月班表 | 範圍控制：只解決「臨時缺班」這一個問題 |
+| 不寫入院內正式班表 | 本平台是決策輔助；替補寫回為 demo 模擬，班表生成僅產出**草稿** |
 | 不自動通知員工 | 通知一律停在草稿，發送權在主管 |
-| 不寫入院內正式班表 | 本平台是決策輔助，不是排班系統的替代品 |
 | 不自行放寬規則、不補完缺漏欄位 | Agent 治理原則：確定性歸程式、決定權歸人 |
+| 不自動刪任務、不自動降載 | 第三層的缺口誠實標示，交主管決策 |
 | 不使用病患資料與真實姓名 | 人員一律代號化（N-01 ~ N-11），資料全數虛構 |
 
 ## 2. 核心設計原則
@@ -28,7 +45,7 @@
 
 | 職責 | 負責模組 | 內容 |
 |---|---|---|
-| **算得準** | `src/engine.js`（確定性規則引擎） | 工時累計、班間休息、連續天數、證照效期、加權評分、指派最佳化 |
+| **算得準** | `src/engine.js`（確定性規則引擎） | 工時累計、班間休息、連續天數、證照效期、加權評分、指派最佳化、班表生成、任務重分配 |
 | **說得清** | `src/llm.js`（語言模型轉接層） | 解析請假訊息、追問缺漏、把數字寫成人話、生成摘要與草稿 |
 
 算錯工時在醫療場域是**合規事故**，不是體驗瑕疵；語言模型會產生流暢但錯誤的數字，
@@ -38,6 +55,13 @@
 
 Agent 的每一個關鍵動作都停在「建議」：追問而非臆測、試算放寬而非自行放寬、
 草稿而非發送、主管確認後才寫回。決策留痕記錄每一步是誰做的。
+
+### 2.3 誠實原則（不粉飾）
+
+系統性地拒絕「假裝問題解決了」，在四個層面各有落實：
+解析時**缺漏轉追問**（不臆測）；替補時**排除逐筆給原因**（不隱藏）；
+重分配時**無人可承接的任務標示缺口與原因**（不硬塞）；
+生成時**排不出的格子彙整各規則擋下幾人**（不放寬）。
 
 ## 3. 系統架構總覽
 
@@ -49,15 +73,15 @@ Agent 的每一個關鍵動作都停在「建議」：追問而非臆測、試�
 ```mermaid
 flowchart TB
     subgraph browser["瀏覽器（單一頁面）"]
-        UI["index.html + assets/styles.css<br/>七個畫面"]
+        UI["index.html + assets/styles.css<br/>八個畫面"]
         APP["src/app.js<br/>畫面渲染與流程控制<br/>（狀態機、留痕、localStorage）"]
-        ENGINE["src/engine.js<br/>確定性決策引擎<br/>createEngine(db) 工廠"]
+        ENGINE["src/engine.js<br/>確定性決策引擎<br/>createEngine(db) 工廠＋reallocateTasks"]
         LLMA["src/llm.js<br/>LLM 轉接層<br/>mock ↔ api（含消毒與合約驗證）"]
-        DATA["src/data.js<br/>模擬資料<br/>（人員／班表／請假／缺班）"]
+        DATA["src/data.js<br/>模擬資料<br/>（人員／班表／請假／演示情境）"]
         RULES["src/rules.js<br/>規則庫 Rule Registry<br/>（H1–H6／S1–S5／F1–F4）"]
     end
     LS[("localStorage<br/>規則調整快照")]
-    EXT["（api 模式，預設關閉）<br/>API Gateway → Lambda → Bedrock"]
+    EXT["（api 模式，預設關閉）<br/>Lambda Function URL → Bedrock<br/>（aws/lambda 已完成實作）"]
 
     UI --> APP
     APP -->|"注入 db（同一份參照）"| ENGINE
@@ -65,20 +89,21 @@ flowchart TB
     DATA --> APP
     RULES --> APP
     APP <-->|"存讀（載入時夾限範圍）"| LS
-    LLMA -.->|"https + 逾時 + 白名單消毒"| EXT
+    LLMA -.->|"https + 逾時 + 端點白名單 + 消毒"| EXT
 ```
 
 ### 3.2 模組職責
 
 | 檔案 | 職責 | 關鍵設計 |
 |---|---|---|
-| `index.html` | 七個畫面的骨架 | 無 inline script；CSP 限制同源資源 |
+| `index.html` | 八個畫面的骨架 | 無 inline script；CSP 限制同源資源 |
 | `src/data.js` | 模擬資料層 | 全虛構、代號化；正式導入時整層替換為 API 讀取 |
 | `src/rules.js` | 規則庫 | 規則是**可維護的資料**，不是寫死的程式碼 |
 | `src/engine.js` | 決策引擎 | `createEngine(db)` 依賴注入，零全域讀取，可移植至 Lambda |
 | `src/llm.js` | LLM 轉接層 | mock／api 雙模式；api 回應經合約驗證＋白名單消毒 |
 | `src/app.js` | 畫面與流程 | 唯一操作 DOM 的模組；輸出一律經 `esc()` 跳脫 |
-| `tests/engine.test.js` | 邊界測試 | 瀏覽器（tests.html）與 CI（Node）共用同一份 |
+| `aws/lambda/index.mjs` | Bedrock LLM Proxy | 金鑰只存在 Lambda IAM 角色；structured outputs 強制回應格式 |
+| `tests/engine.test.js` | 邊界測試（37 項） | 瀏覽器（tests.html）與 CI（Node）共用同一份 |
 | `tests/run-node.js` | CI runner | 把 module.exports 掛回 globalThis，模擬瀏覽器載入順序 |
 
 **依賴方向**：`app.js → (engine, llm, data, rules)`；`engine.js` 不依賴任何模組（資料全部注入）；
@@ -110,6 +135,10 @@ sequenceDiagram
     UI->>ENG: applyReplacement(gap, staffId)（班次寫回＋替補次數 +1）
     UI->>UI: logAction(...)（雜湊鏈留痕）
 ```
+
+候選人不足時進入第 2 層（`relaxationAnalysis` 試算＋畫面 7 全局指派）；
+連放寬都無解時進入第 3 層（畫面 7 韌性模式，`reallocateTasks`）。
+第 0 層（畫面 8 班表生成）獨立於缺班事件流程，直接對「下一週」產出合規班表草稿。
 
 ## 5. 缺班事件生命週期
 
@@ -144,34 +173,38 @@ stateDiagram-v2
 
 各規則的完整定義、法規依據與可否放寬，見 `src/rules.js` 與 [CONTEXT.md](CONTEXT.md)。
 
-### 6.2 主要演算法
+### 6.2 決策階梯的演算法
 
-| 函式 | 用途 | 說明 |
+| 層 | 函式 | 目標與方法 |
 |---|---|---|
-| `evaluateGap(gap)` | 單筆缺班評估 | 全員跑硬性檢查 → 合格者評分排序；原班人員一律排除但據實呈現 |
-| `relaxationAnalysis(gap)` | 升級路徑試算 | 候選不足時逐條試算「放寬哪條會多出誰」；只試算，不放寬 |
-| `assignGreedy(gaps)` | 逐筆貪心（對照組） | 每筆取當下最高分並寫回模擬班表 |
-| `assignJointly(gaps)` | 全局指派 | 枚舉全部可行組合，字典序最佳化：先填補筆數、再總分；組合可行性經完整模擬（同一人接多筆的交互檢查） |
-| `rosterWarnings()` | 主動預警 | 對已排定班表靜態掃描，high／medium／low 三級 |
-| `coverageGaps(dates)` | 配置缺口掃描 | 每單位每班別在班人數 vs 最低配置；無資料單位回報 noData |
+| 0 | `generateSchedule(spec)` | 逐格生成下週班表：每格以 **同一份 `checkHardConstraints`** 過濾合格者，依「總量均衡 → 班別輪值均衡 → 意願 → 字典序」確定性排序取人。既有班表為邊界條件（跨週 H4／H5）。生成後疊上現有班表以 `rosterWarnings` 整表重掃（**第二道獨立驗證**），新增「已違規」必為 0；排不出的格子逐格彙整各規則擋下幾人 |
+| 1 | `evaluateGap(gap)` | 全員跑硬性檢查 → 合格者評分排序；原班人員一律排除但據實呈現 |
+| 2 | `relaxationAnalysis(gap)` | 候選不足時逐條試算「放寬哪條會多出誰」；只試算，不放寬 |
+| 2 | `assignGreedy(gaps)`／`assignJointly(gaps)` | 多筆缺班對照：貪心 vs 全局。全局指派枚舉全部可行組合，字典序最佳化（先填補筆數、再總分），組合可行性經完整模擬（同一人接多筆的 H2/H4/H5/H6 交互檢查） |
+| 3 | `reallocateTasks({tasks, onDuty, maxExtraLoad})` | 缺班者任務拆解重分配：資格硬性匹配、負荷上限嚴守，字典序最佳化（未覆蓋關鍵任務最少 → 未覆蓋總數最少 → 最大負荷最平衡）；無人可承接的任務標示原因（`no_qualified`／`over_capacity`） |
+| — | `rosterWarnings()` | 主動預警：對已排定班表靜態掃描，high／medium／low 三級；也是第 0 層的驗證器 |
+| — | `coverageGaps(dates)` | 配置缺口掃描：每單位每班別在班人數 vs 最低配置；無資料單位回報 noData |
 
-規模聲明:demo 為 11 人 × 少量缺班，暴力枚舉即為確定性最佳解;
-正式導入若缺班筆數放大，`assignJointly` 應改用整數規劃求解器，目標函數不變。
+**規模聲明**：demo 為 11 人 × 少量缺班／28 格週班表，暴力枚舉與貪心＋確定性排序即為可審計的解；
+正式導入若規模放大，`assignJointly` 與 `generateSchedule` 應改用匹配／整數規劃求解器，
+**目標函數與硬性約束不變**。
 
 ### 6.3 可移植性
 
 引擎以 `createEngine(db)` 建立，人員／班表／規則皆由外部注入，內部不讀取任何全域資料、
 不接觸 DOM。同一份檔案在瀏覽器、tests.html、Node CI 與未來的 Lambda 端點上行為一致——
-由 `tests/engine.test.js` 的 22 項邊界測試保證。
+由 `tests/engine.test.js` 的 37 項邊界測試保證。
 
-## 7. LLM 轉接層設計
+## 7. LLM 轉接層與 Bedrock Proxy
+
+### 7.1 前端轉接層的四道防線
 
 ```mermaid
 flowchart LR
     A["呼叫方（app.js）"] --> B{"LLM.mode"}
     B -->|mock（預設）| C["關鍵詞規則比對<br/>決定性、離線可跑"]
     B -->|api| D["llmCallApi()"]
-    D --> E["assertEndpointAllowed<br/>（強制 https，本機除外）"]
+    D --> E["assertEndpointAllowed<br/>（強制 https＋端點白名單）"]
     E --> F["fetch ＋ 15 秒逾時<br/>（AbortController）"]
     F --> G["LLM_CONTRACTS<br/>回應形狀合約驗證"]
     G --> H["sanitizeParsed<br/>欄位值白名單消毒"]
@@ -179,14 +212,31 @@ flowchart LR
     G -->|不符合約| I
 ```
 
-四道防線的理由：
-
 1. **合約驗證**（形狀）：模型輸出永遠可能跑格式，畫面不能因此壞掉。
 2. **白名單消毒**（值）：通報訊息是不可信輸入，可能夾帶 prompt injection；
    模型吐回的欄位值必須通過白名單（日期真實存在、班別∈SHIFT_TYPES、單位∈UNITS、
    資格⊆CERTS）才能進入引擎與畫面，不合法的值降級為「未解析→追問」。
-3. **傳輸安全**：endpoint 強制 https（金鑰與人員資料不得走明文）；15 秒逾時，端點無回應不卡畫面。
+3. **傳輸安全**：endpoint 強制 https（本機開發除外）；以 URL 參數切換端點時僅接受
+   `*.on.aws` 與 localhost 白名單——防止惡意連結把通報訊息導向第三方端點；15 秒逾時不卡畫面。
 4. **失敗退路**：任何一次呼叫失敗立即退回 mock 並標示，演示不中斷。
+
+### 7.2 Bedrock LLM Proxy（`aws/lambda/`，已完成實作）
+
+```mermaid
+flowchart LR
+    FE["前端 llm.js<br/>（api 模式）"] -->|"https + x-demo-token"| FU["Lambda Function URL<br/>（CORS 限定）"]
+    FU --> LB["Lambda：index.mjs<br/>存取權杖檢查＋任務路由"]
+    LB --> BR["Amazon Bedrock<br/>claude-sonnet-5<br/>structured outputs（json_schema）"]
+    LB -.->|"日期由 calendarTable 確定性計算<br/>missing 由 Lambda 推導"| LB
+```
+
+| 設計決定 | 理由 |
+|---|---|
+| 金鑰永不落地前端 | Bedrock 憑證只存在 Lambda 的 IAM 執行角色；前端只持有 demo token |
+| structured outputs（`json_schema`＋`additionalProperties:false`） | 三種任務（parse／explain／summary）的回應形狀由 schema 強制，前端合約驗證是第二道 |
+| 相對日期不交給模型換算 | Lambda 端以 `calendarTable` 確定性計算「明天／下週三」對應日期，模型只選不算 |
+| `missing`（追問清單）由 Lambda 推導 | 缺漏判定是規則不是語言，模型不參與 |
+| 成本護欄 | 低 effort、短輸出上限、單一模型；部署步驟與成本估算見 aws/README.md |
 
 ## 8. 狀態與持久化
 
@@ -198,8 +248,11 @@ flowchart LR
 
 ## 9. 測試與 CI
 
-- `tests/engine.test.js`：釘住合規事故等級的邊界（班間休息恰 11h、連 6／7 天、
-  自然週歸屬、大夜跨日、demo 資料集完整結果、解析不臆測、api 失敗退路）。
+- `tests/engine.test.js`（37 項）釘住合規事故等級的邊界：
+  班間休息恰 11h、連 6／7 天、自然週歸屬、大夜跨日、demo 資料集完整結果、
+  解析不臆測與多線索模糊偵測、api 失敗退路與消毒、
+  任務重分配（資格硬性／負荷上限／關鍵優先／確定性）、
+  班表生成（零違規、跨週 H4/H5 邊界、誠實缺格、確定性、公平輪值）。
 - 三種執行方式，同一份測試：雙擊 `tests.html`（離線）、`node tests/run-node.js`（本機）、
   GitHub Actions（每次 push 自動跑，`.github/workflows/test.yml`）。
 - 語義權威在 [CONTEXT.md](CONTEXT.md)：文件與程式不一致時，以文件為準修程式並補測試。
@@ -213,6 +266,7 @@ flowchart LR
 | 線上 demo | GitHub Pages（push 即自動更新）https://bobyu89.github.io/nursing-agent/ |
 | 離線 demo | 雙擊 `index.html`（CSP 含 `file:` 來源，離線流程不受影響） |
 | 本機開發 | `python -m http.server 8777` |
+| LLM api 模式 | 依 aws/README.md 部署 Lambda + Bedrock 後，以 `?llm=<Function URL>` 切換 |
 
 ### 10.2 正式導入目標架構（AWS）
 
@@ -222,16 +276,19 @@ flowchart TB
     U --> APIGW["API Gateway<br/>（認證、限流）"]
     APIGW --> COG["Cognito + IAM<br/>主管／規則管理員角色分離"]
     APIGW --> L1["Lambda：決策引擎<br/>（同一份 engine.js）"]
-    APIGW --> L2["Lambda：LLM Proxy<br/>（金鑰只存在後端）"]
+    APIGW --> L2["Lambda：LLM Proxy<br/>（aws/lambda 直接沿用）"]
     L2 --> BR["Amazon Bedrock<br/>（訊息解析、理由生成）"]
-    L1 --> DDB[("DynamoDB<br/>人員／班表／規則庫")]
+    L1 --> RR[("DynamoDB<br/>Rule Registry（版本化）")]
+    L1 --> DDB[("RDS／DynamoDB<br/>人員／班表")]
     L1 --> AUDIT[("Audit Log<br/>append-only 儲存")]
+    EB["EventBridge<br/>每日風險掃描（M2）"] --> L1
 ```
 
-關鍵遷移原則：
+關鍵遷移原則（完整的四階段演進路線圖見 [BLUEPRINT.md](BLUEPRINT.md) §4–§5）：
 
-- **引擎零改寫**：`createEngine(db)` 的資料改由 DynamoDB 注入，計算邏輯與測試不變。
+- **引擎零改寫**：`createEngine(db)` 的資料改由資料庫注入，計算邏輯與測試不變。
 - **金鑰永不落地前端**：Bedrock 呼叫一律經 Lambda proxy；前端只拿短效 token（Cognito）。
+- **規則版本化**：「當時是用哪一版規則做的決定」是稽核的核心問題，規則變更本身也要留痕。
 - **留痕升級**：前端雜湊鏈保留作為跨系統核對的輕量證據，正式儲存改後端 append-only
   （DynamoDB 條件寫入或 QLDB）。
 - **公平性訊號**：`standbyCount30d` 由靜態快照改為「院內實際叫班紀錄的滾動 30 天窗口」。
@@ -247,7 +304,8 @@ flowchart TB
 | 不可信輸入 | 通報訊息（使用者輸入）與 api 模式模型輸出，一律經白名單消毒才進入引擎 |
 | 輸入驗證 | 日期嚴格日曆驗證（拒絕 2026-02-31 這類會被 JS Date 無聲進位的值） |
 | localStorage | 載回值逐項夾限，防止規則門檻被竄改成無效值 |
-| 傳輸 | LLM endpoint 強制 https（本機開發除外）＋ 15 秒逾時 |
+| 傳輸 | LLM endpoint 強制 https ＋ 15 秒逾時；URL 參數切換端點僅限 `*.on.aws`／localhost 白名單 |
+| 端點存取 | Lambda 驗證 `x-demo-token`；CORS 限定來源；Bedrock 金鑰只在 IAM 角色 |
 | 隱私 | 無 PII（代號化虛構資料）；`referrer no-referrer`；mock 模式訊息內容不離開瀏覽器 |
 
 ### 11.2 正式導入必要補強（前端 demo 做不到、也不假裝做到的）
@@ -268,4 +326,6 @@ flowchart TB
 | 請假粒度為「日」 | CONTEXT.md | 半天假／時段假視為全日不可排班 |
 | H5／H6 為簡化的院內政策 | CONTEXT.md | 比法規更嚴；正式導入依變形工時制度重定義 |
 | `assignJointly` 指數複雜度 | CONTEXT.md | demo 規模下暴力枚舉即最佳解；放大需求解器 |
+| `generateSchedule` 為貪心 MVP | CONTEXT.md | 週班表、單一單位；月班表與整數規劃最佳化為藍圖下一步 |
+| 任務重分配為獨立演示情境 | CONTEXT.md | 任務清單正式導入應來自護理排程／醫囑系統 |
 | 前端雜湊鏈非密碼學強度 | CONTEXT.md、REVIEW.md | djb2 僅 tamper-evident 展示用 |

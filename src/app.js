@@ -346,6 +346,10 @@ function renderShortfall(candidates) {
       <p class="lede" style="margin-bottom:14px">
         Agent 不會自行放寬任何規則。以下是試算結果，是否採行、由誰核准，由授權主管決定。
       </p>
+      ${zero ? `<div class="sc-evi" style="margin-bottom:12px">
+        決策階梯位置：第 1 層 找合格替補 <b class="expired">✗ 無解</b>
+        → <b>第 2 層 放寬試算（下方）</b> → 第 3 層 任務重新分配（本卡片末段）
+      </div>` : ''}
 
       ${soft.length ? `<h4 style="margin:0 0 4px;font-size:13px;color:var(--ink-faint)">可評估的鬆綁選項</h4>${soft.map(optionRow).join('')}` : ''}
       ${legal.length ? `<h4 style="margin:14px 0 4px;font-size:13px;color:var(--ink-faint)">以下條件涉及法規或病安下限，列出僅供了解缺口成因</h4>${legal.map(optionRow).join('')}` : ''}
@@ -355,10 +359,19 @@ function renderShortfall(candidates) {
       <ul style="margin:0;padding-left:18px;font-size:13.5px">
         <li>擴大至鄰近單位支援池，並同步提高交班與 orientation 的時間</li>
         <li>評估拆班（兩人各分擔半班），降低單一人員的工時衝擊</li>
-        <li>檢視當班任務是否可重新分工，讓不具特定資格者仍可承擔其餘照護工作</li>
         <li>通報護理部調度中心，啟動院級人力調度或約用人力</li>
       </ul>
-      <p class="fineprint">若本情境反覆出現，代表該單位在此時段的人力配置需要結構性檢討，而非每次靠替補補洞。</p>
+      ${zero ? `
+      <div class="excl" style="margin-top:14px">
+        <div><span class="rule-code">第3層</span></div>
+        <div>
+          <div class="excl-reason"><b>放寬也無解、外援也來不及時：任務重新分配（韌性模式）</b></div>
+          <div class="sc-evi">缺的不再是「一個人」，而是「一班的任務」——把缺班者的任務拆解重分配給在班人力：
+            資格硬性匹配、負荷平衡，無人可承接的任務誠實標示為缺口，交主管啟動上報或調度。</div>
+          <button class="btn btn-sm" id="btn-goto-realloc" style="margin-top:8px">前往第 3 層：任務重新分配 →</button>
+        </div>
+      </div>` : ''}
+      <p class="fineprint">若本情境反覆出現，代表該單位在此時段的人力配置需要結構性檢討，而非每次靠替補補洞——這正是第 0 層「班表生成」（畫面 8）要從源頭解決的問題。</p>
     </div>`;
 }
 
@@ -500,6 +513,15 @@ async function renderCandidates() {
   });
   $$('#candidates-body .js-choose').forEach((b) => {
     b.addEventListener('click', () => chooseCandidate(Number(b.dataset.idx)));
+  });
+  // 第 1 層無解時的階梯引導：一鍵前往第 3 層（畫面 7 韌性模式卡片）
+  const gotoRealloc = $('#btn-goto-realloc');
+  if (gotoRealloc) gotoRealloc.addEventListener('click', () => {
+    logAction('沿決策階梯升級至第 3 層',
+      `${state.gap ? `${shortDate(state.gap.date)} ${SHIFT_TYPES[state.gap.shift].name} @ ${UNITS[state.gap.unit]}：` : ''}查無合格替補，前往任務重新分配（韌性模式）`);
+    switchScreen('multi');
+    const card = $('#btn-realloc-run');
+    if (card) setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
   });
 }
 
