@@ -533,6 +533,49 @@ test('班表生成：結果確定性——同輸入同班表', () => {
     e.generateSchedule(GEN_SCENARIO).assignments, '同輸入必得同班表');
 });
 
+/* ── 能力與帶班平衡分析 ── */
+
+test('能力分析：單點依賴——VENT 有效持有 1 人，過期證照不計入戰力', () => {
+  const e = mkEngine(STAFF, SHIFTS, { ladderLevels: LADDER_LEVELS });
+  const r = e.capabilityAnalysis({ dates: WEEK_DATES, unit: 'MED-3A' });
+  const vent = r.certSinglePoints.find((c) => c.code === 'VENT');
+  assertEqual(vent.holders, ['N-10'], 'VENT 唯一有效持有者應為 N-10（單點依賴）');
+  const acls = r.certSinglePoints.find((c) => c.code === 'ACLS');
+  assert(!acls.holders.includes('N-04'), 'N-04 的 ACLS 已過期，不得計入有效持有人');
+});
+
+test('能力分析：帶班平衡——大夜整週無 N3 以上、白班有資深帶班', () => {
+  const e = mkEngine(STAFF, SHIFTS, { ladderLevels: LADDER_LEVELS });
+  const r = e.capabilityAnalysis({ dates: WEEK_DATES, unit: 'MED-3A' });
+  const nights = r.shiftMix.filter((m) => m.shift === 'N' && !m.empty);
+  assert(nights.length >= 4, '示範週應有大夜排班');
+  assert(nights.every((m) => !m.hasSenior), '大夜由 N2 獨撐，整週無 N3 以上帶班（實力失衡情境）');
+  const day84 = r.shiftMix.find((m) => m.date === '2026-08-04' && m.shift === 'D');
+  assert(day84.hasSenior, '8/4 白班有 AHN／N3 以上，應判定有資深帶班');
+});
+
+test('能力分析：到期雷達——過期、90 天內到期、90 天外三種狀態分明', () => {
+  const A = mkStaff('A', {
+    certs: { ACLS: '2026-08-01', CHEMO: '2026-09-30', IV: '2027-08-01' },
+  });
+  const r = mkEngine([A], []).capabilityAnalysis({ dates: ['2026-08-03'], unit: 'MED-3A' });
+  const byCode = Object.fromEntries(r.expiring.map((x) => [x.code, x.status]));
+  assertEqual(byCode.ACLS, 'expired', '8/1 到期、基準日 8/3 → 已過期');
+  assertEqual(byCode.CHEMO, 'expiring', '9/30 到期在 90 天視窗內 → 即將到期');
+  assert(!('IV' in byCode), '一年後到期不應出現在雷達');
+  const badgeA = r.badges[0].certs.find((c) => c.code === 'IV');
+  assertEqual(badgeA.status, 'valid');
+});
+
+test('能力分析：資格×班別覆蓋——大夜化療 4/4 天有人、呼吸器 0/4 天', () => {
+  const e = mkEngine(STAFF, SHIFTS, { ladderLevels: LADDER_LEVELS });
+  const r = e.capabilityAnalysis({ dates: WEEK_DATES, unit: 'MED-3A' });
+  const night = r.certCoverage.find((c) => c.shift === 'N');
+  assertEqual(night.staffedDays, 4, '示範週大夜有排班 4 天');
+  assertEqual(night.certs.find((c) => c.cert === 'CHEMO').coveredDays, 4, 'N-07 具化療資格');
+  assertEqual(night.certs.find((c) => c.cert === 'VENT').coveredDays, 0, '大夜整週無呼吸器覆蓋');
+});
+
 /* ── 人力缺口分析（管理總覽）── */
 
 test('缺口方程式：demo 資料的內科 3A 缺 5 班次、大夜為結構性缺口、ICU 誠實回報無資料', () => {

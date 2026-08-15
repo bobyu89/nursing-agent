@@ -30,6 +30,7 @@ const engine = createEngine({
   shifts: SHIFTS,
   shiftTypes: SHIFT_TYPES,
   roleLevels: ROLE_LEVELS,
+  ladderLevels: LADDER_LEVELS,
   certs: CERTS,
   units: UNITS,
   registry: RULE_REGISTRY,
@@ -197,10 +198,11 @@ function resetSchedule() {
   location.reload();
 }
 
-/** 班表變更後的統一重算：排班工作區、缺口總覽、主動預警 */
+/** 班表變更後的統一重算：排班工作區、缺口總覽、能力儀表板、主動預警 */
 function refreshAfterScheduleChange() {
   renderRoster();
   renderOverview();
+  renderCapability();
   renderWarnings();
 }
 
@@ -210,6 +212,124 @@ function switchScreen(name) {
   $$('.screen').forEach((s) => s.classList.toggle('active', s.id === `screen-${name}`));
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.screen === name));
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ══ ★ 能力與出勤儀表板 ════════════════════════════════ */
+
+function lvBadge(code) {
+  return code
+    ? `<span class="lv-badge lv-${esc(code)}">${esc(code)}</span>`
+    : '<span class="lv-badge lv-none">未評級</span>';
+}
+
+function renderCapability() {
+  const UNIT = 'MED-3A';
+  const r = engine.capabilityAnalysis({ dates: WEEK_DATES, unit: UNIT });
+  const CERT_SHORT = Object.fromEntries(Object.entries(CERTS).map(([k, v]) => [k, v.replace(/\s.*/, '')]));
+
+  /* A. 帶班平衡熱圖：班別 × 日期，無 N3↑ 的班標紅 */
+  const mixHead = `<thead><tr><th>班別</th>${WEEK_DATES.map((d) =>
+    `<th class="center">${shortDate(d)}<br>（${weekdayOf(d)}）</th>`).join('')}<th class="center">資深覆蓋</th></tr></thead>`;
+  const mixBody = ['D', 'E', 'N'].map((code) => {
+    const cells = WEEK_DATES.map((d) => {
+      const m = r.shiftMix.find((x) => x.date === d && x.shift === code);
+      if (!m || m.empty) return '<td class="center" style="color:var(--ink-faint)">·</td>';
+      const chips = m.onDuty.map((s) => s.ladder || '—').join('·');
+      return `<td class="center mix-cell${m.hasSenior ? '' : ' mix-warn'}" title="${m.onDuty.map((s) => `${s.id} ${s.ladder || '未評級'}`).join('、')}">${esc(chips)}${m.hasSenior ? '' : '<br><b class="expired">無 N3↑</b>'}</td>`;
+    }).join('');
+    const staffed = r.shiftMix.filter((x) => x.shift === code && !x.empty);
+    const ok = staffed.filter((x) => x.hasSenior).length;
+    const tag = staffed.length === 0 ? '—'
+      : (ok === staffed.length ? `<span class="tag tag-ok">${ok}/${staffed.length} 天</span>`
+        : `<span class="tag tag-danger">${ok}/${staffed.length} 天</span>`);
+    return `<tr><td><b>${SHIFT_TYPES[code].name}</b></td>${cells}<td class="center">${tag}</td></tr>`;
+  }).join('');
+
+  /* B. 徽章牆 */
+  const wall = r.badges.map((b) => `
+    <tr>
+      <td><b>${esc(b.id)}</b></td>
+      <td>${lvBadge(b.ladder)}</td>
+      <td style="white-space:normal">${b.certs.map((c) => {
+        const label = { valid: '', expiring: `（${c.expiry} 到期）`, expired: '（已過期）' }[c.status];
+        return `<span class="cert-badge cert-${c.status}" title="${CERTS[c.code]}｜效期 ${c.expiry}">${esc(CERT_SHORT[c.code])}${label}</span>`;
+      }).join('')}</td>
+    </tr>`).join('');
+
+  /* C. 單點依賴 + 到期雷達 */
+  const spRows = r.certSinglePoints.map((c) => `
+    <div class="fact">
+      <span>${esc(CERTS[c.code])}</span>
+      <span>${c.count === 0 ? '<b class="expired">0 人——能力已消失</b>'
+        : c.count === 1 ? `<b class="expired">僅 ${esc(c.holders[0])} 一人——單點故障</b>`
+        : `${c.count} 人（${c.holders.map(esc).join('、')}）`}</span>
+    </div>`).join('');
+  const radarRows = r.expiring.length ? r.expiring.map((x) => `
+    <div class="fact">
+      <span>${esc(x.id)}｜${esc(CERT_SHORT[x.code])}</span>
+      <span class="${x.status === 'expired' ? 'expired' : ''}">${x.status === 'expired' ? `已於 ${x.expiry} 過期——回訓後才可計入戰力` : `${x.expiry} 到期，請排回訓`}</span>
+    </div>`).join('') : '<div class="sc-evi">未來 90 天內無證照到期。</div>';
+
+  /* D. 出勤與公平快照 */
+  const leaveDays = STAFF.filter((s) => s.unit === UNIT).flatMap((s) =>
+    WEEK_DATES.filter((d) => s.leaves.some((lv) => d >= lv.from && d <= lv.to)).map(() => s.id));
+  const leaveWho = [...new Set(leaveDays)];
+  const counts = STAFF.filter((s) => s.unit === UNIT).map((s) => s.standbyCount30d);
+  const nightCerts = r.certCoverage.find((c) => c.shift === 'N');
+
+  $('#capability-body').innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h2>三班帶班平衡（進階 N3 以上視為可帶班）</h2>
+        <span class="tag tag-danger">實力平衡檢查</span>
+      </div>
+      <div class="table-scroll"><table>${mixHead}<tbody>${mixBody}</tbody></table></div>
+      <p class="fineprint">
+        每格顯示該班在班人員的進階組成（滑鼠停留看名單）。<b>大夜由 N2 獨撐整週</b>——
+        新人夜裡遇到急救沒有 N3 以上壓陣，是實力失衡的典型樣態；
+        調整方向：把資深輪進夜班、或於「班表生成」納入帶班約束（藍圖下一步）。
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>徽章牆：進階層級 × 資格效期</h2>
+        <span class="tag tag-neutral">灰＝過期不計戰力</span>
+      </div>
+      <div class="table-scroll"><table>
+        <thead><tr><th>人員</th><th>進階</th><th>資格徽章</th></tr></thead>
+        <tbody>${wall}</tbody>
+      </table></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <h2>資格單點依賴</h2>
+          <span class="tag tag-danger">那個人倒下，能力就消失</span>
+        </div>
+        ${spRows}
+        <p class="fineprint">大夜的呼吸器覆蓋 ${nightCerts ? nightCerts.certs.find((c) => c.cert === 'VENT').coveredDays : 0}／${nightCerts ? nightCerts.staffedDays : 0} 天——單點依賴＋夜間零覆蓋，就是畫面 7 韌性模式那個劇本的前兆。培訓第二位持有者是最便宜的保險。</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>到期雷達（未來 90 天）</h2>
+          <span class="tag tag-warn">回訓排程依據</span>
+        </div>
+        ${radarRows}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>出勤與公平快照（本週）</h2>
+        <span class="tag tag-neutral">單週快照；正式導入後累積為趨勢</span>
+      </div>
+      <div class="fact"><span>請假影響</span><span>${leaveWho.length} 人、${leaveDays.length} 人日（${leaveWho.map(esc).join('、') || '無'}）——造成的缺口帳見「人力缺口」頁</span></div>
+      <div class="fact"><span>替補集中度（近 30 天）</span><span>最高 ${Math.max(...counts)} 次／最低 ${Math.min(...counts)} 次——差距愈大，愈接近「誰好講話就找誰」</span></div>
+      <div class="fact"><span>公平性飽和警戒</span><span>${STAFF.filter((s) => s.unit === UNIT && s.standbyCount30d >= 4).map((s) => s.id).join('、') || '無'}（達 4 次以上，再叫班即觸頂）</span></div>
+      <p class="fineprint">出勤與公平是離職螺旋的前導指標：缺人 → 集中叫班 → 更多人離開。這一頁的目標是在螺旋成形前看見它。</p>
+    </div>`;
 }
 
 /* ══ ◎ 人力缺口總覽（管理首頁）═════════════════════════ */
@@ -806,7 +926,8 @@ async function chooseCandidate(idx) {
     renderFairness();
     renderWarnings();
     renderRoster();
-    renderOverview();   // 寫回後缺口帳即時重算
+    renderOverview();      // 寫回後缺口帳即時重算
+    renderCapability();    // 帶班組成同步更新
 
     // 治理迴路的下一步：一鍵開始第二筆缺班，班表與公平性延續累計
     const next = document.createElement('button');
@@ -1079,7 +1200,7 @@ function handleRosterImport() {
 
 function renderStaffTable() {
   const head = `<thead><tr>
-    <th>代號</th><th>職務</th><th>所屬單位</th><th>資格與效期</th>
+    <th>代號</th><th>職務</th><th>進階</th><th>所屬單位</th><th>資格與效期</th>
     <th>願意支援班別</th><th class="center">近 30 天代班</th><th>狀態</th>
   </tr></thead>`;
 
@@ -1096,7 +1217,7 @@ function renderStaffTable() {
       : s.willingShifts.map((c) => SHIFT_TYPES[c].name).join('、');
     const leave = s.leaves.map((l) => `${esc(l.type)} ${shortDate(l.from)}–${shortDate(l.to)}`).join('；');
     return `<tr>
-      <td><b>${esc(s.id)}</b></td><td>${esc(s.role)}</td><td>${esc(UNITS[s.unit])}</td>
+      <td><b>${esc(s.id)}</b></td><td>${esc(s.role)}</td><td>${lvBadge(s.ladder)}</td><td>${esc(UNITS[s.unit])}</td>
       <td style="white-space:normal">${certs}</td>
       <td>${willing}</td>
       <td class="center">${s.standbyCount30d} 次</td>
@@ -1664,6 +1785,7 @@ function init() {
   renderReallocScenario();
   renderGenScenario();
   renderOverview();
+  renderCapability();
 }
 
 document.addEventListener('DOMContentLoaded', init);

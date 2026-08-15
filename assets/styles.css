@@ -96,6 +96,27 @@ input[type="checkbox"]:focus-visible, input[type="range"]:focus-visible {
 }
 .tab.active .tab-no { background: var(--brand); color: #fff; }
 
+/* ── 能力儀表板：進階與資格徽章 ─────────────────────── */
+.lv-badge {
+  display: inline-block; padding: 2px 9px; border-radius: 10px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .02em; white-space: nowrap;
+}
+.lv-AHN { background: #3d3a34; color: #fff; }
+.lv-N4  { background: #6b5d4a; color: #fff; }
+.lv-N3  { background: #8a7a5f; color: #fff; }
+.lv-N2  { background: #d5cebe; color: #3d3a34; }
+.lv-N1  { background: #eceae3; color: #6d6a62; }
+.lv-none { background: var(--line-soft); color: var(--ink-faint); }
+.cert-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 4px; margin: 1px 3px 1px 0;
+  font-size: 11px; border: 1px solid var(--line); white-space: nowrap;
+}
+.cert-valid { background: var(--surface); color: var(--ink-soft); }
+.cert-expiring { background: var(--warn-tint); border-color: #e0c98e; color: var(--warn); font-weight: 700; }
+.cert-expired { background: var(--line-soft); color: var(--ink-faint); text-decoration: line-through; }
+.mix-cell { font-size: 11px; line-height: 1.6; }
+.mix-warn { background: #f7ecec; box-shadow: inset 0 0 0 1px #e3c9c9; }
+
 /* ── 排班工作區：可編輯格 ────────────────────────────── */
 .td-edit { cursor: pointer; }
 .td-edit:hover { background: var(--line-soft); box-shadow: inset 0 0 0 1px var(--line); }

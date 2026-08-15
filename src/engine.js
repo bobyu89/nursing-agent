@@ -538,6 +538,95 @@ function createEngine(db) {
   }
 
   /**
+   * 能力與帶班平衡分析（能力儀表板）。
+   *
+   * 兩種徽章、兩個問題：
+   * - 資格徽章（證照）回答「有沒有人會做」——含效期狀態
+   *   （valid／expiring＝expiringDays 內到期／expired），過期即不計入戰力。
+   * - 進階徽章（N1–N4／AHN 臨床進階制度）回答「有沒有人扛得住」——
+   *   帶班平衡的檢查點：每一班至少一位 seniorLevel（預設 N3）以上。
+   *
+   * 單點依賴：某資格的有效持有人 ≤ 1 即單點故障——那個人倒下，
+   * 這項能力就從單位消失（畫面 7 的劇本就是這樣發生的）。
+   *
+   * @param {object} spec { dates, unit, seniorLevel = 3, expiringDays = 90 }
+   */
+  function capabilityAnalysis({ dates, unit, seniorLevel = 3, expiringDays = 90 }) {
+    const ladder = db.ladderLevels || {};
+    const lvOf = (s) => (s.ladder && ladder[s.ladder] ? ladder[s.ladder].level : 0);
+    const refDate = dates[0];
+    const horizon = addDays(refDate, expiringDays);
+    const pool = db.staff.filter((s) => !unit || s.unit === unit);
+    const inUnit = (x) => !unit || x.unit === unit;
+
+    /* 徽章牆：進階層級＋各證照效期狀態 */
+    const badges = pool.map((s) => ({
+      id: s.id, role: s.role,
+      ladder: s.ladder || null,
+      ladderName: s.ladder && ladder[s.ladder] ? ladder[s.ladder].name : '未評級',
+      level: lvOf(s),
+      certs: Object.entries(s.certs).map(([code, expiry]) => ({
+        code, expiry,
+        status: expiry < refDate ? 'expired' : (expiry <= horizon ? 'expiring' : 'valid'),
+      })),
+    })).sort((a, b) => b.level - a.level || (a.id < b.id ? -1 : 1));
+
+    /* 資格單點依賴：有效持有人數（過期不計入戰力） */
+    const certSinglePoints = Object.keys(db.certs).map((code) => {
+      const holders = pool.filter((s) => s.certs[code] && s.certs[code] >= refDate).map((s) => s.id);
+      return { code, holders, count: holders.length };
+    }).sort((a, b) => a.count - b.count);
+
+    /* 帶班平衡：每日×班別的在班進階組成與是否有資深（seniorLevel↑）帶班 */
+    const shiftMix = [];
+    dates.forEach((date) => {
+      Object.keys(db.shiftTypes).forEach((code) => {
+        const onDuty = db.shifts
+          .filter((x) => x.date === date && x.shift === code && inUnit(x))
+          .map((x) => db.staff.find((s) => s.id === x.staffId))
+          .filter(Boolean);
+        shiftMix.push({
+          date, shift: code,
+          empty: onDuty.length === 0,
+          onDuty: onDuty.map((s) => ({ id: s.id, ladder: s.ladder || null, level: lvOf(s) }))
+            .sort((a, b) => b.level - a.level),
+          hasSenior: onDuty.some((s) => lvOf(s) >= seniorLevel),
+        });
+      });
+    });
+
+    /* 資格×班別覆蓋：該班別有排班的天數中，幾天班上有人具「當日有效」資格 */
+    const certCoverage = Object.keys(db.shiftTypes).map((code) => {
+      const staffedDays = dates.filter((date) =>
+        db.shifts.some((x) => x.date === date && x.shift === code && inUnit(x)));
+      return {
+        shift: code,
+        staffedDays: staffedDays.length,
+        certs: Object.keys(db.certs).map((cert) => ({
+          cert,
+          coveredDays: staffedDays.filter((date) => db.shifts.some((x) => {
+            if (x.date !== date || x.shift !== code || !inUnit(x)) return false;
+            const st = db.staff.find((s) => s.id === x.staffId);
+            return st && st.certs[cert] && st.certs[cert] >= date;
+          })).length,
+        })),
+      };
+    });
+
+    /* 到期雷達：已過期＋expiringDays 內到期，依到期日排序 */
+    const expiring = [];
+    pool.forEach((s) => {
+      Object.entries(s.certs).forEach(([code, expiry]) => {
+        if (expiry < refDate) expiring.push({ id: s.id, code, expiry, status: 'expired' });
+        else if (expiry <= horizon) expiring.push({ id: s.id, code, expiry, status: 'expiring' });
+      });
+    });
+    expiring.sort((a, b) => (a.expiry < b.expiry ? -1 : 1));
+
+    return { badges, certSinglePoints, shiftMix, certCoverage, expiring, seniorLevel, expiringDays };
+  }
+
+  /**
    * 人力缺口分析（管理總覽）——把缺工從模糊感受變成可量化的管理資訊。
    *
    * 缺口方程式：營運所需人力 − 目前可合法且合理排入的人力 ＝ 實際人力缺口
@@ -904,7 +993,7 @@ function createEngine(db) {
     weeklyHours, shiftMix, isOnLeave, consecutiveDaysWithGap,
     minRestAfterGap, shiftInterval, unitCoverage,
     assignGreedy, assignJointly, rosterWarnings, coverageGaps,
-    generateSchedule, workforceGapAnalysis,
+    generateSchedule, workforceGapAnalysis, capabilityAnalysis,
   };
 }
 

@@ -48,6 +48,19 @@ const ROLE_LEVELS = {
   '資深護理師': 2,
 };
 
+/* ── 護理進階制度（臨床專業能力階層，與職務並行）─────────
+ * 依台灣護理人員進階制度：N1 基礎照護 → N2 重症照護 → N3 整體照護與教學
+ * → N4 專案改善與研究；AHN 副護理長（行政職，臨床上視同 N4 以上帶班能力）。
+ * 「帶班資深」的預設門檻為 N3 以上（院內政策，可依單位調整）。
+ */
+const LADDER_LEVELS = {
+  N1: { level: 1, name: 'N1 基礎照護' },
+  N2: { level: 2, name: 'N2 重症照護' },
+  N3: { level: 3, name: 'N3 整體照護與教學' },
+  N4: { level: 4, name: 'N4 專案與研究' },
+  AHN: { level: 5, name: 'AHN 副護理長' },
+};
+
 /* ── 本週範圍（用於週工時計算）─────────────────────────── */
 const WEEK = { start: '2026-08-03', end: '2026-08-09', label: '2026 年 8 月第 1 週（8/03 一 – 8/09 日）' };
 const WEEK_DATES = ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07', '2026-08-08', '2026-08-09'];
@@ -61,7 +74,7 @@ const WEEK_DATES = ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '202
  */
 const STAFF = [
   {
-    id: 'N-01', role: '資深護理師', unit: 'MED-3A',
+    id: 'N-01', role: '資深護理師', ladder: 'AHN', unit: 'MED-3A',
     certs: { ACLS: '2027-05-31', CHEMO: '2027-01-31', IV: '2028-12-31' },
     willingShifts: ['D'],
     familiarUnits: ['MED-3A'],
@@ -70,7 +83,7 @@ const STAFF = [
     note: '資深、資格完整，但近一個月已被叫班 4 次',
   },
   {
-    id: 'N-02', role: '護理師', unit: 'MED-3A',
+    id: 'N-02', role: '護理師', ladder: 'N2', unit: 'MED-3A',
     certs: { ACLS: '2027-03-31', CHEMO: '2026-12-31', IV: '2028-06-30' },
     willingShifts: ['D', 'E'],
     familiarUnits: ['MED-3A'],
@@ -79,7 +92,7 @@ const STAFF = [
     note: '',
   },
   {
-    id: 'N-03', role: '護理師', unit: 'MED-3A',
+    id: 'N-03', role: '護理師', ladder: 'N1', unit: 'MED-3A',
     certs: { ACLS: '2027-06-30', IV: '2027-12-31' },
     willingShifts: ['D', 'E'],
     familiarUnits: ['MED-3A'],
@@ -88,7 +101,7 @@ const STAFF = [
     note: '未取得化學治療給藥資格',
   },
   {
-    id: 'N-04', role: '資深護理師', unit: 'MED-3A',
+    id: 'N-04', role: '資深護理師', ladder: 'N3', unit: 'MED-3A',
     certs: { ACLS: '2026-06-30', CHEMO: '2027-08-31', IV: '2028-03-31' },
     willingShifts: ['D'],
     familiarUnits: ['MED-3A'],
@@ -97,7 +110,7 @@ const STAFF = [
     note: 'ACLS 證照已於 2026-06-30 到期，尚未完成回訓',
   },
   {
-    id: 'N-05', role: '護理師', unit: 'MED-3A',
+    id: 'N-05', role: '護理師', ladder: 'N1', unit: 'MED-3A',
     certs: { ACLS: '2027-02-28', CHEMO: '2027-04-30', IV: '2028-01-31' },
     willingShifts: ['D'],
     familiarUnits: ['MED-3A'],
@@ -106,7 +119,7 @@ const STAFF = [
     note: '本次缺班事件的原班人員',
   },
   {
-    id: 'N-06', role: '護理師', unit: 'MED-3A',
+    id: 'N-06', role: '護理師', ladder: 'N2', unit: 'MED-3A',
     certs: { ACLS: '2027-09-30', CHEMO: '2027-05-31', IV: '2028-08-31' },
     willingShifts: ['E'],
     familiarUnits: ['MED-3A'],
@@ -115,7 +128,7 @@ const STAFF = [
     note: '',
   },
   {
-    id: 'N-07', role: '護理師', unit: 'MED-3A',
+    id: 'N-07', role: '護理師', ladder: 'N2', unit: 'MED-3A',
     certs: { ACLS: '2027-04-30', CHEMO: '2027-07-31', IV: '2028-05-31' },
     willingShifts: ['N'],
     familiarUnits: ['MED-3A'],
@@ -124,7 +137,7 @@ const STAFF = [
     note: '帳面上 8/09 無班，但 8/08 大夜要到 8/09 早上 07:00 才下班',
   },
   {
-    id: 'N-08', role: '護理師', unit: 'SUR-5B',
+    id: 'N-08', role: '護理師', ladder: 'N2', unit: 'SUR-5B',
     certs: { ACLS: '2027-11-30', CHEMO: '2027-03-31', IV: '2028-09-30' },
     willingShifts: null,
     familiarUnits: ['SUR-5B', 'MED-3A'],
@@ -133,7 +146,7 @@ const STAFF = [
     note: '外科病房人員，過去曾支援內科病房 3A',
   },
   {
-    id: 'N-09', role: '護理師', unit: 'MED-3A',
+    id: 'N-09', role: '護理師', ladder: 'N1', unit: 'MED-3A',
     certs: { ACLS: '2027-08-31', CHEMO: '2027-06-30', IV: '2028-11-30' },
     willingShifts: ['D'],
     familiarUnits: ['MED-3A'],
@@ -142,7 +155,7 @@ const STAFF = [
     note: '帳面上 8/09 無班，但已連續上班 6 天',
   },
   {
-    id: 'N-10', role: '資深護理師', unit: 'MED-3A',
+    id: 'N-10', role: '資深護理師', ladder: 'N4', unit: 'MED-3A',
     certs: { ACLS: '2027-10-31', CHEMO: '2027-09-30', IV: '2028-10-31', VENT: '2027-12-31' },
     willingShifts: ['D'],
     familiarUnits: ['MED-3A', 'ICU'],
@@ -151,7 +164,7 @@ const STAFF = [
     note: '',
   },
   {
-    id: 'N-11', role: '護理師', unit: 'MED-3A',
+    id: 'N-11', role: '護理師', ladder: 'N1', unit: 'MED-3A',
     certs: { ACLS: '2027-07-31', CHEMO: '2027-02-28', IV: '2028-04-30' },
     willingShifts: ['D', 'E'],
     familiarUnits: ['MED-3A'],
@@ -316,7 +329,7 @@ const GAP_EVENT = {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    SHIFT_TYPES, UNITS, CERTS, ROLE_LEVELS, WEEK, WEEK_DATES,
+    SHIFT_TYPES, UNITS, CERTS, ROLE_LEVELS, LADDER_LEVELS, WEEK, WEEK_DATES,
     STAFF, SHIFTS, RAW_MESSAGE, GAP_EVENT, UNIT_MIN_STAFF, MULTI_GAP_SCENARIO,
     SAMPLE_MESSAGES, TASK_REALLOC_SCENARIO, GEN_SCENARIO,
   };
