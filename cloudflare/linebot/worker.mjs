@@ -74,6 +74,7 @@ function decodeParams(str) {
     s: qs.get('s'),                                  // 班別代碼 D/E/N
     u: qs.get('u'),                                  // 單位代碼
     c: qs.has('c') ? qs.get('c') : null,             // 資格代碼逗號串（'' = 明確選了「無需資格」）
+    id: qs.get('id'),                                // 產生詢問草稿的對象（候選人代號）
   };
 }
 
@@ -115,36 +116,48 @@ function askNext(p) {
 
 /* ── 條件齊全 → 同一份引擎評估，回覆替補建議 ── */
 
-function evaluateAndFormat(p, platformUrl) {
-  const engine = createEngine({
-    staff: STAFF, shifts: SHIFTS, shiftTypes: SHIFT_TYPES, roleLevels: ROLE_LEVELS,
-    certs: CERTS, units: UNITS, registry: RULE_REGISTRY, staffingMin: UNIT_MIN_STAFF,
-  });
-  const gap = {
+function buildGap(p) {
+  return {
     date: p.d, shift: p.s, unit: p.u,
     requiredRole: '護理師',
     requiredCerts: p.c ? p.c.split(',').filter(Boolean) : [],
     originalStaffId: null,
   };
-  const { candidates, excluded } = engine.evaluateGap(gap);
+}
+
+function runEngine(p) {
+  const engine = createEngine({
+    staff: STAFF, shifts: SHIFTS, shiftTypes: SHIFT_TYPES, roleLevels: ROLE_LEVELS,
+    certs: CERTS, units: UNITS, registry: RULE_REGISTRY, staffingMin: UNIT_MIN_STAFF,
+  });
+  const gap = buildGap(p);
+  return { gap, ...engine.evaluateGap(gap) };
+}
+
+function evaluateAndFormat(p, platformUrl) {
+  const { gap, candidates, excluded } = runEngine(p);
 
   const head = `【替補建議】${shortDate(gap.date)}（${weekdayOf(gap.date)}）${SHIFT_TYPES[gap.shift].name}｜${UNITS[gap.unit]}\n` +
     `需求：護理師以上${gap.requiredCerts.length ? '＋' + gap.requiredCerts.map((c) => CERTS[c].replace(/\s.*/, '')).join('、') : ''}`;
 
   if (candidates.length === 0) {
     const codes = [...new Set(excluded.flatMap((e) => e.violations.map((v) => v.code)))].filter((c) => c !== '—');
-    return [
-      head, '',
-      `⚠ 查無合格替補（${excluded.length} 人全數排除，涉及規則：${codes.join('、')}）。`,
-      '請至平台查看放寬試算與第 3 層任務重分配（決策階梯會引導）：',
-      platformUrl,
-      '',
-      '＊示範資料（虛構人員）；正式決策以平台留痕為準',
-    ].join('\n');
+    return {
+      text: [
+        head, '',
+        `⚠ 查無合格替補（${excluded.length} 人全數排除，涉及規則：${codes.join('、')}）。`,
+        '請至平台查看放寬試算與第 3 層任務重分配（決策階梯會引導）：',
+        platformUrl,
+        '',
+        '＊示範資料（虛構人員）；正式決策以平台留痕為準',
+      ].join('\n'),
+      items: null,
+    };
   }
 
   const medal = ['1️⃣', '2️⃣', '3️⃣'];
-  const top = candidates.slice(0, 3).map((c, i) => {
+  const top3 = candidates.slice(0, 3);
+  const top = top3.map((c, i) => {
     const why = [...c.score.breakdown].sort((a, b) => b.points - a.points).slice(0, 2)
       .map((b) => `${b.name} ${b.points} 分`).join('、');
     const warn = c.flags.length ? `\n　⚠ ${c.flags.map((f) => f.code).join('、')}${c.needsApproval ? '（需額外核准）' : ''}` : '';
@@ -152,15 +165,57 @@ function evaluateAndFormat(p, platformUrl) {
   }).join('\n');
 
   const exCodes = [...new Set(excluded.flatMap((e) => e.violations.map((v) => v.code)))].filter((c) => c !== '—');
-  return [
-    head, '', top, '',
-    `另有 ${excluded.length} 人被排除（${exCodes.slice(0, 4).join('、')}），逐筆原因見平台。`,
-    '正式指派請至平台完成主管確認（寫回班表＋決策留痕）：',
-    platformUrl,
-    '',
-    '＊建議由確定性引擎計算；機器人不做指派決定',
-    '＊示範資料（虛構人員）',
-  ].join('\n');
+  return {
+    text: [
+      head, '', top, '',
+      `另有 ${excluded.length} 人被排除（${exCodes.slice(0, 4).join('、')}），逐筆原因見平台。`,
+      '點下方按鈕可產生「詢問訊息草稿」，複製後自行轉傳。',
+      '正式指派請至平台完成主管確認（寫回班表＋決策留痕）：',
+      platformUrl,
+      '',
+      '＊建議由確定性引擎計算；機器人不做指派決定',
+      '＊示範資料（虛構人員）',
+    ].join('\n'),
+    items: top3.map((c) => ({
+      label: `✉ 詢問 ${c.staff.id}`,
+      dataStr: encodeParams({ d: p.d, s: p.s, u: p.u, c: p.c, id: c.staff.id }),
+    })),
+  };
+}
+
+/* ── 詢問訊息草稿：平台同一份 llmNotificationDraft，含工時試算與誠實聲明 ── */
+
+async function draftAndFormat(p, platformUrl) {
+  globalThis.LLM.mode = 'mock';
+  const { gap, candidates } = runEngine(p);
+  const others = candidates.slice(0, 3).filter((c) => c.staff.id !== p.id);
+  const backItems = [
+    ...others.map((c) => ({
+      label: `✉ 詢問 ${c.staff.id}`,
+      dataStr: encodeParams({ d: p.d, s: p.s, u: p.u, c: p.c, id: c.staff.id }),
+    })),
+    { label: '↩ 回建議清單', dataStr: encodeParams({ d: p.d, s: p.s, u: p.u, c: p.c }) },
+  ];
+
+  const chosen = candidates.find((c) => c.staff.id === p.id);
+  if (!chosen) {
+    return { text: `${p.id} 已不在合格候選內（條件可能已變動），請回建議清單重新確認。`, items: backItems };
+  }
+
+  const draft = await globalThis.llmNotificationDraft(gap, chosen);
+  return {
+    text: [
+      `【詢問訊息草稿｜${p.id}】`,
+      '複製下方訊息、自行轉傳給該同仁——系統不代發，發送與否由你決定：',
+      '',
+      '──────────',
+      draft,
+      '──────────',
+      '',
+      '＊工時試算由引擎確定性計算；對方同意後，正式指派請至平台完成主管確認與留痕',
+    ].join('\n'),
+    items: backItems,
+  };
 }
 
 /* ── 事件處理 ── */
@@ -186,13 +241,18 @@ async function handleEvent(ev, env) {
     return lineReply(token, ev.replyToken, welcomeText(platformUrl));
   }
 
-  /* 按鈕回傳：條件逐步補齊 → 齊全即評估 */
+  /* 按鈕回傳：條件逐步補齊 → 齊全即評估；帶 id 則產生詢問草稿 */
   if (ev.type === 'postback' && ev.replyToken) {
     const p = decodeParams(ev.postback && ev.postback.data);
     if (!p.d) return lineReply(token, ev.replyToken, '這筆通報的日期不明，請重新傳一次請假訊息（例：我明天白班沒辦法上）。');
+    if (p.id) {
+      const out = await draftAndFormat(p, platformUrl);
+      return lineReply(token, ev.replyToken, out.text, out.items);
+    }
     const ask = askNext(p);
     if (ask) return lineReply(token, ev.replyToken, ask.text, ask.items);
-    return lineReply(token, ev.replyToken, evaluateAndFormat(p, platformUrl));
+    const out = evaluateAndFormat(p, platformUrl);
+    return lineReply(token, ev.replyToken, out.text, out.items);
   }
 
   if (ev.type !== 'message' || !ev.message || ev.message.type !== 'text' || !ev.replyToken) return;
@@ -228,8 +288,8 @@ async function handleEvent(ev, env) {
     lines.push('', ask.text);
     return lineReply(token, ev.replyToken, lines.join('\n'), ask.items);
   }
-  lines.push('', '條件齊全，開始評估──');
-  await lineReply(token, ev.replyToken, evaluateAndFormat(p, platformUrl));
+  const out = evaluateAndFormat(p, platformUrl);
+  return lineReply(token, ev.replyToken, out.text, out.items);
 }
 
 export default {
