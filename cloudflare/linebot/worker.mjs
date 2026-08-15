@@ -26,6 +26,52 @@ Object.assign(globalThis, data, rules, engineMod, llm);
 
 const FIELD_TW = { date: '日期', shift: '班別', unit: '單位', requiredCerts: '必要資格', reason: '事由' };
 
+/* ── 濫用防護（偵測 → 應對 → 告警）────────────────────────
+ * 白名單：ALLOWED_USERS（逗號分隔的 LINE userId）設定後，名單外的使用者
+ *   只會收到「請提供識別碼給管理者開通」——拿不到任何人事資訊。
+ *   未設定＝示範開放模式，但每個新使用者都寫入 [SEC] 日誌供蒐集。
+ * 頻率限制：每人每分鐘上限（記憶體滑動視窗）。Workers isolate 可能隨時回收，
+ *   此為「盡力而為」的第一道消耗保護；正式導入改 Durable Objects／WAF 規則。
+ * 告警：設定 ADMIN_USER_ID 後，安全事件以 push 通知管理者
+ *   （每個 isolate 對同一使用者只告警一次，避免告警本身被拿來洗推播額度）。
+ * 日誌：一律帶 [SEC] 前綴——`wrangler tail --search "[SEC]"` 就是監看台。
+ */
+const RATE_LIMIT = 10;            // 每人每 60 秒訊息上限
+const RATE_WINDOW_MS = 60_000;
+const rateBuckets = new Map();    // userId → [timestamps]
+const alerted = new Set();        // 本 isolate 已告警的 userId
+const seenUsers = new Set();      // 開放模式下已記錄的 userId
+
+function secLog(type, detail) {
+  console.log(`[SEC] ${type} ${detail}`);
+}
+
+function allowedUser(env, userId) {
+  const list = (env.ALLOWED_USERS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (list.length === 0) return true;   // 開放模式（示範）
+  return !!userId && list.includes(userId);
+}
+
+function overRateLimit(userId) {
+  const now = Date.now();
+  const arr = (rateBuckets.get(userId) || []).filter((t) => now - t < RATE_WINDOW_MS);
+  arr.push(now);
+  rateBuckets.set(userId, arr);
+  return arr.length > RATE_LIMIT;
+}
+
+async function adminAlert(env, userId, text) {
+  if (!env.ADMIN_USER_ID || alerted.has(userId)) return;
+  alerted.add(userId);
+  try {
+    await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` },
+      body: JSON.stringify({ to: env.ADMIN_USER_ID, messages: [{ type: 'text', text: `【班守｜安全告警】${text}`.slice(0, 1000) }] }),
+    });
+  } catch (err) { console.log('[SEC] alert-failed', String(err)); }
+}
+
 /** 台北時區的今天（Workers 跑 UTC；「明天」要以台灣日曆換算） */
 function todayTaipei() {
   return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
@@ -236,6 +282,38 @@ const welcomeText = (platformUrl) => [
 async function handleEvent(ev, env) {
   const platformUrl = env.PLATFORM_URL || 'https://bobyu89.github.io/nursing-agent/';
   const token = env.LINE_CHANNEL_ACCESS_TOKEN;
+  const userId = (ev.source && ev.source.userId) || 'unknown';
+
+  /* 第一道：白名單。名單外的使用者拿不到任何功能與人事資訊 */
+  if (!allowedUser(env, userId)) {
+    secLog('blocked-user', userId);
+    await adminAlert(env, userId, `名單外使用者嘗試使用機器人：${userId}`);
+    if (ev.replyToken && (ev.type === 'message' || ev.type === 'follow' || ev.type === 'postback')) {
+      return lineReply(token, ev.replyToken, [
+        '此為院內內部系統，您的帳號尚未開通。',
+        '如需使用，請把下方識別碼提供給管理者：',
+        userId,
+      ].join('\n'));
+    }
+    return;
+  }
+  if (!seenUsers.has(userId)) {
+    seenUsers.add(userId);
+    secLog('user-active', userId + ((env.ALLOWED_USERS || '').trim() ? '' : ' (open-mode)'));
+  }
+
+  /* 第二道：頻率限制。超限先警告一次，之後靜默丟棄（不回覆＝不被拿來耗資源）*/
+  if (ev.type === 'message' || ev.type === 'postback') {
+    if (overRateLimit(userId)) {
+      secLog('rate-limited', userId);
+      await adminAlert(env, userId, `使用者觸發頻率限制（>${RATE_LIMIT} 則/分）：${userId}`);
+      const arr = rateBuckets.get(userId) || [];
+      if (arr.length === RATE_LIMIT + 1 && ev.replyToken) {
+        return lineReply(token, ev.replyToken, '訊息過於頻繁，請稍候一分鐘再試。');
+      }
+      return;   // 靜默丟棄
+    }
+  }
 
   if (ev.type === 'follow' && ev.replyToken) {
     return lineReply(token, ev.replyToken, welcomeText(platformUrl));
@@ -300,6 +378,7 @@ export default {
     const raw = await request.text();
     const sig = request.headers.get('x-line-signature');
     if (!validSignature(env.LINE_CHANNEL_SECRET || '', raw, sig)) {
+      secLog('bad-signature', `ip=${request.headers.get('cf-connecting-ip') || '?'} len=${raw.length}`);
       return new Response('signature validation failed', { status: 403 });
     }
     let body;

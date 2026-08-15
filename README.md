@@ -164,6 +164,7 @@ docs/BLUEPRINT.md           系統藍圖（五模組平台視野、四階段演�
 docs/ARCHITECTURE.md        系統架構書（模組、資料流、資安設計、AWS 目標架構）
 docs/REVIEW.md              功能與資安審查報告（發現、修復與驗證紀錄）
 docs/CONTEXT.md             領域語義定義（自然週、連續天數、生命週期…的權威出處）
+docs/SECURITY.md            資安事件應對手冊（七種情境的偵測→處置→復原 runbook）
 docs/DEMO-SCRIPT.md         Demo Day 台本（逐幕動作、預期數字、挑戰應對）
 docs/proposal.md            完整提案素材
 ```

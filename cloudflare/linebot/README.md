@@ -106,6 +106,17 @@ https://bobyu89.github.io/nursing-agent/
 - **個資**：訊息只在 Worker 內以規則比對處理、即回即棄，不落地、不送任何模型端點。
   歡迎訊息仍提醒：以代號通報、勿含病人資訊。
 
+### 濫用防護（偵測 → 應對 → 告警）
+
+| 機制 | 設定 | 行為 |
+|---|---|---|
+| 使用者白名單 | `npx wrangler secret put ALLOWED_USERS`（逗號分隔 userId） | 名單外只收到「請提供識別碼給管理者開通」，拿不到任何功能與人事資訊；未設定＝開放模式（每個新使用者記入 `[SEC]` 日誌） |
+| 頻率限制 | 內建（10 則/分/人） | 超限警告一次、之後靜默丟棄；Workers isolate 回收會重置計數（盡力而為，正式導入改 Durable Objects／WAF） |
+| 管理者告警 | `npx wrangler secret put ADMIN_USER_ID` | 名單外嘗試、頻率超限 → 推播通知管理者（同一使用者只告警一次） |
+| 監看台 | `npx wrangler tail --search "[SEC]"` | 即時看 blocked-user／rate-limited／bad-signature／user-active |
+
+事件應對流程（含金鑰輪換、一鍵斷線、封鎖名單）見 [docs/SECURITY.md](../../docs/SECURITY.md)。
+
 ## 疑難排解
 
 | 症狀 | 解法 |

@@ -132,26 +132,32 @@ function saveRules() {
 function loadRules() {
   try {
     const raw = localStorage.getItem(RULES_STORE_KEY);
-    if (!raw) return false;
+    if (!raw) return null;
     const saved = JSON.parse(raw);
+    let adjusted = 0;   // 竄改可視化：夾限發生＝儲存值不合法，計數後上報留痕
+    const clampCount = (v, range) => {
+      const c = clampTo(v, range);
+      if (c !== v) adjusted += 1;
+      return c;
+    };
     (saved.hard || []).forEach((s) => {
       const r = getHardRule(s.code);
       if (!r) return;
       if (typeof s.enabled === 'boolean') r.enabled = s.enabled;
       if (r.param && Number.isFinite(s.param)) {
-        r.param.value = clampTo(s.param, PARAM_RANGE[r.code] || [0, 999]);
+        r.param.value = clampCount(s.param, PARAM_RANGE[r.code] || [0, 999]);
       }
     });
     (saved.soft || []).forEach((s) => {
       const r = RULE_REGISTRY.soft.find((x) => x.code === s.code);
       if (!r) return;
-      if (Number.isFinite(s.weight)) r.weight = clampTo(s.weight, WEIGHT_RANGE);
+      if (Number.isFinite(s.weight)) r.weight = clampCount(s.weight, WEIGHT_RANGE);
       if (r.param && Number.isFinite(s.param)) {
-        r.param.value = clampTo(s.param, PARAM_RANGE[r.code] || [0, 999]);
+        r.param.value = clampCount(s.param, PARAM_RANGE[r.code] || [0, 999]);
       }
     });
-    return true;
-  } catch (e) { return false; }
+    return { adjusted };
+  } catch (e) { return null; }
 }
 
 function resetRules() {
@@ -176,9 +182,9 @@ function saveSchedule() {
 function loadSchedule() {
   try {
     const raw = localStorage.getItem(SCHEDULE_STORE_KEY);
-    if (!raw) return false;
+    if (!raw) return null;
     const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return false;
+    if (!Array.isArray(arr)) return null;
     const valid = arr.filter((x) => x
       && STAFF.some((s) => s.id === x.staffId)
       && isValidDateStr(x.date)
@@ -189,8 +195,9 @@ function loadSchedule() {
       staffId: x.staffId, date: x.date, shift: x.shift, unit: x.unit,
       ...(x.isReplacement ? { isReplacement: true } : {}),
     }));
-    return true;
-  } catch (e) { return false; }
+    // 竄改可視化：被剔除的筆數＝儲存中出現不合法資料，上報留痕
+    return { dropped: arr.length - valid.length };
+  } catch (e) { return null; }
 }
 
 function resetSchedule() {
@@ -1758,17 +1765,29 @@ function init() {
   $('#llm-mode-badge').textContent = `LLM 模式：${LLM.modeLabel}`;
   $('#raw-message').value = RAW_MESSAGE;
 
-  if (loadRules()) {
+  const rulesLoad = loadRules();
+  if (rulesLoad) {
     logAction('載入本機保存的規則設定',
       `軟性權重 ${RULE_REGISTRY.soft.map((r) => `${r.code}=${r.weight}`).join('、')}（可按「還原預設規則」清除）`,
       '班守 ShiftGuard');
+    if (rulesLoad.adjusted > 0) {
+      logAction('⚠ 安全警示：規則載入異常',
+        `${rulesLoad.adjusted} 項儲存值超出合法範圍、已強制夾限——本機儲存可能遭改動，請確認規則庫設定或按「還原預設規則」`,
+        '班守 ShiftGuard 防護');
+    }
   }
-  if (loadSchedule()) {
+  const schedLoad = loadSchedule();
+  if (schedLoad) {
     const badge = $('#roster-modified');
     if (badge) badge.hidden = false;
     logAction('載入本機保存的班表',
       `共 ${SHIFTS.length} 班次（排班工作區的變更；可按「還原示範班表」清除）`,
       '班守 ShiftGuard');
+    if (schedLoad.dropped > 0) {
+      logAction('⚠ 安全警示：班表載入異常',
+        `${schedLoad.dropped} 筆不合法班次已剔除（代號／日期／班別／單位未通過白名單）——本機儲存可能遭改動，請核對班表或按「還原示範班表」`,
+        '班守 ShiftGuard 防護');
+    }
   }
   $('#btn-rules-reset').addEventListener('click', () => {
     if (confirm('確定要清除本機保存的規則調整，回到預設值嗎？頁面將重新載入。')) resetRules();
