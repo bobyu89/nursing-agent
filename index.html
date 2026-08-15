@@ -27,44 +27,9 @@
   </div>
 </header>
 
-<!-- 導覽依決策階梯分組；畫面編號維持 Demo 分幕順序（台本與文件以編號指涉） -->
-<nav class="tabs" id="tabs">
-  <div class="tab-group">
-    <div class="tab-group-label">管理總覽</div>
-    <div class="tab-group-row">
-      <button class="tab active" data-screen="overview"><span class="tab-no">◎</span>人力缺口</button>
-      <button class="tab" data-screen="capability"><span class="tab-no">★</span>能力與出勤</button>
-    </div>
-  </div>
-  <div class="tab-group">
-    <div class="tab-group-label">缺班處理｜第 1–2 層</div>
-    <div class="tab-group-row">
-      <button class="tab" data-screen="intake"><span class="tab-no">1</span>缺班事件</button>
-      <button class="tab" data-screen="candidates"><span class="tab-no">2</span>替補候選人</button>
-      <button class="tab" data-screen="confirm"><span class="tab-no">3</span>主管確認</button>
-    </div>
-  </div>
-  <div class="tab-group">
-    <div class="tab-group-label">調度與韌性｜第 2–3 層</div>
-    <div class="tab-group-row">
-      <button class="tab" data-screen="multi"><span class="tab-no">7</span>多筆缺班</button>
-    </div>
-  </div>
-  <div class="tab-group">
-    <div class="tab-group-label">源頭治理｜第 0 層</div>
-    <div class="tab-group-row">
-      <button class="tab" data-screen="generate"><span class="tab-no">8</span>班表生成</button>
-    </div>
-  </div>
-  <div class="tab-group">
-    <div class="tab-group-label">治理基盤</div>
-    <div class="tab-group-row">
-      <button class="tab" data-screen="dashboard"><span class="tab-no">4</span>公平性與留痕</button>
-      <button class="tab" data-screen="roster"><span class="tab-no">5</span>班表與人員</button>
-      <button class="tab" data-screen="rules"><span class="tab-no">6</span>規則庫</button>
-    </div>
-  </div>
-</nav>
+<!-- 兩層導覽：4 個大分頁、子功能收在第二層（app.js 動態渲染）。
+     畫面編號維持 Demo 分幕順序，台本與文件以編號指涉。 -->
+<nav id="nav" aria-label="主導覽"></nav>
 
 <main>
 

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' file:; script-src 'none'; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data:; object-src 'none'; base-uri 'self'">
+  <meta name="referrer" content="no-referrer">
+  <title>班守 ShiftGuard｜缺工情境下的排班與人力缺口決策支援工具</title>
+  <link rel="stylesheet" href="assets/styles.css">
+  <style>
+    .lp-hero { max-width: 880px; margin: 0 auto; padding: 72px 28px 48px; text-align: center; }
+    .lp-mark {
+      width: 56px; height: 56px; border-radius: 14px; margin: 0 auto 22px;
+      background: var(--brand); color: #fff; display: grid; place-items: center;
+      font-weight: 800; font-size: 22px; letter-spacing: .02em;
+    }
+    .lp-hero h1 { font-size: 34px; letter-spacing: -.02em; }
+    .lp-sub { font-size: 17px; color: var(--ink-soft); margin: 14px auto 6px; max-width: 620px; line-height: 1.75; }
+    .lp-claim { font-size: 14px; color: var(--ink-faint); margin-top: 10px; }
+    .lp-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 30px; }
+    .lp-cta .btn { font-size: 15px; padding: 12px 26px; }
+    .lp-section { max-width: 1020px; margin: 0 auto; padding: 34px 28px; }
+    .lp-h2 { font-size: 21px; margin-bottom: 6px; }
+    .lp-h2sub { font-size: 13.5px; color: var(--ink-faint); margin-bottom: 20px; }
+    .lp-three { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+    .lp-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 20px; }
+    .lp-card h3 { font-size: 16px; margin-bottom: 8px; }
+    .lp-card p { font-size: 13.5px; color: var(--ink-soft); line-height: 1.7; margin: 0; }
+    .lp-feat { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
+    .lp-no {
+      display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+      background: var(--line-soft); color: var(--ink-soft); font-size: 12px; font-weight: 700; margin-right: 8px;
+    }
+    .lp-ladder {
+      border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+      padding: 20px 22px; font-size: 14px; line-height: 2.05;
+    }
+    .lp-ladder b { color: var(--brand-dark); }
+    .lp-honest { border-left: 3px solid var(--warn); background: var(--warn-tint); border-radius: 6px;
+      padding: 14px 18px; font-size: 13px; color: var(--ink-soft); line-height: 1.8; }
+    .lp-footer { text-align: center; padding: 36px 20px 56px; color: var(--ink-faint); font-size: 12.5px; line-height: 2; }
+    .lp-footer a { color: var(--ink-soft); }
+  </style>
+</head>
+<body>
+
+<div class="lp-hero">
+  <div class="lp-mark">SG</div>
+  <h1>班守 ShiftGuard</h1>
+  <p class="lp-sub">
+    <b>缺工情境下的排班與人力缺口決策支援工具。</b><br>
+    在醫護人力短缺、無法即時增加人力的現實裡，
+    把缺工從模糊感受變成<b>可量化、可追蹤、可行動</b>的管理資訊。
+  </p>
+  <p class="lp-claim">它不承諾解決缺工——它承諾讓每一個缺口被更早看見、被誠實計算。</p>
+  <div class="lp-cta">
+    <a class="btn btn-primary" href="index.html">進入平台 →</a>
+    <a class="btn" href="https://line.me/R/ti/p/@913sepht">加入 LINE 通報機器人</a>
+  </div>
+</div>
+
+<div class="lp-section">
+  <h2 class="lp-h2">三件事，缺一不可</h2>
+  <p class="lp-h2sub">只做「快」的話，Excel 篩選就夠了。平台存在的理由是後面兩件事。</p>
+  <div class="lp-three">
+    <div class="lp-card">
+      <h3>算得準</h3>
+      <p>工時、班距、連續天數、證照效期——全部由確定性規則引擎計算，45 項邊界測試釘住。語言模型不碰任何數字：算錯工時在醫療場域是合規事故，不是體驗瑕疵。</p>
+    </div>
+    <div class="lp-card">
+      <h3>說得清</h3>
+      <p>每一位候選人的分數攤得開、每一筆排除都寫明規則代碼與原因。「為什麼找他不找我」從此有答案——這是護理職場公平的起點。</p>
+    </div>
+    <div class="lp-card">
+      <h3>留得下</h3>
+      <p>每一步決策寫入雜湊鏈結的留痕，改任何一筆都會被抓到。勞檢、稽核、評鑑，一鍵匯出舉證。</p>
+    </div>
+  </div>
+</div>
+
+<div class="lp-section">
+  <h2 class="lp-h2">功能總覽</h2>
+  <p class="lp-h2sub">進入平台後以四個分頁組織：總覽 ・ 缺班處理 ・ 排班 ・ 治理</p>
+  <div class="lp-feat">
+    <div class="lp-card">
+      <h3><span class="lp-no">◎</span>人力缺口儀表板</h3>
+      <p>缺口方程式：營運所需 − 已排定 ＝ 缺口 → 合法吸收模擬（含代價）→ 誠實殘餘。結構性缺口自動判定，直接變成員額與預算的證據。</p>
+    </div>
+    <div class="lp-card">
+      <h3><span class="lp-no">★</span>能力徽章與帶班平衡</h3>
+      <p>資格徽章（含效期）答「有沒有人會做」；進階徽章 N1–N4／AHN 答「有沒有人扛得住」。三班帶班平衡熱圖讓「夜班全是新人」無所遁形。</p>
+    </div>
+    <div class="lp-card">
+      <h3><span class="lp-no">1</span>缺班替補（第 1–2 層）</h3>
+      <p>貼上請假訊息 → 解析追問 → 合格候選排序與評分卡 → 主管確認留痕。找不到人時：放寬試算與多筆全局指派，只試算、不自行放寬。</p>
+    </div>
+    <div class="lp-card">
+      <h3><span class="lp-no">7</span>韌性模式（第 3 層）</h3>
+      <p>連替補都無解時，缺的不再是「一個人」，是「一班的任務」——任務重分配：資格硬性匹配、負荷平衡，補不上的誠實標示為缺口。</p>
+    </div>
+    <div class="lp-card">
+      <h3><span class="lp-no">8</span>班表生成（第 0 層）</h3>
+      <p>用與替補完全相同的一份規則生成下週班表——排出來的那一刻就合規；生成後疊回現有班表重掃驗證，零新增風險。</p>
+    </div>
+    <div class="lp-card">
+      <h3><span class="lp-no">L</span>LINE 通報機器人</h3>
+      <p>通報入口放在護理師本來就在用的 LINE：訊息解析、按鈕補條件、替補建議、詢問草稿、戰情儀表板——同一份引擎，零學習成本。</p>
+    </div>
+  </div>
+</div>
+
+<div class="lp-section">
+  <h2 class="lp-h2">決策階梯：從源頭治理到韌性降級</h2>
+  <p class="lp-h2sub">上層做得越好，下層被觸發得越少——我們的成功指標是韌性模式的啟動次數逐季下降。</p>
+  <div class="lp-ladder">
+    <b>第 0 層</b>　班表生成——排出來的那一刻就合規<br>
+    <b>第 1 層</b>　找合格替補——硬性排除、軟性排序、逐筆交代<br>
+    <b>第 2 層</b>　放寬試算＋全局指派——把選項與代價攤開，決定權在主管<br>
+    <b>第 3 層</b>　任務重新分配——極端情境下的降級運作方案，缺口誠實攤開
+  </div>
+</div>
+
+<div class="lp-section">
+  <div class="lp-honest">
+    <b>誠實聲明</b>：本站為教學展示——所有人員、班表、請假資料皆為虛構（代號 N-01～N-11），
+    不含任何病患資料；訊息解析為確定性關鍵詞規則（非真實模型），理解力有限但離線可跑、可驗證；
+    Agent 不臆測缺漏欄位、不自行放寬規則、不代替主管決定，通知一律停在草稿。
+  </div>
+</div>
+
+<footer class="lp-footer">
+  職游 NaviCareer × AWS × 伊雲谷｜AI 職涯實戰營 DEMO DAY　第 4 組<br>
+  <a href="index.html">進入平台</a>　·
+  <a href="https://github.com/bobyu89/nursing-agent">GitHub（原始碼與文件）</a>　·
+  <a href="https://bobyu89.github.io/nursing-agent/tests.html">引擎測試（45 項）</a>
+</footer>
+
+</body>
+</html>

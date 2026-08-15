@@ -213,11 +213,41 @@ function refreshAfterScheduleChange() {
   renderWarnings();
 }
 
-/* ══ 分頁切換 ═══════════════════════════════════════════ */
+/* ══ 兩層導覽與分頁切換 ═════════════════════════════════
+ * 4 個大分頁收納 10 個畫面；畫面 id 與編號不變（台本與文件以編號指涉）。 */
+
+const NAV_GROUPS = [
+  { key: 'ov', label: '總覽', screens: [
+    ['overview', '人力缺口', '◎'], ['capability', '能力與出勤', '★'],
+  ] },
+  { key: 'gap', label: '缺班處理', screens: [
+    ['intake', '通報解析', '1'], ['candidates', '替補候選', '2'],
+    ['confirm', '主管確認', '3'], ['multi', '多筆與韌性', '7'],
+  ] },
+  { key: 'sched', label: '排班', screens: [
+    ['roster', '班表工作區', '5'], ['generate', '班表生成', '8'],
+  ] },
+  { key: 'gov', label: '治理', screens: [
+    ['dashboard', '公平與留痕', '4'], ['rules', '規則庫', '6'],
+  ] },
+];
+
+function navGroupOf(name) {
+  return NAV_GROUPS.find((g) => g.screens.some(([id]) => id === name)) || NAV_GROUPS[0];
+}
+
+function renderNav(active) {
+  const g = navGroupOf(active);
+  $('#nav').innerHTML = `
+    <div class="nav-primary">${NAV_GROUPS.map((x) =>
+    `<button class="np${x.key === g.key ? ' active' : ''}" data-group="${x.key}">${x.label}</button>`).join('')}</div>
+    <div class="nav-secondary">${g.screens.map(([id, label, no]) =>
+    `<button class="tab${id === active ? ' active' : ''}" data-screen="${id}"><span class="tab-no">${no}</span>${label}</button>`).join('')}</div>`;
+}
 
 function switchScreen(name) {
   $$('.screen').forEach((s) => s.classList.toggle('active', s.id === `screen-${name}`));
-  $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.screen === name));
+  renderNav(name);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1820,7 +1850,18 @@ function init() {
     STAFF.map((s) => `<option value="${s.id}"${s.id === GAP_EVENT.originalStaffId ? ' selected' : ''}>` +
       `${s.id}　${s.role}　${UNITS[s.unit]}</option>`).join('');
 
-  $$('.tab').forEach((t) => t.addEventListener('click', () => switchScreen(t.dataset.screen)));
+  // 兩層導覽：事件委派（導覽列每次切換都重繪，委派在容器上不掉監聽）
+  $('#nav').addEventListener('click', (ev) => {
+    const gp = ev.target.closest('.np');
+    if (gp) {
+      const g = NAV_GROUPS.find((x) => x.key === gp.dataset.group);
+      if (g) switchScreen(g.screens[0][0]);
+      return;
+    }
+    const t = ev.target.closest('.tab');
+    if (t) switchScreen(t.dataset.screen);
+  });
+  renderNav('overview');
   $('#btn-parse').addEventListener('click', handleParse);
 
   // 範例訊息一鍵帶入並解析

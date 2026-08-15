@@ -354,6 +354,21 @@ function buildDashboardFlex(platformUrl) {
 }
 
 const DASHBOARD_RE = /^(儀表板|戰情|狀態|缺口|dashboard)$/i;
+const MENU_RE = /^(選單|功能|幫助|menu|help)$/i;
+
+/** 功能選單：快速按鈕（圖文選單 Rich Menu 的輕量版，隨時可叫出） */
+function menuMessage(platformUrl) {
+  return {
+    type: 'text',
+    text: '請選擇功能（也可以直接把請假訊息傳給我）：',
+    quickReply: { items: [
+      { type: 'action', action: { type: 'message', label: '📊 戰情儀表板', text: '儀表板' } },
+      { type: 'action', action: { type: 'message', label: '📝 通報範例', text: '護理長不好意思，我明天白班發燒沒辦法上，很抱歉' } },
+      { type: 'action', action: { type: 'uri', label: '🌐 開啟平台', uri: platformUrl } },
+      { type: 'action', action: { type: 'uri', label: 'ℹ️ 功能介紹', uri: platformUrl.replace(/\/?$/, '/') + 'home.html' } },
+    ] },
+  };
+}
 
 /* ── 事件處理 ── */
 
@@ -367,6 +382,7 @@ const welcomeText = (platformUrl) => [
   '② 看戰情：輸入「儀表板」，立刻回覆本週缺口、',
   '　帶班平衡、單點依賴與需要行動的事項。',
   '',
+  '隨時輸入「選單」叫出功能快速按鈕。',
   '提醒：請以人員代號通報；訊息中請勿包含任何病人資訊。',
   `平台入口：${platformUrl}`,
 ].join('\n');
@@ -427,10 +443,13 @@ async function handleEvent(ev, env) {
 
   if (ev.type !== 'message' || !ev.message || ev.message.type !== 'text' || !ev.replyToken) return;
 
-  /* 文字訊息：儀表板指令 → Flex 戰情卡；其餘走解析流程 */
+  /* 文字訊息：指令（儀表板／選單）優先，其餘走解析流程 */
   const text = String(ev.message.text || '').slice(0, 2000);
   if (DASHBOARD_RE.test(text.trim())) {
     return lineReplyMessages(token, ev.replyToken, [buildDashboardFlex(platformUrl)]);
+  }
+  if (MENU_RE.test(text.trim())) {
+    return lineReplyMessages(token, ev.replyToken, [menuMessage(platformUrl)]);
   }
   globalThis.GAP_EVENT.raisedAt = `${todayTaipei()} 08:00`;   // 「明天」以台灣今天為基準
   globalThis.LLM.mode = 'mock';                                // 恆為確定性解析
