@@ -96,6 +96,15 @@ input[type="checkbox"]:focus-visible, input[type="range"]:focus-visible {
 }
 .tab.active .tab-no { background: var(--brand); color: #fff; }
 
+/* ── 總覽：缺口方程式 ────────────────────────────────── */
+.ov-eq { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 8px 0 12px; }
+.ov-term { text-align: center; min-width: 86px; }
+.ov-num { font-size: 30px; font-weight: 700; letter-spacing: -.02em; }
+.ov-num.danger { color: var(--danger); }
+.ov-num.ok { color: var(--brand-dark); }
+.ov-lbl { font-size: 12px; color: var(--ink-faint); margin-top: 2px; }
+.ov-op { font-size: 22px; color: var(--ink-faint); padding-bottom: 14px; }
+
 /* ── 版面 ─────────────────────────────────────────────── */
 main { max-width: 1180px; margin: 0 auto; padding: 26px 28px 60px; }
 .screen { display: none; }

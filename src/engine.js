@@ -538,6 +538,134 @@ function createEngine(db) {
   }
 
   /**
+   * 人力缺口分析（管理總覽）——把缺工從模糊感受變成可量化的管理資訊。
+   *
+   * 缺口方程式：營運所需人力 − 目前可合法且合理排入的人力 ＝ 實際人力缺口
+   *
+   * 對每個「單位 × 日期 × 班別」計算需求 vs 已排定 → 缺口格；
+   * 缺口再經兩道「合法填補模擬」（同一份 checkHardConstraints）：
+   *   第一道：同單位人員；第二道：加入熟悉此單位的跨單位人員。
+   * 每一筆可行填補都同時記錄其代價（F1 加班超時／F2 連續天數／F4 公平性
+   * 等風險標記）；填不進去的缺口誠實保留，並彙整各規則擋下幾人。
+   *
+   * 結構性判定：同一單位同一班別在區間內出現缺口 ≥ structuralDays 天
+   * （預設 3），標記為結構性缺口——反覆靠替補補洞不是解方，
+   * 應回到源頭（班表生成／招募／培訓）處理。
+   *
+   * 完全沒有排班資料的單位回報 noData，不假裝算得出缺口。
+   *
+   * @param {object} spec { dates, demand: {unit: {D,E,N}}, structuralDays? }
+   */
+  function workforceGapAnalysis({ dates, demand, structuralDays = 3 }) {
+    const units = Object.keys(demand);
+    const cells = [];          // 需求 > 0 的全部格子（含已滿足者，供矩陣呈現）
+    const noData = [];
+
+    units.forEach((unit) => {
+      const unitShifts = db.shifts.filter((s) => s.unit === unit);
+      if (unitShifts.length === 0) { noData.push(unit); return; }
+      dates.forEach((date) => {
+        Object.keys(db.shiftTypes).forEach((code) => {
+          const need = demand[unit][code] || 0;
+          if (!need) return;
+          const scheduled = unitShifts.filter((s) => s.date === date && s.shift === code).length;
+          cells.push({ unit, date, shift: code, need, scheduled, gap: Math.max(0, need - scheduled) });
+        });
+      });
+    });
+
+    const gapCells = cells.filter((c) => c.gap > 0);
+
+    // 合法填補模擬：逐格嘗試把缺口補滿；已填補的班次寫入工作副本，
+    // 讓後續格子的 H2／H4／H5／H6 判定看得到（同一人不會被重複計算）。
+    const simFill = (allowCross) => {
+      const workShifts = db.shifts.map((s) => Object.assign({}, s));
+      const sim = createEngine({
+        staff: db.staff, shifts: workShifts,
+        shiftTypes: db.shiftTypes, roleLevels: db.roleLevels,
+        certs: db.certs, units: db.units,
+        registry: db.registry, staffingMin: db.staffingMin,
+      });
+      const fills = [];
+      const unfilled = [];
+      gapCells.forEach((cell) => {
+        for (let seat = 0; seat < cell.gap; seat++) {
+          const pseudoGap = {
+            date: cell.date, shift: cell.shift, unit: cell.unit,
+            requiredRole: '護理師', requiredCerts: [], originalStaffId: null,
+          };
+          const pool = db.staff.filter((st) => allowCross
+            ? (st.unit === cell.unit || (st.familiarUnits || []).includes(cell.unit))
+            : st.unit === cell.unit);
+          const checked = pool.map((st) => ({ st, violations: sim.checkHardConstraints(st, pseudoGap) }));
+          const ok = checked.filter((c) => c.violations.length === 0)
+            .sort((a, b) => (a.st.id < b.st.id ? -1 : 1));
+          if (ok.length === 0) {
+            const byCode = {};
+            checked.forEach((c) => {
+              [...new Set(c.violations.map((v) => v.code))].forEach((code) => {
+                byCode[code] = (byCode[code] || 0) + 1;
+              });
+            });
+            unfilled.push({
+              unit: cell.unit, date: cell.date, shift: cell.shift,
+              blockers: Object.entries(byCode).map(([code, count]) => ({ code, count })),
+            });
+            continue;
+          }
+          const pick = ok[0].st;
+          const flags = sim.collectFlags(pick, pseudoGap, sim.scoreCandidate(pick, pseudoGap));
+          workShifts.push({ staffId: pick.id, date: cell.date, shift: cell.shift, unit: cell.unit, simulated: true });
+          fills.push({
+            unit: cell.unit, date: cell.date, shift: cell.shift,
+            staffId: pick.id, cross: pick.unit !== cell.unit,
+            flags: flags.map((f) => f.code),
+          });
+        }
+      });
+      return { fills, unfilled };
+    };
+
+    const inUnit = simFill(false);
+    const withCross = simFill(true);
+
+    // 結構性缺口：同一單位同一班別缺口出現的天數
+    const structural = [];
+    const byUnitShift = {};
+    gapCells.forEach((c) => {
+      const key = `${c.unit}|${c.shift}`;
+      (byUnitShift[key] = byUnitShift[key] || []).push(c.date);
+    });
+    Object.entries(byUnitShift).forEach(([key, ds]) => {
+      const [unit, shift] = key.split('|');
+      if (ds.length >= structuralDays) structural.push({ unit, shift, days: ds.length, dates: ds });
+    });
+
+    const seatCount = (list) => list.reduce ? list.reduce((n, c) => n + (c.gap || 1), 0) : 0;
+    const hoursOf = (list) => list.reduce((h, c) => h + db.shiftTypes[c.shift].hours * (c.gap || 1), 0);
+
+    return {
+      dates, cells, noData, structural,
+      totals: {
+        needSeats: cells.reduce((n, c) => n + c.need, 0),
+        scheduledSeats: cells.reduce((n, c) => n + Math.min(c.scheduled, c.need), 0),
+        gapSeats: seatCount(gapCells),
+        gapHours: hoursOf(gapCells),
+      },
+      absorb: {
+        inUnit: inUnit.fills.length,
+        inUnitFlagged: inUnit.fills.filter((f) => f.flags.length > 0).length,
+        withCross: withCross.fills.length,
+        crossOnly: withCross.fills.filter((f) => f.cross).length,
+        fills: withCross.fills,
+        residual: withCross.unfilled,
+        residualSeats: withCross.unfilled.length,
+        residualHours: withCross.unfilled.reduce((h, u) => h + db.shiftTypes[u.shift].hours, 0),
+      },
+    };
+  }
+
+  /**
    * 第 0 層（源頭治理）：班表生成。
    * 給定日期範圍與各班別人力需求，為單一單位生成班表草稿——
    * 讓班表「排出來的那一刻」就合規，讓下游的缺班替補越來越少被觸發。
@@ -776,7 +904,7 @@ function createEngine(db) {
     weeklyHours, shiftMix, isOnLeave, consecutiveDaysWithGap,
     minRestAfterGap, shiftInterval, unitCoverage,
     assignGreedy, assignJointly, rosterWarnings, coverageGaps,
-    generateSchedule,
+    generateSchedule, workforceGapAnalysis,
   };
 }
 

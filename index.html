@@ -18,7 +18,7 @@
     <div class="brand-mark">SG</div>
     <div class="brand-text">
       <div class="brand-name">班守 ShiftGuard</div>
-      <div class="brand-sub">醫護排班治理平台 ／ 模組一：臨時缺班替補</div>
+      <div class="brand-sub">缺工情境下的排班與人力缺口決策支援</div>
     </div>
   </div>
   <div class="topbar-right">
@@ -30,9 +30,15 @@
 <!-- 導覽依決策階梯分組；畫面編號維持 Demo 分幕順序（台本與文件以編號指涉） -->
 <nav class="tabs" id="tabs">
   <div class="tab-group">
+    <div class="tab-group-label">管理總覽</div>
+    <div class="tab-group-row">
+      <button class="tab active" data-screen="overview"><span class="tab-no">◎</span>人力缺口</button>
+    </div>
+  </div>
+  <div class="tab-group">
     <div class="tab-group-label">缺班處理｜第 1–2 層</div>
     <div class="tab-group-row">
-      <button class="tab active" data-screen="intake"><span class="tab-no">1</span>缺班事件</button>
+      <button class="tab" data-screen="intake"><span class="tab-no">1</span>缺班事件</button>
       <button class="tab" data-screen="candidates"><span class="tab-no">2</span>替補候選人</button>
       <button class="tab" data-screen="confirm"><span class="tab-no">3</span>主管確認</button>
     </div>
@@ -61,8 +67,17 @@
 
 <main>
 
+  <!-- ══ ◎ 人力缺口總覽（管理首頁）═══════════════════ -->
+  <section class="screen active" id="screen-overview">
+    <div class="screen-head">
+      <h1>人力缺口總覽</h1>
+      <p class="lede">缺工不是「感覺人不夠」，是一筆可以算的帳：<strong>營運所需人力 − 可合法且合理排入的人力 ＝ 實際人力缺口</strong>。這一頁把缺口變成可量化、可追蹤、可行動的管理資訊——缺在哪、缺多少、吸收後剩多少、是偶發還是結構性。</p>
+    </div>
+    <div id="overview-body"></div>
+  </section>
+
   <!-- ══ 1. 缺班事件建立 ══════════════════════════════ -->
-  <section class="screen active" id="screen-intake">
+  <section class="screen" id="screen-intake">
     <div class="screen-head">
       <h1>缺班事件建立</h1>
       <p class="lede">護理長把人員的請假訊息貼進來，Agent 負責解析成結構化事件；<strong>訊息沒寫的欄位一律留空並主動追問</strong>，不自行補完。</p>

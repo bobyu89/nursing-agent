@@ -165,6 +165,138 @@ function switchScreen(name) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+/* ══ ◎ 人力缺口總覽（管理首頁）═════════════════════════ */
+
+/**
+ * 缺口方程式：營運所需 − 可合法且合理排入 ＝ 實際缺口。
+ * 主敘事以名單完整的示範單位（內科 3A）呈現；部分名單與無資料單位
+ * 誠實標示，不讓殘缺資料撐出假數字。班表寫回後即時重算。
+ */
+function renderOverview() {
+  const r = engine.workforceGapAnalysis({ dates: WEEK_DATES, demand: UNIT_MIN_STAFF });
+  const UNIT = 'MED-3A';
+  const cells = r.cells.filter((c) => c.unit === UNIT);
+  const gapCells = cells.filter((c) => c.gap > 0);
+  const fills = r.absorb.fills.filter((f) => f.unit === UNIT);
+  const residual = r.absorb.residual.filter((u) => u.unit === UNIT);
+  const flagged = fills.filter((f) => f.flags.length > 0);
+  const need = cells.reduce((n, c) => n + c.need, 0);
+  const sched = cells.reduce((n, c) => n + Math.min(c.scheduled, c.need), 0);
+  const gapHours = gapCells.reduce((h, c) => h + SHIFT_TYPES[c.shift].hours * c.gap, 0);
+
+  /* 缺口矩陣：班別 × 日期 */
+  const matrixHead = `<thead><tr><th>班別</th>${WEEK_DATES.map((d) =>
+    `<th class="center">${shortDate(d)}<br>（${weekdayOf(d)}）</th>`).join('')}<th class="center">缺口天數</th></tr></thead>`;
+  const matrixBody = ['D', 'E', 'N'].map((code) => {
+    const row = WEEK_DATES.map((d) => {
+      const cell = cells.find((c) => c.date === d && c.shift === code);
+      if (!cell) return '<td class="center" style="color:var(--ink-faint)">·</td>';
+      return cell.gap > 0
+        ? '<td class="center"><span class="cell cell-G">缺</span></td>'
+        : '<td class="center" style="color:var(--ink-faint)">✓</td>';
+    }).join('');
+    const days = gapCells.filter((c) => c.shift === code).length;
+    return `<tr><td><b>${SHIFT_TYPES[code].name}</b></td>${row}
+      <td class="center">${days ? `<b class="expired">${days} 天</b>` : '0'}</td></tr>`;
+  }).join('');
+
+  const FLAG_TEXT = { F1: '加班超時需核准', F2: '連續上班天數偏高', F3: '跨單位支援', F4: '公平性集中風險' };
+  const fillRows = fills.map((f) => `
+    <div class="fact">
+      <span>${shortDate(f.date)}（${weekdayOf(f.date)}）${SHIFT_TYPES[f.shift].name} → <b>${esc(f.staffId)}</b>${f.cross ? '（跨單位）' : ''}</span>
+      <span>${f.flags.length ? f.flags.map((c) => `<span class="tag tag-warn">${c} ${FLAG_TEXT[c] || ''}</span>`).join(' ') : '<span style="color:var(--ink-faint)">無風險標記</span>'}</span>
+    </div>`).join('');
+
+  const structuralMed = r.structural.filter((s) => s.unit === UNIT);
+  const structuralOther = r.structural.filter((s) => s.unit !== UNIT);
+
+  $('#overview-body').innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h2>缺口方程式｜${UNITS[UNIT]}（本週）</h2>
+        <span class="tag tag-neutral">名單完整之示範單位</span>
+      </div>
+      <div class="ov-eq">
+        <div class="ov-term"><div class="ov-num">${need}</div><div class="ov-lbl">營運所需（班次）</div></div>
+        <div class="ov-op">−</div>
+        <div class="ov-term"><div class="ov-num">${sched}</div><div class="ov-lbl">已排定</div></div>
+        <div class="ov-op">＝</div>
+        <div class="ov-term"><div class="ov-num danger">${gapCells.length}</div><div class="ov-lbl">缺口班次（${gapHours} 小時）</div></div>
+        <div class="ov-op">→</div>
+        <div class="ov-term"><div class="ov-num ok">${fills.length}</div><div class="ov-lbl">可合法吸收</div></div>
+        <div class="ov-op">＝</div>
+        <div class="ov-term"><div class="ov-num ${residual.length ? 'danger' : 'ok'}">${residual.length}</div><div class="ov-lbl">殘餘缺口</div></div>
+      </div>
+      <div class="table-scroll"><table>${matrixHead}<tbody>${matrixBody}</tbody></table></div>
+      <p class="fineprint">需求基準＝各班別最低安全配置（規則庫可調）。「可合法吸收」為填補模擬結果——每一筆都通過
+        H1–H6 硬性檢查，但<b>可吸收 ≠ 建議照做</b>：代價逐筆列於下方，決定權在主管。</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <h2>吸收方案與代價</h2>
+          <span class="tag ${flagged.length ? 'tag-warn' : 'tag-ok'}">${fills.length} 筆可行，${flagged.length} 筆有代價</span>
+        </div>
+        ${fillRows || '<div class="empty-state">本週無缺口需要填補。</div>'}
+        ${residual.length ? `
+          <h4 style="margin:12px 0 4px;font-size:13px;color:var(--ink-faint)">殘餘缺口（無人可合法填補）</h4>
+          ${residual.map((u) => `<div class="fact"><span>${shortDate(u.date)} ${SHIFT_TYPES[u.shift].name}</span>
+            <span class="expired">${u.blockers.map((b) => `${b.code} 擋下 ${b.count} 人`).join('；')}</span></div>`).join('')}` : ''}
+        <p class="fineprint">吸收全靠替補＝把風險攤在少數人身上。公平性標記（F4）是「補得上，但不該一直這樣補」的訊號。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>結構性缺口訊號</h2>
+          <span class="tag ${structuralMed.length ? 'tag-danger' : 'tag-ok'}">偶發 vs 結構</span>
+        </div>
+        ${structuralMed.map((s) => `
+          <div class="fact"><span><b>${UNITS[s.unit]}｜${SHIFT_TYPES[s.shift].name}</b></span>
+            <span class="expired">一週 ${s.days}／${WEEK_DATES.length} 天出現缺口</span></div>`).join('') ||
+          '<div class="sc-evi">本單位無結構性缺口。</div>'}
+        <p class="sc-evi" style="margin-top:8px">同一班別反覆缺口＝結構性問題，靠每天找替補補洞不是解方。中長期行動：</p>
+        <ul style="margin:4px 0 0;padding-left:18px;font-size:13.5px">
+          <li>大夜人力招募評估與夜班意願培訓（缺口持續紀錄可作為員額與預算依據）</li>
+          <li>把需求基準放進「班表生成」（第 0 層），從源頭排滿而不是事後補</li>
+          <li>跨院區支援協定與外部人力採購的啟動門檻</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>其他單位</h2>
+        <span class="tag tag-neutral">資料誠實聲明</span>
+      </div>
+      <div class="fact"><span>外科病房 5B</span><span>缺口 ${r.cells.filter((c) => c.unit === 'SUR-5B' && c.gap > 0).length} 格，殘餘 ${r.absorb.residual.filter((u) => u.unit === 'SUR-5B').length} 格${structuralOther.filter((s) => s.unit === 'SUR-5B').length ? '（含結構性）' : ''}——<b>示範資料僅含該單位部分名單，數字為機制展示</b></span></div>
+      <div class="fact"><span>加護病房</span><span>無排班資料，不列入計算（noData）——系統不對沒有資料的單位假裝算得出缺口</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>下一步行動</h2><span class="tag tag-neutral">從缺口到決策</span></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-ov-intake">處理今日缺班通報 →</button>
+        <button class="btn" id="btn-ov-multi">多筆缺班與全局指派 →</button>
+        <button class="btn" id="btn-ov-generate">生成下週班表（第 0 層）→</button>
+      </div>
+      <h4 style="margin:14px 0 4px;font-size:13px;color:var(--ink-faint)">待驗證假設（企業訪談清單）</h4>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px">
+        <li>管理者目前能否快速且精準地知道「缺多少人」？</li>
+        <li>缺口是否經常到很晚才被發現？</li>
+        <li>現行缺口以總人數、班次、工時還是專業資格衡量？</li>
+        <li>若能提早看到缺口及其影響，管理者實際可採取哪些行動？</li>
+      </ul>
+      <p class="fineprint">本平台定位：缺工情境下的排班與人力缺口決策支援工具——不承諾解決整體醫療缺工，
+        承諾把缺工從模糊感受變成可量化、可追蹤、可行動的管理資訊。缺口紀錄持續累積後，
+        可支援招募員額、預算編列、跨院區支援與培訓規劃等中長期決策。</p>
+    </div>`;
+
+  $('#btn-ov-intake').addEventListener('click', () => switchScreen('intake'));
+  $('#btn-ov-multi').addEventListener('click', () => switchScreen('multi'));
+  $('#btn-ov-generate').addEventListener('click', () => switchScreen('generate'));
+}
+
 /* ══ 畫面 1：缺班事件建立 ═══════════════════════════════ */
 
 let parsing = false;
@@ -627,6 +759,7 @@ async function chooseCandidate(idx) {
     renderFairness();
     renderWarnings();
     renderRoster();
+    renderOverview();   // 寫回後缺口帳即時重算
 
     // 治理迴路的下一步：一鍵開始第二筆缺班，班表與公平性延續累計
     const next = document.createElement('button');
@@ -1246,6 +1379,7 @@ function handleRecalc() {
   renderFairness();
   renderWarnings();
   renderRoster();
+  renderOverview();   // 門檻改變會影響缺口與吸收模擬
 }
 
 /* ══ 啟動 ═══════════════════════════════════════════════ */
@@ -1339,6 +1473,7 @@ function init() {
   renderMultiScenario();
   renderReallocScenario();
   renderGenScenario();
+  renderOverview();
 }
 
 document.addEventListener('DOMContentLoaded', init);

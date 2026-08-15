@@ -533,6 +533,57 @@ test('班表生成：結果確定性——同輸入同班表', () => {
     e.generateSchedule(GEN_SCENARIO).assignments, '同輸入必得同班表');
 });
 
+/* ── 人力缺口分析（管理總覽）── */
+
+test('缺口方程式：demo 資料的內科 3A 缺 5 班次、大夜為結構性缺口、ICU 誠實回報無資料', () => {
+  const e = mkEngine(STAFF, SHIFTS);
+  const r = e.workforceGapAnalysis({ dates: WEEK_DATES, demand: UNIT_MIN_STAFF });
+  const med = r.cells.filter((c) => c.unit === 'MED-3A' && c.gap > 0);
+  assertEqual(med.length, 5, '內科 3A 本週應有 5 個缺口格');
+  assert(med.some((c) => c.date === '2026-08-09' && c.shift === 'D'), '缺班事件當日白班應在缺口中');
+  const medN = r.structural.find((s) => s.unit === 'MED-3A' && s.shift === 'N');
+  assert(medN && medN.days === 3, '內科 3A 大夜缺口出現 3 天，應標記為結構性');
+  assert(r.noData.includes('ICU'), '無排班資料的單位應回報 noData，不假裝算得出缺口');
+  const r2 = e.workforceGapAnalysis({ dates: WEEK_DATES, demand: UNIT_MIN_STAFF });
+  assertEqual(JSON.stringify(r.absorb.fills), JSON.stringify(r2.absorb.fills), '同輸入必得同結果');
+});
+
+test('缺口分析：填補模擬誠實——無人可合法填補時保留殘餘並標示原因', () => {
+  const A = mkStaff('A');
+  const shifts = [d('A', '2026-08-10', 'D')];        // 唯一人力當日已排班（H2）
+  const r = mkEngine([A], shifts).workforceGapAnalysis({
+    dates: ['2026-08-10'], demand: { 'MED-3A': { E: 1 } },
+  });
+  assertEqual(r.totals.gapSeats, 1);
+  assertEqual(r.absorb.withCross, 0, '無人可填補時不得虛報吸收量');
+  assertEqual(r.absorb.residualSeats, 1, '殘餘缺口誠實保留');
+  assert(r.absorb.residual[0].blockers.some((b) => b.code === 'H4' || b.code === 'H2'),
+    '殘餘缺口需標示被哪條規則擋下');
+});
+
+test('缺口分析：跨單位支援的吸收量分開計——同單位補不了的缺口由熟悉單位者吸收', () => {
+  const A = mkStaff('A', { unit: 'MED-3A', familiarUnits: ['MED-3A', 'SUR-5B'] });
+  const B = mkStaff('B', { unit: 'SUR-5B', familiarUnits: ['SUR-5B'] });
+  const shifts = [d('B', '2026-08-10', 'D', 'SUR-5B')];   // B 當日已排班 → 同單位無人可補小夜
+  const r = mkEngine([A, B], shifts).workforceGapAnalysis({
+    dates: ['2026-08-10'], demand: { 'SUR-5B': { D: 1, E: 1 } },
+  });
+  assertEqual(r.absorb.inUnit, 0, '同單位人力已用盡');
+  assertEqual(r.absorb.withCross, 1, '跨單位熟悉者可吸收');
+  assert(r.absorb.fills[0].cross === true && r.absorb.fills[0].staffId === 'A',
+    '填補紀錄應標示為跨單位支援');
+});
+
+test('缺口分析：結構性門檻——同班別缺口 2 天不算、3 天標記為結構性', () => {
+  const A = mkStaff('A');
+  const mk = (dates) => mkEngine([A], [d('A', dates[0], 'D')]).workforceGapAnalysis({
+    dates, demand: { 'MED-3A': { N: 1 } },
+  });
+  assertEqual(mk(['2026-08-10', '2026-08-11']).structural, [], '2 天缺口不構成結構性');
+  const r3 = mk(['2026-08-10', '2026-08-11', '2026-08-12']);
+  assert(r3.structural.some((s) => s.shift === 'N' && s.days === 3), '3 天缺口應標記為結構性');
+});
+
 test('班表生成：公平輪值——三人輪六天白班，每人恰好兩班', () => {
   const trio = ['A', 'B', 'C'].map((id) => mkStaff(id));
   const r = mkEngine(trio, []).generateSchedule({

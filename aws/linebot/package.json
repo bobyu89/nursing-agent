@@ -1,0 +1,7 @@
+{
+  "name": "shiftguard-linebot",
+  "version": "1.0.0",
+  "description": "班守 ShiftGuard — LINE 通報機器人 Webhook（Lambda，零相依）",
+  "type": "module",
+  "main": "index.mjs"
+}
