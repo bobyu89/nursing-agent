@@ -277,59 +277,112 @@ function renderCapability() {
   const counts = STAFF.filter((s) => s.unit === UNIT).map((s) => s.standbyCount30d);
   const nightCerts = r.certCoverage.find((c) => c.shift === 'N');
 
+  /* 結論磚與行動清單：先講結論，依據收抽屜 */
+  const shiftBalance = ['D', 'E', 'N'].map((code) => {
+    const staffed = r.shiftMix.filter((x) => x.shift === code && !x.empty);
+    return { code, staffed: staffed.length, ok: staffed.filter((x) => x.hasSenior).length };
+  }).filter((b) => b.staffed > 0);
+  const worstBalance = shiftBalance.reduce((w, b) => (b.ok / b.staffed < w.ok / w.staffed ? b : w), shiftBalance[0]);
+  const balanceBad = shiftBalance.some((b) => b.ok < b.staffed);
+  const spCritical = r.certSinglePoints.filter((c) => c.count <= 1);
+  const expired = r.expiring.filter((x) => x.status === 'expired');
+  const expSoon = r.expiring.filter((x) => x.status === 'expiring');
+  const spread = Math.max(...counts) - Math.min(...counts);
+  const saturated = STAFF.filter((s) => s.unit === UNIT && s.standbyCount30d >= 4);
+
+  const actions = [];
+  shiftBalance.filter((b) => b.ok < b.staffed).forEach((b) => actions.push({
+    level: 'bad',
+    text: `${SHIFT_TYPES[b.code].name}資深覆蓋僅 ${b.ok}／${b.staffed} 天（無 N3↑ 帶班）→ 將 N3／N4 輪入該班別（畫面 5 點格即改，熱圖立即轉綠）`,
+  }));
+  spCritical.forEach((c) => actions.push({
+    level: 'bad',
+    text: c.count === 0
+      ? `${CERTS[c.code]}有效持有 0 人——能力已消失 → 立即培訓或啟動跨單位支援`
+      : `${CERTS[c.code]}僅 ${c.holders[0]} 一人（單點故障）→ 培訓第二位持有者是最便宜的保險`,
+  }));
+  expired.forEach((x) => actions.push({
+    level: 'warn',
+    text: `${x.id} 的 ${CERT_SHORT[x.code]} 已於 ${x.expiry} 過期 → 安排回訓（回訓前不計入戰力）`,
+  }));
+  expSoon.forEach((x) => actions.push({
+    level: 'warn',
+    text: `${x.id} 的 ${CERT_SHORT[x.code]} 將於 ${x.expiry} 到期 → 預排回訓`,
+  }));
+  if (saturated.length) actions.push({
+    level: 'warn',
+    text: `${saturated.map((s) => s.id).join('、')} 近 30 天代班已達 ${saturated.map((s) => s.standbyCount30d).join('、')} 次 → 暫停指派、優先輪替他人`,
+  });
+
   $('#capability-body').innerHTML = `
-    <div class="card">
-      <div class="card-head">
-        <h2>三班帶班平衡（進階 N3 以上視為可帶班）</h2>
-        <span class="tag tag-danger">實力平衡檢查</span>
+    <div class="kpi-row">
+      <div class="kpi ${balanceBad ? 'kpi-bad' : 'kpi-ok'}">
+        <div class="kpi-num">${worstBalance.ok}／${worstBalance.staffed}</div>
+        <div class="kpi-lbl">帶班平衡（最弱：${SHIFT_TYPES[worstBalance.code].name}的資深覆蓋天數）</div>
       </div>
-      <div class="table-scroll"><table>${mixHead}<tbody>${mixBody}</tbody></table></div>
-      <p class="fineprint">
-        每格顯示該班在班人員的進階組成（滑鼠停留看名單）。<b>大夜由 N2 獨撐整週</b>——
-        新人夜裡遇到急救沒有 N3 以上壓陣，是實力失衡的典型樣態；
-        調整方向：把資深輪進夜班、或於「班表生成」納入帶班約束（藍圖下一步）。
-      </p>
+      <div class="kpi ${spCritical.length ? 'kpi-bad' : 'kpi-ok'}">
+        <div class="kpi-num">${spCritical.length}</div>
+        <div class="kpi-lbl">資格單點依賴（有效持有 ≤ 1 人）</div>
+      </div>
+      <div class="kpi ${(expired.length + expSoon.length) ? 'kpi-warn' : 'kpi-ok'}">
+        <div class="kpi-num">${expired.length}＋${expSoon.length}</div>
+        <div class="kpi-lbl">證照：已過期＋90 天內到期</div>
+      </div>
+      <div class="kpi ${spread >= 3 ? 'kpi-warn' : 'kpi-ok'}">
+        <div class="kpi-num">${spread}</div>
+        <div class="kpi-lbl">代班集中度（最高 − 最低次數）</div>
+      </div>
     </div>
 
     <div class="card">
       <div class="card-head">
-        <h2>徽章牆：進階層級 × 資格效期</h2>
-        <span class="tag tag-neutral">灰＝過期不計戰力</span>
+        <h2>需要行動</h2>
+        <span class="tag ${actions.some((a) => a.level === 'bad') ? 'tag-danger' : (actions.length ? 'tag-warn' : 'tag-ok')}">${actions.length} 項</span>
       </div>
-      <div class="table-scroll"><table>
-        <thead><tr><th>人員</th><th>進階</th><th>資格徽章</th></tr></thead>
-        <tbody>${wall}</tbody>
-      </table></div>
+      ${actions.length
+        ? actions.map((a) => `<div class="act-item"><span class="act-dot ${a.level}"></span><span>${a.text}</span></div>`).join('')
+        : '<div class="sc-evi">目前無需行動事項——三班平衡、無單點依賴、證照效期健康。</div>'}
+      <p class="fineprint">上方結論磚只報狀態、這裡只列「要做什麼」；全部依據與明細收在下方抽屜，點開即查。</p>
     </div>
 
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-head">
-          <h2>資格單點依賴</h2>
-          <span class="tag tag-danger">那個人倒下，能力就消失</span>
-        </div>
+    <details class="drill">
+      <summary>三班帶班平衡熱圖（依據）</summary>
+      <div class="drill-body">
+        <div class="table-scroll"><table>${mixHead}<tbody>${mixBody}</tbody></table></div>
+        <p class="fineprint">每格為該班在班人員的進階組成（滑鼠停留看名單）；無 N3 以上的班標紅。調整方向：把資深輪進夜班（畫面 5 點格即改），或於「班表生成」納入帶班約束（藍圖下一步）。</p>
+      </div>
+    </details>
+
+    <details class="drill">
+      <summary>徽章牆：進階 × 資格效期（全員）</summary>
+      <div class="drill-body">
+        <div class="table-scroll"><table>
+          <thead><tr><th>人員</th><th>進階</th><th>資格徽章（灰＝過期不計戰力）</th></tr></thead>
+          <tbody>${wall}</tbody>
+        </table></div>
+      </div>
+    </details>
+
+    <details class="drill">
+      <summary>單點依賴與到期雷達（全清單）</summary>
+      <div class="drill-body">
+        <h4 style="margin:8px 0 4px;font-size:13px;color:var(--ink-faint)">各資格有效持有人</h4>
         ${spRows}
-        <p class="fineprint">大夜的呼吸器覆蓋 ${nightCerts ? nightCerts.certs.find((c) => c.cert === 'VENT').coveredDays : 0}／${nightCerts ? nightCerts.staffedDays : 0} 天——單點依賴＋夜間零覆蓋，就是畫面 7 韌性模式那個劇本的前兆。培訓第二位持有者是最便宜的保險。</p>
-      </div>
-      <div class="card">
-        <div class="card-head">
-          <h2>到期雷達（未來 90 天）</h2>
-          <span class="tag tag-warn">回訓排程依據</span>
-        </div>
+        <p class="fineprint">大夜的呼吸器覆蓋 ${nightCerts ? nightCerts.certs.find((c) => c.cert === 'VENT').coveredDays : 0}／${nightCerts ? nightCerts.staffedDays : 0} 天——單點依賴＋夜間零覆蓋，是畫面 7 韌性模式劇本的前兆。</p>
+        <h4 style="margin:12px 0 4px;font-size:13px;color:var(--ink-faint)">到期雷達（未來 90 天）</h4>
         ${radarRows}
       </div>
-    </div>
+    </details>
 
-    <div class="card">
-      <div class="card-head">
-        <h2>出勤與公平快照（本週）</h2>
-        <span class="tag tag-neutral">單週快照；正式導入後累積為趨勢</span>
+    <details class="drill">
+      <summary>出勤與公平快照（本週；正式導入後累積為趨勢）</summary>
+      <div class="drill-body">
+        <div class="fact"><span>請假影響</span><span>${leaveWho.length} 人、${leaveDays.length} 人日（${leaveWho.map(esc).join('、') || '無'}）——缺口帳見「人力缺口」頁</span></div>
+        <div class="fact"><span>替補集中度（近 30 天）</span><span>最高 ${Math.max(...counts)} 次／最低 ${Math.min(...counts)} 次</span></div>
+        <div class="fact"><span>公平性飽和警戒</span><span>${saturated.map((s) => s.id).join('、') || '無'}（達 4 次以上，再叫班即觸頂）</span></div>
+        <p class="fineprint">出勤與公平是離職螺旋的前導指標：缺人 → 集中叫班 → 更多人離開。目標是在螺旋成形前看見它。</p>
       </div>
-      <div class="fact"><span>請假影響</span><span>${leaveWho.length} 人、${leaveDays.length} 人日（${leaveWho.map(esc).join('、') || '無'}）——造成的缺口帳見「人力缺口」頁</span></div>
-      <div class="fact"><span>替補集中度（近 30 天）</span><span>最高 ${Math.max(...counts)} 次／最低 ${Math.min(...counts)} 次——差距愈大，愈接近「誰好講話就找誰」</span></div>
-      <div class="fact"><span>公平性飽和警戒</span><span>${STAFF.filter((s) => s.unit === UNIT && s.standbyCount30d >= 4).map((s) => s.id).join('、') || '無'}（達 4 次以上，再叫班即觸頂）</span></div>
-      <p class="fineprint">出勤與公平是離職螺旋的前導指標：缺人 → 集中叫班 → 更多人離開。這一頁的目標是在螺旋成形前看見它。</p>
-    </div>`;
+    </details>`;
 }
 
 /* ══ ◎ 人力缺口總覽（管理首頁）═════════════════════════ */
@@ -377,6 +430,21 @@ function renderOverview() {
   const structuralMed = r.structural.filter((s) => s.unit === UNIT);
   const structuralOther = r.structural.filter((s) => s.unit !== UNIT);
 
+  /* 行動清單：紅在前、黃在後，每項都收斂到一個動作 */
+  const ovActions = [];
+  residual.forEach((u) => ovActions.push({
+    level: 'bad',
+    text: `${shortDate(u.date)}（${weekdayOf(u.date)}）${SHIFT_TYPES[u.shift].name}無人可合法填補（${u.blockers.map((b) => `${b.code} 擋下 ${b.count} 人`).join('；')}）→ 上報院級調度或跨單位支援`,
+  }));
+  structuralMed.forEach((s) => ovActions.push({
+    level: 'bad',
+    text: `${SHIFT_TYPES[s.shift].name}一週 ${s.days}／${WEEK_DATES.length} 天出現缺口——結構性 → 員額評估、夜班培訓、把需求放進「班表生成」從源頭排滿`,
+  }));
+  if (flagged.length) ovActions.push({
+    level: 'warn',
+    text: `可吸收的 ${fills.length} 筆中 ${flagged.length} 筆帶公平性代價（${[...new Set(flagged.map((f) => f.staffId))].join('、')}）→ 吸收不等於建議照做，留意集中在少數人身上`,
+  });
+
   $('#overview-body').innerHTML = `
     <div class="card">
       <div class="card-head">
@@ -394,70 +462,66 @@ function renderOverview() {
         <div class="ov-op">＝</div>
         <div class="ov-term"><div class="ov-num ${residual.length ? 'danger' : 'ok'}">${residual.length}</div><div class="ov-lbl">殘餘缺口</div></div>
       </div>
-      <div class="table-scroll"><table>${matrixHead}<tbody>${matrixBody}</tbody></table></div>
-      <p class="fineprint">需求基準＝各班別最低安全配置（規則庫可調）。「可合法吸收」為填補模擬結果——每一筆都通過
-        H1–H6 硬性檢查，但<b>可吸收 ≠ 建議照做</b>：代價逐筆列於下方，決定權在主管。</p>
+      <p class="fineprint">一句話：本週缺 ${gapCells.length} 班次可全數合法吸收${flagged.length ? `，但 ${flagged.length} 筆有公平性代價` : ''}${structuralMed.length ? `；${structuralMed.map((s) => SHIFT_TYPES[s.shift].name).join('、')}為結構性缺口，補洞不是解方` : ''}。</p>
     </div>
 
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-head">
-          <h2>吸收方案與代價</h2>
-          <span class="tag ${flagged.length ? 'tag-warn' : 'tag-ok'}">${fills.length} 筆可行，${flagged.length} 筆有代價</span>
-        </div>
+    <div class="card">
+      <div class="card-head">
+        <h2>需要行動</h2>
+        <span class="tag ${ovActions.some((a) => a.level === 'bad') ? 'tag-danger' : (ovActions.length ? 'tag-warn' : 'tag-ok')}">${ovActions.length} 項</span>
+      </div>
+      ${ovActions.length
+        ? ovActions.map((a) => `<div class="act-item"><span class="act-dot ${a.level}"></span><span>${a.text}</span></div>`).join('')
+        : '<div class="sc-evi">本週缺口全數可吸收且無結構性訊號。</div>'}
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-primary" id="btn-ov-intake">處理今日缺班通報 →</button>
+        <button class="btn" id="btn-ov-multi">多筆缺班與全局指派 →</button>
+        <button class="btn" id="btn-ov-generate">生成下週班表（第 0 層）→</button>
+      </div>
+    </div>
+
+    <details class="drill">
+      <summary>缺口矩陣：班別 × 日期（依據）</summary>
+      <div class="drill-body">
+        <div class="table-scroll"><table>${matrixHead}<tbody>${matrixBody}</tbody></table></div>
+        <p class="fineprint">需求基準＝各班別最低安全配置（規則庫可調）。</p>
+      </div>
+    </details>
+
+    <details class="drill">
+      <summary>吸收方案逐筆（含代價與殘餘）</summary>
+      <div class="drill-body">
         ${fillRows || '<div class="empty-state">本週無缺口需要填補。</div>'}
         ${residual.length ? `
           <h4 style="margin:12px 0 4px;font-size:13px;color:var(--ink-faint)">殘餘缺口（無人可合法填補）</h4>
           ${residual.map((u) => `<div class="fact"><span>${shortDate(u.date)} ${SHIFT_TYPES[u.shift].name}</span>
             <span class="expired">${u.blockers.map((b) => `${b.code} 擋下 ${b.count} 人`).join('；')}</span></div>`).join('')}` : ''}
-        <p class="fineprint">吸收全靠替補＝把風險攤在少數人身上。公平性標記（F4）是「補得上，但不該一直這樣補」的訊號。</p>
+        <p class="fineprint">每一筆都通過 H1–H6 硬性檢查，但<b>可吸收 ≠ 建議照做</b>——公平性標記（F4）是「補得上，但不該一直這樣補」的訊號，決定權在主管。</p>
       </div>
+    </details>
 
-      <div class="card">
-        <div class="card-head">
-          <h2>結構性缺口訊號</h2>
-          <span class="tag ${structuralMed.length ? 'tag-danger' : 'tag-ok'}">偶發 vs 結構</span>
-        </div>
-        ${structuralMed.map((s) => `
-          <div class="fact"><span><b>${UNITS[s.unit]}｜${SHIFT_TYPES[s.shift].name}</b></span>
-            <span class="expired">一週 ${s.days}／${WEEK_DATES.length} 天出現缺口</span></div>`).join('') ||
-          '<div class="sc-evi">本單位無結構性缺口。</div>'}
-        <p class="sc-evi" style="margin-top:8px">同一班別反覆缺口＝結構性問題，靠每天找替補補洞不是解方。中長期行動：</p>
-        <ul style="margin:4px 0 0;padding-left:18px;font-size:13.5px">
-          <li>大夜人力招募評估與夜班意願培訓（缺口持續紀錄可作為員額與預算依據）</li>
-          <li>把需求基準放進「班表生成」（第 0 層），從源頭排滿而不是事後補</li>
-          <li>跨院區支援協定與外部人力採購的啟動門檻</li>
+    <details class="drill">
+      <summary>其他單位與資料誠實聲明</summary>
+      <div class="drill-body">
+        <div class="fact"><span>外科病房 5B</span><span>缺口 ${r.cells.filter((c) => c.unit === 'SUR-5B' && c.gap > 0).length} 格，殘餘 ${r.absorb.residual.filter((u) => u.unit === 'SUR-5B').length} 格${structuralOther.filter((s) => s.unit === 'SUR-5B').length ? '（含結構性）' : ''}——<b>示範資料僅含該單位部分名單，數字為機制展示</b></span></div>
+        <div class="fact"><span>加護病房</span><span>無排班資料，不列入計算（noData）——系統不對沒有資料的單位假裝算得出缺口</span></div>
+      </div>
+    </details>
+
+    <details class="drill">
+      <summary>待驗證假設（企業訪談清單）與平台定位</summary>
+      <div class="drill-body">
+        <ul style="margin:0;padding-left:18px;font-size:13.5px">
+          <li>管理者目前能否快速且精準地知道「缺多少人」？</li>
+          <li>缺口是否經常到很晚才被發現？</li>
+          <li>現行缺口以總人數、班次、工時還是專業資格衡量？</li>
+          <li>若能提早看到缺口及其影響，管理者實際可採取哪些行動？</li>
         </ul>
+        <p class="fineprint">本平台定位：缺工情境下的排班與人力缺口決策支援工具——不承諾解決整體醫療缺工，
+          承諾把缺工從模糊感受變成可量化、可追蹤、可行動的管理資訊。缺口紀錄持續累積後，
+          可支援招募員額、預算編列、跨院區支援與培訓規劃等中長期決策。</p>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-head">
-        <h2>其他單位</h2>
-        <span class="tag tag-neutral">資料誠實聲明</span>
-      </div>
-      <div class="fact"><span>外科病房 5B</span><span>缺口 ${r.cells.filter((c) => c.unit === 'SUR-5B' && c.gap > 0).length} 格，殘餘 ${r.absorb.residual.filter((u) => u.unit === 'SUR-5B').length} 格${structuralOther.filter((s) => s.unit === 'SUR-5B').length ? '（含結構性）' : ''}——<b>示範資料僅含該單位部分名單，數字為機制展示</b></span></div>
-      <div class="fact"><span>加護病房</span><span>無排班資料，不列入計算（noData）——系統不對沒有資料的單位假裝算得出缺口</span></div>
-    </div>
-
-    <div class="card">
-      <div class="card-head"><h2>下一步行動</h2><span class="tag tag-neutral">從缺口到決策</span></div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btn-ov-intake">處理今日缺班通報 →</button>
-        <button class="btn" id="btn-ov-multi">多筆缺班與全局指派 →</button>
-        <button class="btn" id="btn-ov-generate">生成下週班表（第 0 層）→</button>
-      </div>
-      <h4 style="margin:14px 0 4px;font-size:13px;color:var(--ink-faint)">待驗證假設（企業訪談清單）</h4>
-      <ul style="margin:0;padding-left:18px;font-size:13.5px">
-        <li>管理者目前能否快速且精準地知道「缺多少人」？</li>
-        <li>缺口是否經常到很晚才被發現？</li>
-        <li>現行缺口以總人數、班次、工時還是專業資格衡量？</li>
-        <li>若能提早看到缺口及其影響，管理者實際可採取哪些行動？</li>
-      </ul>
-      <p class="fineprint">本平台定位：缺工情境下的排班與人力缺口決策支援工具——不承諾解決整體醫療缺工，
-        承諾把缺工從模糊感受變成可量化、可追蹤、可行動的管理資訊。缺口紀錄持續累積後，
-        可支援招募員額、預算編列、跨院區支援與培訓規劃等中長期決策。</p>
-    </div>`;
+    </details>`;
 
   $('#btn-ov-intake').addEventListener('click', () => switchScreen('intake'));
   $('#btn-ov-multi').addEventListener('click', () => switchScreen('multi'));
