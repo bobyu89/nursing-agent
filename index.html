@@ -174,14 +174,26 @@
     </div>
   </section>
 
-  <!-- ══ 5. 班表與人員 ════════════════════════════════ -->
+  <!-- ══ 5. 班表與人員（排班工作區）═══════════════════ -->
   <section class="screen" id="screen-roster">
     <div class="screen-head">
       <h1>班表與人員</h1>
-      <p class="lede">系統輸入的三份資料：匿名化人員主檔、1 週現有班表、請假紀錄。全部為虛構代號資料。</p>
+      <p class="lede">這裡是<strong>排班工作區</strong>：點格子直接排班、從 Excel 貼上整週班表、或套用畫面 8 的生成草稿。每一次變更都留痕，缺口總覽與主動預警即時重算。</p>
     </div>
     <div class="card">
-      <div class="card-head"><h2>現有班表</h2><span class="tag tag-neutral" id="week-label"></span></div>
+      <div class="card-head">
+        <h2>班表</h2>
+        <span>
+          <span class="tag tag-warn" id="roster-modified" hidden>已修改（非示範預設）</span>
+          <span class="tag tag-neutral" id="week-label"></span>
+        </span>
+      </div>
+      <div class="btn-row" style="margin-bottom:10px">
+        <button class="btn btn-sm" id="btn-week-prev">◀ 前一週</button>
+        <button class="btn btn-sm" id="btn-week-demo">示範週</button>
+        <button class="btn btn-sm" id="btn-week-next">後一週 ▶</button>
+        <button class="btn btn-sm" id="btn-roster-reset" style="margin-left:auto">還原示範班表</button>
+      </div>
       <div class="table-scroll"><table id="roster-table"></table></div>
       <div class="legend">
         <span><i class="dot dot-d"></i>白班 07:00–15:00</span>
@@ -190,6 +202,23 @@
         <span><i class="dot dot-l"></i>請假</span>
         <span><i class="dot dot-g"></i>缺班待補</span>
       </div>
+      <p class="fineprint">
+        <b>點任一格子</b>可循環編輯：無 → 白班 → 小夜 → 大夜 → 清除（請假格不可編輯）。
+        變更保存在本機瀏覽器並寫入決策留痕；「還原示範班表」回到出廠資料。
+        編輯不會自動重算進行中的缺班評估——條件改變請回「缺班事件」重新確認。
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>從 Excel 貼上匯入</h2>
+        <span class="tag tag-neutral">目前顯示的那一週</span>
+      </div>
+      <textarea id="roster-paste" rows="5" spellcheck="false"
+        placeholder="從 Excel 複製後貼上，每列一人：代號 + 七欄班別（一～日）&#10;例：&#10;N-01&#9;D&#9;D&#9;&#9;E&#9;E&#9;&#9;N&#10;N-02&#9;D&#9;&#9;D&#9;D&#9;&#9;E&#9;&#10;支援：D/E/N、白/小/大、留空＝休"></textarea>
+      <button class="btn btn-primary" id="btn-roster-import">解析並套用到目前顯示的週</button>
+      <div id="roster-import-result"></div>
+      <p class="fineprint">只影響貼上內容列出的人員（該週原班次會被取代）；代號與班別代碼經白名單驗證，不合法的列會逐列標示原因、不會套用。</p>
     </div>
     <div class="card">
       <div class="card-head"><h2>人員主檔</h2><span class="tag tag-neutral">代號化，不使用姓名</span></div>
@@ -216,7 +245,7 @@
       <button class="btn btn-primary" id="btn-recalc">套用規則並重新計算排序</button>
       <button class="btn" id="btn-rules-reset">還原預設規則</button>
       <div id="recalc-result"></div>
-      <p class="fineprint">規則調整會自動保存在本機瀏覽器，重新整理不會遺失；「還原預設規則」可回到出廠設定。班表寫回與決策留痕則於重新整理時重置，方便重複演示。</p>
+      <p class="fineprint">規則調整與排班工作區的變更會自動保存在本機瀏覽器，重新整理不會遺失，各有還原按鈕可回到出廠設定。主管確認的替補寫回與決策留痕則於重新整理時重置，方便重複演示。</p>
     </div>
   </section>
 

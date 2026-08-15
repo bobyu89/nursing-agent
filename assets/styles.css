@@ -96,6 +96,10 @@ input[type="checkbox"]:focus-visible, input[type="range"]:focus-visible {
 }
 .tab.active .tab-no { background: var(--brand); color: #fff; }
 
+/* ── 排班工作區：可編輯格 ────────────────────────────── */
+.td-edit { cursor: pointer; }
+.td-edit:hover { background: var(--line-soft); box-shadow: inset 0 0 0 1px var(--line); }
+
 /* ── 總覽：缺口方程式 ────────────────────────────────── */
 .ov-eq { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 8px 0 12px; }
 .ov-term { text-align: center; min-width: 86px; }

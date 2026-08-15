@@ -14,6 +14,7 @@ const state = {
   audit: [],           // 決策留痕
   multiQueue: [],      // 畫面 7 帶入的缺班佇列（{gap, suggestedId}）
   suggestedId: null,   // 當前評估中，全局指派建議的人選（畫面標示用）
+  rosterWeekStart: WEEK.start,   // 畫面 5 目前顯示的週（週一）
 };
 
 /** 開場時的替補次數基準值，用來標示本次連線期間的變化 */
@@ -155,6 +156,52 @@ function loadRules() {
 function resetRules() {
   try { localStorage.removeItem(RULES_STORE_KEY); } catch (e) {}
   location.reload();
+}
+
+/* ══ 班表持久化（localStorage）══════════════════════════
+ * 排班工作區的變更（格子編輯／貼上匯入／套用生成草稿）保存在本機；
+ * 「主管確認寫回」維持既有語義：屬演示行為，不主動保存、重整即重置。
+ * 載回時逐筆白名單驗證（代號∈STAFF、日期真實存在、班別∈SHIFT_TYPES、
+ * 單位∈UNITS）——localStorage 是可被任意改寫的儲存，不驗證等於開後門。
+ */
+const SCHEDULE_STORE_KEY = 'shiftguard.schedule.v1';
+
+function saveSchedule() {
+  try { localStorage.setItem(SCHEDULE_STORE_KEY, JSON.stringify(SHIFTS)); } catch (e) {}
+  const badge = $('#roster-modified');
+  if (badge) badge.hidden = false;
+}
+
+function loadSchedule() {
+  try {
+    const raw = localStorage.getItem(SCHEDULE_STORE_KEY);
+    if (!raw) return false;
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return false;
+    const valid = arr.filter((x) => x
+      && STAFF.some((s) => s.id === x.staffId)
+      && isValidDateStr(x.date)
+      && SHIFT_TYPES[x.shift]
+      && UNITS[x.unit]);
+    SHIFTS.length = 0;
+    valid.forEach((x) => SHIFTS.push({
+      staffId: x.staffId, date: x.date, shift: x.shift, unit: x.unit,
+      ...(x.isReplacement ? { isReplacement: true } : {}),
+    }));
+    return true;
+  } catch (e) { return false; }
+}
+
+function resetSchedule() {
+  try { localStorage.removeItem(SCHEDULE_STORE_KEY); } catch (e) {}
+  location.reload();
+}
+
+/** 班表變更後的統一重算：排班工作區、缺口總覽、主動預警 */
+function refreshAfterScheduleChange() {
+  renderRoster();
+  renderOverview();
+  renderWarnings();
 }
 
 /* ══ 分頁切換 ═══════════════════════════════════════════ */
@@ -907,32 +954,127 @@ function renderAuditLog() {
 
 /* ══ 畫面 5：班表與人員 ═════════════════════════════════ */
 
+function rosterDates() {
+  return Array.from({ length: 7 }, (_, i) => addDays(state.rosterWeekStart, i));
+}
+
 function renderRoster() {
-  $('#week-label').textContent = WEEK.label;
+  const ws = state.rosterWeekStart;
+  const dates = rosterDates();
+  $('#week-label').textContent = ws === WEEK.start
+    ? WEEK.label
+    : `${shortDate(ws)}（一）– ${shortDate(dates[6])}（日）`;
 
   const head = `<thead><tr><th>人員</th><th>職務</th>${
-    WEEK_DATES.map((d) => `<th class="center">${shortDate(d)}<br>（${weekdayOf(d)}）</th>`).join('')
+    dates.map((d) => `<th class="center">${shortDate(d)}<br>（${weekdayOf(d)}）</th>`).join('')
   }<th class="center">週工時</th></tr></thead>`;
 
   const gap = state.gap || GAP_EVENT;
   const gapFilled = state.confirmed && state.chosen;
 
   const body = STAFF.map((s) => {
-    const cells = WEEK_DATES.map((d) => {
-      const sh = SHIFTS.find((x) => x.staffId === s.id && x.date === d);
-      if (sh) {
-        return `<td class="center"><span class="cell cell-${sh.shift}">${sh.shift}${sh.isReplacement ? '<sup>替</sup>' : ''}</span></td>`;
-      }
-      if (!gapFilled && gap.originalStaffId === s.id && d === gap.date) {
+    const cells = dates.map((d) => {
+      if (engine.isOnLeave(s, d)) return '<td class="center"><span class="cell cell-L">假</span></td>';
+      if (!gapFilled && gap.originalStaffId === s.id && d === gap.date
+          && !SHIFTS.some((x) => x.staffId === s.id && x.date === d)) {
         return '<td class="center"><span class="cell cell-G">缺班</span></td>';
       }
-      if (engine.isOnLeave(s, d)) return '<td class="center"><span class="cell cell-L">假</span></td>';
-      return '<td class="center" style="color:var(--ink-faint)">·</td>';
+      const sh = SHIFTS.find((x) => x.staffId === s.id && x.date === d);
+      const inner = sh
+        ? `<span class="cell cell-${sh.shift}">${sh.shift}${sh.isReplacement ? '<sup>替</sup>' : ''}</span>`
+        : '<span style="color:var(--ink-faint)">·</span>';
+      return `<td class="center td-edit" data-sid="${esc(s.id)}" data-d="${d}" title="點擊編輯：無→白→小夜→大夜→清除">${inner}</td>`;
     }).join('');
-    return `<tr><td><b>${esc(s.id)}</b></td><td>${esc(s.role)}</td>${cells}<td class="center">${engine.weeklyHours(s.id, WEEK.start)} 小時</td></tr>`;
+    return `<tr><td><b>${esc(s.id)}</b></td><td>${esc(s.role)}</td>${cells}<td class="center">${engine.weeklyHours(s.id, ws)} 小時</td></tr>`;
   }).join('');
 
   $('#roster-table').innerHTML = head + `<tbody>${body}</tbody>`;
+}
+
+/** 格子循環編輯：無 → 白班 → 小夜 → 大夜 → 清除；每次變更留痕並保存 */
+function cycleShiftCell(staffId, date) {
+  const staff = STAFF.find((s) => s.id === staffId);
+  if (!staff || engine.isOnLeave(staff, date)) return;
+  const order = [null, 'D', 'E', 'N'];
+  const idx = SHIFTS.findIndex((x) => x.staffId === staffId && x.date === date);
+  const cur = idx >= 0 ? SHIFTS[idx].shift : null;
+  const next = order[(order.indexOf(cur) + 1) % order.length];
+  if (idx >= 0) SHIFTS.splice(idx, 1);
+  if (next) SHIFTS.push({ staffId, date, shift: next, unit: staff.unit });
+  saveSchedule();
+  logAction('班表編輯',
+    `${staffId} ${shortDate(date)}（${weekdayOf(date)}）：${cur ? SHIFT_TYPES[cur].name : '無'} → ${next ? SHIFT_TYPES[next].name : '清除'}`);
+  refreshAfterScheduleChange();
+}
+
+/**
+ * 從 Excel 貼上匯入目前顯示的週。
+ * 每列：人員代號 + 最多七欄班別（週一～週日）。Tab 分隔保留空欄（Excel 直貼），
+ * 空白分隔時以 -／休／X 表示休假日。整列有任何錯誤即整列不套用（逐列報告）。
+ */
+function handleRosterImport() {
+  const text = $('#roster-paste').value || '';
+  const dates = rosterDates();
+  const CODE = { D: 'D', E: 'E', N: 'N' };
+  const CJK = { '白': 'D', '小': 'E', '大': 'N', '夜': 'N' };
+  const REST = new Set(['', '-', '·', '—', '休', 'X', '0', 'OFF']);
+
+  const lines = text.split(/\r?\n/).map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim() !== '');
+  const entries = [];
+  const errors = [];
+  const staffIds = new Set();
+
+  lines.forEach((line, li) => {
+    const tokens = line.includes('\t')
+      ? line.split('\t').map((t) => t.trim())
+      : line.trim().split(/[\s,;，、]+/);
+    const id = (tokens[0] || '').toUpperCase();
+    const staff = STAFF.find((s) => s.id === id);
+    if (!staff) {
+      // 第一列容錯：像表頭（含日期／星期字樣）就靜默略過
+      if (li === 0 && /代號|人員|星期|週|一|\d+\/\d+/.test(line)) return;
+      errors.push(`第 ${li + 1} 列：查無人員代號「${tokens[0] || '(空白)'}」`);
+      return;
+    }
+    const rowEntries = [];
+    let rowBad = false;
+    tokens.slice(1, 8).forEach((cellRaw, i) => {
+      const v = (cellRaw || '').trim().toUpperCase();
+      if (REST.has(v)) return;
+      const code = CODE[v] || CJK[v[0]];
+      if (!code) {
+        errors.push(`第 ${li + 1} 列「${id}」第 ${i + 1} 天：無法辨識「${cellRaw}」`);
+        rowBad = true;
+        return;
+      }
+      rowEntries.push({ staffId: id, date: dates[i], shift: code, unit: staff.unit });
+    });
+    if (rowBad) return;   // 整列不套用——寧可少排，不套用可疑資料
+    staffIds.add(id);
+    entries.push(...rowEntries);
+  });
+
+  const resultEl = $('#roster-import-result');
+  if (staffIds.size === 0) {
+    resultEl.innerHTML = `<p class="fineprint" style="color:var(--danger)">未套用任何資料。${
+      errors.length ? '問題：' + esc(errors.slice(0, 5).join('；')) : '請確認貼上內容格式。'}</p>`;
+    return;
+  }
+
+  // 取代列出人員在本週的既有班次
+  for (let i = SHIFTS.length - 1; i >= 0; i--) {
+    if (staffIds.has(SHIFTS[i].staffId) && dates.includes(SHIFTS[i].date)) SHIFTS.splice(i, 1);
+  }
+  entries.forEach((e) => SHIFTS.push(e));
+  saveSchedule();
+  logAction('班表匯入',
+    `${shortDate(dates[0])} 週：套用 ${staffIds.size} 人、${entries.length} 班次${
+      errors.length ? `；${errors.length} 個項目因格式錯誤整列未套用` : ''}`);
+  refreshAfterScheduleChange();
+
+  resultEl.innerHTML = `
+    <p class="fineprint">✓ 已套用 ${staffIds.size} 人、${entries.length} 班次（該週原班次已取代）。</p>
+    ${errors.length ? `<p class="fineprint" style="color:var(--danger)">未套用的列：${esc(errors.slice(0, 8).join('；'))}${errors.length > 8 ? `…共 ${errors.length} 項` : ''}</p>` : ''}`;
 }
 
 function renderStaffTable() {
@@ -1246,9 +1388,31 @@ function handleGenRun() {
       <div class="fact"><span>班數分佈（公平輪值）</span><span>最多 ${r.spread.max} 班／最少 ${r.spread.min} 班（不計整週不合格者）</span></div>
       <p class="fineprint">
         逐格檢查與整表掃描是<b>兩條獨立的驗證路徑</b>，互相印證。
-        生成結果為建議草稿，不寫入正式班表——正式導入時由護理長逐格調整後發布，調整仍受同一套規則即時檢查。
+      </p>
+      ${r.filled > 0 ? `
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-gen-apply" style="margin-top:0">套用此草稿至班表（寫入 ${shortDate(sc.dates[0])}–${shortDate(sc.dates[6])} 並前往檢視）</button>
+      </div>` : ''}
+      <p class="fineprint">
+        套用後可在「班表與人員」逐格調整（調整仍受同一套規則與預警檢查）；
+        變更保存在本機瀏覽器並留痕。正式發布仍以院內排班系統為準。
       </p>
     </div>`;
+
+  const applyGen = $('#btn-gen-apply');
+  if (applyGen) applyGen.addEventListener('click', () => {
+    // 覆蓋該單位在生成週的既有班次，寫入草稿
+    for (let i = SHIFTS.length - 1; i >= 0; i--) {
+      if (sc.dates.includes(SHIFTS[i].date) && SHIFTS[i].unit === sc.unit) SHIFTS.splice(i, 1);
+    }
+    r.assignments.forEach((a) => SHIFTS.push({ staffId: a.staffId, date: a.date, shift: a.shift, unit: a.unit }));
+    saveSchedule();
+    logAction('套用生成班表',
+      `${UNITS[sc.unit]} ${sc.label}：寫入 ${r.assignments.length} 班次（由第 0 層生成器產出，主管可逐格調整）`);
+    state.rosterWeekStart = sc.dates[0];
+    refreshAfterScheduleChange();
+    switchScreen('roster');
+  });
 
   logAction('班表生成（第 0 層源頭治理）',
     `${UNITS[sc.unit]} ${sc.label}：填滿 ${r.filled}／${r.slotCount} 格，` +
@@ -1414,6 +1578,13 @@ function init() {
       `軟性權重 ${RULE_REGISTRY.soft.map((r) => `${r.code}=${r.weight}`).join('、')}（可按「還原預設規則」清除）`,
       '班守 ShiftGuard');
   }
+  if (loadSchedule()) {
+    const badge = $('#roster-modified');
+    if (badge) badge.hidden = false;
+    logAction('載入本機保存的班表',
+      `共 ${SHIFTS.length} 班次（排班工作區的變更；可按「還原示範班表」清除）`,
+      '班守 ShiftGuard');
+  }
   $('#btn-rules-reset').addEventListener('click', () => {
     if (confirm('確定要清除本機保存的規則調整，回到預設值嗎？頁面將重新載入。')) resetRules();
   });
@@ -1463,6 +1634,25 @@ function init() {
   $('#btn-multi-run').addEventListener('click', handleMultiRun);
   $('#btn-realloc-run').addEventListener('click', handleReallocRun);
   $('#btn-gen-run').addEventListener('click', handleGenRun);
+
+  // 排班工作區：週切換、格子編輯（事件委派，表格重繪不掉監聽）、匯入、還原
+  $('#btn-week-prev').addEventListener('click', () => {
+    state.rosterWeekStart = addDays(state.rosterWeekStart, -7); renderRoster();
+  });
+  $('#btn-week-next').addEventListener('click', () => {
+    state.rosterWeekStart = addDays(state.rosterWeekStart, 7); renderRoster();
+  });
+  $('#btn-week-demo').addEventListener('click', () => {
+    state.rosterWeekStart = WEEK.start; renderRoster();
+  });
+  $('#roster-table').addEventListener('click', (ev) => {
+    const td = ev.target.closest('td.td-edit');
+    if (td) cycleShiftCell(td.dataset.sid, td.dataset.d);
+  });
+  $('#btn-roster-import').addEventListener('click', handleRosterImport);
+  $('#btn-roster-reset').addEventListener('click', () => {
+    if (confirm('確定要清除本機保存的班表變更，回到示範資料嗎？頁面將重新載入。')) resetSchedule();
+  });
 
   renderRoster();
   renderStaffTable();
