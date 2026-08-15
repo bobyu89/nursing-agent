@@ -175,6 +175,12 @@ details.drill > .drill-body { padding: 2px 14px 14px; }
 .td-edit { cursor: pointer; }
 .td-edit:hover { background: #16324a; box-shadow: inset 0 0 0 1px var(--line); }
 
+/* ── 儀表板圖表（手寫 SVG，零依賴）───────────────────── */
+.chart { width: 100%; height: auto; display: block; margin: 8px 0 2px; }
+.chart text { font-family: inherit; }
+@keyframes pop { from { transform: scale(1.1); opacity: .35; } to { transform: scale(1); opacity: 1; } }
+.ov-num, .kpi-num { animation: pop .35s ease both; transform-origin: center; display: inline-block; }
+
 /* ── 總覽：缺口方程式 ────────────────────────────────── */
 .ov-eq { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 8px 0 12px; }
 .ov-term { text-align: center; min-width: 86px; }

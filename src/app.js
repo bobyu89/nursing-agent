@@ -251,6 +251,45 @@ function switchScreen(name) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+/* ══ 儀表板圖表：手寫 SVG（零依賴，深色主題原生）═══════ */
+
+/**
+ * 水平長條圖。rows: [{ label, segs: [{v, color, title}], right }]
+ * max 為共同尺度；marker 可在指定值畫垂直虛線（如飽和門檻）。
+ * 顏色用 CSS 變數字串，inline SVG 直接繼承主題。
+ */
+function chartHBar(rows, { max, width = 640, marker } = {}) {
+  const LABEL_W = 96; const RIGHT_W = 96; const BAR_H = 16; const ROW_H = 30;
+  const barW = width - LABEL_W - RIGHT_W;
+  const H = rows.length * ROW_H + 10;
+  const x0 = LABEL_W;
+  const scale = max > 0 ? barW / max : 0;
+
+  const body = rows.map((r, i) => {
+    let x = 0;
+    const segs = (r.segs || []).map((s) => {
+      const w = Math.max(0, s.v * scale);
+      const rect = `<rect x="${(x0 + x).toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${BAR_H}" rx="3" fill="${s.color}"><title>${esc(s.title || r.label)}：${s.v}</title></rect>`;
+      x += w;
+      return rect;
+    }).join('');
+    return `<g transform="translate(0 ${i * ROW_H + 6})">
+      <text x="0" y="12" font-size="12" fill="var(--ink-soft)">${esc(r.label)}</text>
+      <rect x="${x0}" y="0" width="${barW}" height="${BAR_H}" rx="3" fill="var(--line-soft)"/>
+      ${segs}
+      <text x="${x0 + barW + 8}" y="12" font-size="12" fill="var(--ink-faint)">${esc(r.right || '')}</text>
+    </g>`;
+  }).join('');
+
+  const mk = marker ? `
+    <line x1="${(x0 + marker.v * scale).toFixed(1)}" y1="4" x2="${(x0 + marker.v * scale).toFixed(1)}" y2="${H - 6}"
+      stroke="var(--warn)" stroke-dasharray="4 3" stroke-width="1.5"></line>` : '';
+
+  return `<svg class="chart" viewBox="0 0 ${width} ${H}" role="img">${body}${mk}</svg>`;
+}
+
+const stampTag = () => `<span class="tag tag-brand">即時計算 ${nowStamp().slice(11)}</span>`;
+
 /* ══ ★ 能力與出勤儀表板 ════════════════════════════════ */
 
 function lvBadge(code) {
@@ -351,7 +390,24 @@ function renderCapability() {
     text: `${saturated.map((s) => s.id).join('、')} 近 30 天代班已達 ${saturated.map((s) => s.standbyCount30d).join('、')} 次 → 暫停指派、優先輪替他人`,
   });
 
+  const covChart = chartHBar(shiftBalance.map((b) => ({
+    label: SHIFT_TYPES[b.code].name,
+    right: `${b.ok}／${b.staffed} 天`,
+    segs: [
+      { v: b.ok, color: 'var(--ok)', title: '有 N3↑ 帶班' },
+      { v: b.staffed - b.ok, color: 'var(--danger)', title: '無資深帶班' },
+    ],
+  })), { max: Math.max(...shiftBalance.map((b) => b.staffed)) });
+
+  const standbyChart = chartHBar(
+    STAFF.filter((s) => s.unit === UNIT).map((s) => ({
+      label: s.id,
+      right: `${s.standbyCount30d} 次`,
+      segs: [{ v: s.standbyCount30d, color: s.standbyCount30d >= 4 ? 'var(--danger)' : 'var(--brand)', title: '近 30 天代班' }],
+    })), { max: 5, marker: { v: 5 } });
+
   $('#capability-body').innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">${stampTag()}</div>
     <div class="kpi-row">
       <div class="kpi ${balanceBad ? 'kpi-bad' : 'kpi-ok'}">
         <div class="kpi-num">${worstBalance.ok}／${worstBalance.staffed}</div>
@@ -369,6 +425,14 @@ function renderCapability() {
         <div class="kpi-num">${spread}</div>
         <div class="kpi-lbl">代班集中度（最高 − 最低次數）</div>
       </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>三班資深覆蓋（N3↑ 帶班）</h2>
+        <span class="tag ${balanceBad ? 'tag-danger' : 'tag-ok'}">綠＝有資深、紅＝無</span>
+      </div>
+      ${covChart}
     </div>
 
     <div class="card">
@@ -414,6 +478,8 @@ function renderCapability() {
     <details class="drill">
       <summary>出勤與公平快照（本週；正式導入後累積為趨勢）</summary>
       <div class="drill-body">
+        <h4 style="margin:8px 0 0;font-size:13px;color:var(--ink-faint)">近 30 天代班分佈（虛線＝飽和門檻 5 次）</h4>
+        ${standbyChart}
         <div class="fact"><span>請假影響</span><span>${leaveWho.length} 人、${leaveDays.length} 人日（${leaveWho.map(esc).join('、') || '無'}）——缺口帳見「人力缺口」頁</span></div>
         <div class="fact"><span>替補集中度（近 30 天）</span><span>最高 ${Math.max(...counts)} 次／最低 ${Math.min(...counts)} 次</span></div>
         <div class="fact"><span>公平性飽和警戒</span><span>${saturated.map((s) => s.id).join('、') || '無'}（達 4 次以上，再叫班即觸頂）</span></div>
@@ -482,11 +548,30 @@ function renderOverview() {
     text: `可吸收的 ${fills.length} 筆中 ${flagged.length} 筆帶公平性代價（${[...new Set(flagged.map((f) => f.staffId))].join('、')}）→ 吸收不等於建議照做，留意集中在少數人身上`,
   });
 
+  const eqChart = chartHBar([{
+    label: '本週人力帳',
+    right: `需求 ${need} 班次`,
+    segs: [
+      { v: sched, color: 'var(--brand)', title: '已排定' },
+      { v: fills.length, color: '#2f7180', title: '可合法吸收' },
+      { v: residual.length, color: 'var(--danger)', title: '殘餘缺口' },
+    ],
+  }], { max: need });
+
+  const gapChart = chartHBar(['D', 'E', 'N'].map((code) => {
+    const n = gapCells.filter((c) => c.shift === code).length;
+    return {
+      label: SHIFT_TYPES[code].name,
+      right: `${n} 班次`,
+      segs: [{ v: n, color: 'var(--danger)', title: '缺口' }],
+    };
+  }), { max: WEEK_DATES.length });
+
   $('#overview-body').innerHTML = `
     <div class="card">
       <div class="card-head">
         <h2>缺口方程式｜${UNITS[UNIT]}（本週）</h2>
-        <span class="tag tag-neutral">名單完整之示範單位</span>
+        <span>${stampTag()} <span class="tag tag-neutral">名單完整之示範單位</span></span>
       </div>
       <div class="ov-eq">
         <div class="ov-term"><div class="ov-num">${need}</div><div class="ov-lbl">營運所需（班次）</div></div>
@@ -498,6 +583,12 @@ function renderOverview() {
         <div class="ov-term"><div class="ov-num ok">${fills.length}</div><div class="ov-lbl">可合法吸收</div></div>
         <div class="ov-op">＝</div>
         <div class="ov-term"><div class="ov-num ${residual.length ? 'danger' : 'ok'}">${residual.length}</div><div class="ov-lbl">殘餘缺口</div></div>
+      </div>
+      ${eqChart}
+      <div class="legend">
+        <span><i class="dot" style="background:var(--brand)"></i>已排定</span>
+        <span><i class="dot" style="background:#2f7180"></i>可合法吸收</span>
+        <span><i class="dot" style="background:var(--danger)"></i>殘餘缺口</span>
       </div>
       <p class="fineprint">一句話：本週缺 ${gapCells.length} 班次可全數合法吸收${flagged.length ? `，但 ${flagged.length} 筆有公平性代價` : ''}${structuralMed.length ? `；${structuralMed.map((s) => SHIFT_TYPES[s.shift].name).join('、')}為結構性缺口，補洞不是解方` : ''}。</p>
     </div>
@@ -520,6 +611,8 @@ function renderOverview() {
     <details class="drill">
       <summary>缺口矩陣：班別 × 日期（依據）</summary>
       <div class="drill-body">
+        <h4 style="margin:8px 0 0;font-size:13px;color:var(--ink-faint)">各班別缺口天數</h4>
+        ${gapChart}
         <div class="table-scroll"><table>${matrixHead}<tbody>${matrixBody}</tbody></table></div>
         <p class="fineprint">需求基準＝各班別最低安全配置（規則庫可調）。</p>
       </div>
@@ -1897,6 +1990,33 @@ function init() {
   $('#btn-roster-import').addEventListener('click', handleRosterImport);
   $('#btn-roster-reset').addEventListener('click', () => {
     if (confirm('確定要清除本機保存的班表變更，回到示範資料嗎？頁面將重新載入。')) resetSchedule();
+  });
+
+  // 跨視窗即時同步：另一個分頁改了班表／規則，本頁立即重算（瀏覽器原生 storage 事件，零後端）
+  window.addEventListener('storage', (ev) => {
+    if (ev.key === SCHEDULE_STORE_KEY) {
+      if (ev.newValue === null) {
+        logAction('另一視窗還原了示範班表', '請重新整理本頁以載入出廠資料', '班守 ShiftGuard');
+        return;
+      }
+      if (loadSchedule()) {
+        const badge = $('#roster-modified');
+        if (badge) badge.hidden = false;
+        refreshAfterScheduleChange();
+        renderStaffTable();
+        renderFairness();
+        logAction('跨視窗即時同步', '偵測到另一視窗的班表變更，缺口與儀表板已重算', '班守 ShiftGuard');
+      }
+      return;
+    }
+    if (ev.key === RULES_STORE_KEY && ev.newValue !== null) {
+      if (loadRules()) {
+        renderRules();
+        updateWeightSum();
+        refreshAfterScheduleChange();
+        logAction('跨視窗即時同步', '偵測到另一視窗的規則調整，決策結果已重算', '班守 ShiftGuard');
+      }
+    }
   });
 
   renderRoster();
