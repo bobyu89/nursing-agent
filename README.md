@@ -144,7 +144,8 @@ F1 週工時超過 48 小時軟性上限（需額外核准）／F2 連續上班�
 ## 檔案結構
 
 ```
-index.html                  八個畫面
+home.html                   Landing Page（電影感影片首頁；對外分享入口）
+index.html                  平台主程式（兩層導覽：總覽/缺班處理/排班/治理）
 tests.html                  引擎測試頁（雙擊即可跑，零依賴）
 assets/styles.css           樣式
 src/data.js                 模擬資料（人員／班表／請假／缺班事件）

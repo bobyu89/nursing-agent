@@ -4,136 +4,263 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self' file:; script-src 'none'; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data:; object-src 'none'; base-uri 'self'">
+        content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; media-src https://d8j0ntlcm91z4.cloudfront.net; object-src 'none'; base-uri 'self'">
   <meta name="referrer" content="no-referrer">
-  <title>班守 ShiftGuard｜缺工情境下的排班與人力缺口決策支援工具</title>
-  <link rel="stylesheet" href="assets/styles.css">
+  <title>班守 ShiftGuard｜夜再深，也要有人守班</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500&family=Noto+Serif+TC:wght@400;600&family=Noto+Sans+TC:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    .lp-hero { max-width: 880px; margin: 0 auto; padding: 72px 28px 48px; text-align: center; }
-    .lp-mark {
-      width: 56px; height: 56px; border-radius: 14px; margin: 0 auto 22px;
-      background: var(--brand); color: #fff; display: grid; place-items: center;
-      font-weight: 800; font-size: 22px; letter-spacing: .02em;
+    :root {
+      /* 班守配色：深夜病房的海軍藍（可整組微調） */
+      --background: hsl(203 62% 10%);
+      --foreground: hsl(0 0% 100%);
+      --muted-foreground: hsl(208 18% 70%);
+      --border: hsl(206 30% 24%);
+      --warn: hsl(38 55% 62%);
+      --font-display: 'Instrument Serif', 'Noto Serif TC', serif;
+      --font-body: 'Inter', 'Noto Sans TC', sans-serif;
     }
-    .lp-hero h1 { font-size: 34px; letter-spacing: -.02em; }
-    .lp-sub { font-size: 17px; color: var(--ink-soft); margin: 14px auto 6px; max-width: 620px; line-height: 1.75; }
-    .lp-claim { font-size: 14px; color: var(--ink-faint); margin-top: 10px; }
-    .lp-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 30px; }
-    .lp-cta .btn { font-size: 15px; padding: 12px 26px; }
-    .lp-section { max-width: 1020px; margin: 0 auto; padding: 34px 28px; }
-    .lp-h2 { font-size: 21px; margin-bottom: 6px; }
-    .lp-h2sub { font-size: 13.5px; color: var(--ink-faint); margin-bottom: 20px; }
-    .lp-three { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-    .lp-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 20px; }
-    .lp-card h3 { font-size: 16px; margin-bottom: 8px; }
-    .lp-card p { font-size: 13.5px; color: var(--ink-soft); line-height: 1.7; margin: 0; }
-    .lp-feat { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
-    .lp-no {
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--background); color: var(--foreground);
+      font-family: var(--font-body); font-weight: 400;
+      -webkit-font-smoothing: antialiased; overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── 液態玻璃 ─────────────────────────────── */
+    .liquid-glass {
+      background: rgba(255, 255, 255, 0.01);
+      background-blend-mode: luminosity;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      border: none;
+      box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+      position: relative; overflow: hidden;
+    }
+    .liquid-glass::before {
+      content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1.4px;
+      background: linear-gradient(180deg,
+        rgba(255,255,255,0.45) 0%, rgba(255,255,255,0.15) 20%,
+        rgba(255,255,255,0) 40%, rgba(255,255,255,0) 60%,
+        rgba(255,255,255,0.15) 80%, rgba(255,255,255,0.45) 100%);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    /* ── 動畫 ─────────────────────────────────── */
+    @keyframes fade-rise {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-rise { animation: fade-rise 0.8s ease-out both; }
+    .animate-fade-rise-delay { animation: fade-rise 0.8s ease-out 0.2s both; }
+    .animate-fade-rise-delay-2 { animation: fade-rise 0.8s ease-out 0.4s both; }
+    @media (prefers-reduced-motion: reduce) {
+      .animate-fade-rise, .animate-fade-rise-delay, .animate-fade-rise-delay-2 { animation: none; }
+    }
+
+    /* ── 影片背景層 ───────────────────────────── */
+    .hero-wrap { position: relative; min-height: 100vh; display: flex; flex-direction: column; }
+    .bg-video {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; z-index: 0;
+    }
+    .bg-scrim {   /* 讓文字在任何影格上都可讀 */
+      position: absolute; inset: 0; z-index: 1; pointer-events: none;
+      background: linear-gradient(180deg, rgba(4,20,31,.35) 0%, rgba(4,20,31,.15) 45%, rgba(4,20,31,.75) 100%);
+    }
+
+    /* ── 導覽列 ───────────────────────────────── */
+    .nav {
+      position: relative; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 24px 32px; max-width: 80rem; margin: 0 auto; width: 100%;
+    }
+    .logo { font-family: var(--font-display); font-size: 30px; letter-spacing: -0.01em; }
+    .logo sup { font-size: 11px; color: var(--muted-foreground); }
+    .nav-links { display: none; gap: 28px; }
+    .nav-links a {
+      font-size: 14px; color: var(--muted-foreground); transition: color .2s ease;
+    }
+    .nav-links a:hover, .nav-links a.active { color: var(--foreground); }
+    .btn-glass {
+      display: inline-block; border-radius: 999px; color: var(--foreground);
+      font-size: 14px; padding: 10px 24px; cursor: pointer;
+      transition: transform .2s ease; white-space: nowrap;
+    }
+    .btn-glass:hover { transform: scale(1.03); }
+    @media (min-width: 768px) { .nav-links { display: flex; } }
+
+    /* ── Hero ─────────────────────────────────── */
+    .hero {
+      position: relative; z-index: 10; flex: 1;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 90px 24px;
+    }
+    .hero h1 {
+      font-family: var(--font-display); font-weight: 400;
+      font-size: clamp(44px, 9vw, 96px);
+      line-height: 1.05; letter-spacing: -0.03em; max-width: 80rem;
+    }
+    .hero h1 em { font-style: normal; color: var(--muted-foreground); }
+    .hero .sub {
+      color: var(--muted-foreground); font-size: clamp(15px, 2vw, 18px);
+      max-width: 42rem; margin-top: 32px; line-height: 1.8;
+    }
+    .hero .cta { margin-top: 48px; padding: 20px 56px; font-size: 16px; }
+    .hero .cta-sub { margin-top: 18px; font-size: 13px; color: var(--muted-foreground); }
+    .hero .cta-sub a { border-bottom: 1px solid var(--border); padding-bottom: 2px; }
+    .hero .cta-sub a:hover { color: var(--foreground); }
+
+    /* ── 下方內容區（深色玻璃）────────────────── */
+    .section { max-width: 68rem; margin: 0 auto; padding: 72px 28px 8px; position: relative; z-index: 10; }
+    .section h2 {
+      font-family: var(--font-display); font-weight: 400;
+      font-size: clamp(28px, 4vw, 40px); letter-spacing: -0.02em; margin-bottom: 10px;
+    }
+    .section .lead { color: var(--muted-foreground); font-size: 14.5px; margin-bottom: 28px; line-height: 1.8; }
+    .grid { display: grid; gap: 14px; }
+    .g3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .g2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+    .card { border-radius: 14px; padding: 26px 24px; }
+    .card h3 { font-size: 16.5px; font-weight: 500; margin-bottom: 10px; }
+    .card h3 .no {
       display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
-      background: var(--line-soft); color: var(--ink-soft); font-size: 12px; font-weight: 700; margin-right: 8px;
+      background: rgba(255,255,255,.08); font-size: 12px; margin-right: 10px; vertical-align: 2px;
     }
-    .lp-ladder {
-      border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
-      padding: 20px 22px; font-size: 14px; line-height: 2.05;
+    .card p { font-size: 13.5px; color: var(--muted-foreground); line-height: 1.85; }
+    .ladder { border-radius: 14px; padding: 28px 30px; font-size: 15px; line-height: 2.3; }
+    .ladder b { font-family: var(--font-display); font-size: 17px; margin-right: 10px; }
+    .honest {
+      border-radius: 14px; padding: 22px 26px; font-size: 13px; line-height: 1.9;
+      color: var(--muted-foreground);
     }
-    .lp-ladder b { color: var(--brand-dark); }
-    .lp-honest { border-left: 3px solid var(--warn); background: var(--warn-tint); border-radius: 6px;
-      padding: 14px 18px; font-size: 13px; color: var(--ink-soft); line-height: 1.8; }
-    .lp-footer { text-align: center; padding: 36px 20px 56px; color: var(--ink-faint); font-size: 12.5px; line-height: 2; }
-    .lp-footer a { color: var(--ink-soft); }
+    .honest b { color: var(--warn); }
+    .footer {
+      position: relative; z-index: 10; text-align: center;
+      padding: 64px 20px 56px; color: var(--muted-foreground); font-size: 12.5px; line-height: 2.2;
+    }
+    .footer a { border-bottom: 1px solid var(--border); padding-bottom: 1px; }
+    .footer a:hover { color: var(--foreground); }
   </style>
 </head>
 <body>
 
-<div class="lp-hero">
-  <div class="lp-mark">SG</div>
-  <h1>班守 ShiftGuard</h1>
-  <p class="lp-sub">
-    <b>缺工情境下的排班與人力缺口決策支援工具。</b><br>
-    在醫護人力短缺、無法即時增加人力的現實裡，
-    把缺工從模糊感受變成<b>可量化、可追蹤、可行動</b>的管理資訊。
-  </p>
-  <p class="lp-claim">它不承諾解決缺工——它承諾讓每一個缺口被更早看見、被誠實計算。</p>
-  <div class="lp-cta">
-    <a class="btn btn-primary" href="index.html">進入平台 →</a>
-    <a class="btn" href="https://line.me/R/ti/p/@913sepht">加入 LINE 通報機器人</a>
-  </div>
+<!-- ══ Hero：全螢幕影片背景 ══════════════════════ -->
+<div class="hero-wrap">
+  <video class="bg-video" autoplay loop muted playsinline
+         src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260314_131748_f2ca2a28-fed7-44c8-b9a9-bd9acdd5ec31.mp4"></video>
+  <div class="bg-scrim"></div>
+
+  <nav class="nav">
+    <a class="logo" href="home.html">班守 ShiftGuard</a>
+    <div class="nav-links">
+      <a class="active" href="home.html">首頁</a>
+      <a href="#features">功能</a>
+      <a href="#ladder">決策階梯</a>
+      <a href="#honest">誠實聲明</a>
+      <a href="https://github.com/bobyu89/nursing-agent">GitHub</a>
+    </div>
+    <a class="liquid-glass btn-glass" href="index.html">進入平台</a>
+  </nav>
+
+  <section class="hero">
+    <h1 class="animate-fade-rise"><em>夜再深，</em>也要有人<br>守著班表<em>與彼此。</em></h1>
+    <p class="sub animate-fade-rise-delay">
+      班守 ShiftGuard——缺工情境下的排班與人力缺口決策支援工具。
+      在人力最沉默的地方，把缺口變成可量化、可追蹤、可行動的管理資訊；
+      每一個判斷，都交代得出依據。
+    </p>
+    <a class="liquid-glass btn-glass cta animate-fade-rise-delay-2" href="index.html">進入平台</a>
+    <p class="cta-sub animate-fade-rise-delay-2">
+      或 <a href="https://line.me/R/ti/p/@913sepht">加入 LINE 通報機器人</a>，在聊天室裡完成通報與替補建議
+    </p>
+  </section>
 </div>
 
-<div class="lp-section">
-  <h2 class="lp-h2">三件事，缺一不可</h2>
-  <p class="lp-h2sub">只做「快」的話，Excel 篩選就夠了。平台存在的理由是後面兩件事。</p>
-  <div class="lp-three">
-    <div class="lp-card">
+<!-- ══ 三件事 ═══════════════════════════════════ -->
+<section class="section" id="claims">
+  <h2>三件事，缺一不可。</h2>
+  <p class="lead">只做「快」的話，Excel 篩選就夠了。平台存在的理由是後面兩件事。</p>
+  <div class="grid g3">
+    <div class="liquid-glass card">
       <h3>算得準</h3>
       <p>工時、班距、連續天數、證照效期——全部由確定性規則引擎計算，45 項邊界測試釘住。語言模型不碰任何數字：算錯工時在醫療場域是合規事故，不是體驗瑕疵。</p>
     </div>
-    <div class="lp-card">
+    <div class="liquid-glass card">
       <h3>說得清</h3>
       <p>每一位候選人的分數攤得開、每一筆排除都寫明規則代碼與原因。「為什麼找他不找我」從此有答案——這是護理職場公平的起點。</p>
     </div>
-    <div class="lp-card">
+    <div class="liquid-glass card">
       <h3>留得下</h3>
       <p>每一步決策寫入雜湊鏈結的留痕，改任何一筆都會被抓到。勞檢、稽核、評鑑，一鍵匯出舉證。</p>
     </div>
   </div>
-</div>
+</section>
 
-<div class="lp-section">
-  <h2 class="lp-h2">功能總覽</h2>
-  <p class="lp-h2sub">進入平台後以四個分頁組織：總覽 ・ 缺班處理 ・ 排班 ・ 治理</p>
-  <div class="lp-feat">
-    <div class="lp-card">
-      <h3><span class="lp-no">◎</span>人力缺口儀表板</h3>
+<!-- ══ 功能 ═════════════════════════════════════ -->
+<section class="section" id="features">
+  <h2>功能總覽</h2>
+  <p class="lead">進入平台後以四個分頁組織：總覽 ・ 缺班處理 ・ 排班 ・ 治理</p>
+  <div class="grid g2">
+    <div class="liquid-glass card">
+      <h3><span class="no">◎</span>人力缺口儀表板</h3>
       <p>缺口方程式：營運所需 − 已排定 ＝ 缺口 → 合法吸收模擬（含代價）→ 誠實殘餘。結構性缺口自動判定，直接變成員額與預算的證據。</p>
     </div>
-    <div class="lp-card">
-      <h3><span class="lp-no">★</span>能力徽章與帶班平衡</h3>
+    <div class="liquid-glass card">
+      <h3><span class="no">★</span>能力徽章與帶班平衡</h3>
       <p>資格徽章（含效期）答「有沒有人會做」；進階徽章 N1–N4／AHN 答「有沒有人扛得住」。三班帶班平衡熱圖讓「夜班全是新人」無所遁形。</p>
     </div>
-    <div class="lp-card">
-      <h3><span class="lp-no">1</span>缺班替補（第 1–2 層）</h3>
+    <div class="liquid-glass card">
+      <h3><span class="no">1</span>缺班替補</h3>
       <p>貼上請假訊息 → 解析追問 → 合格候選排序與評分卡 → 主管確認留痕。找不到人時：放寬試算與多筆全局指派，只試算、不自行放寬。</p>
     </div>
-    <div class="lp-card">
-      <h3><span class="lp-no">7</span>韌性模式（第 3 層）</h3>
+    <div class="liquid-glass card">
+      <h3><span class="no">7</span>韌性模式</h3>
       <p>連替補都無解時，缺的不再是「一個人」，是「一班的任務」——任務重分配：資格硬性匹配、負荷平衡，補不上的誠實標示為缺口。</p>
     </div>
-    <div class="lp-card">
-      <h3><span class="lp-no">8</span>班表生成（第 0 層）</h3>
+    <div class="liquid-glass card">
+      <h3><span class="no">8</span>班表生成</h3>
       <p>用與替補完全相同的一份規則生成下週班表——排出來的那一刻就合規；生成後疊回現有班表重掃驗證，零新增風險。</p>
     </div>
-    <div class="lp-card">
-      <h3><span class="lp-no">L</span>LINE 通報機器人</h3>
+    <div class="liquid-glass card">
+      <h3><span class="no">L</span>LINE 通報機器人</h3>
       <p>通報入口放在護理師本來就在用的 LINE：訊息解析、按鈕補條件、替補建議、詢問草稿、戰情儀表板——同一份引擎，零學習成本。</p>
     </div>
   </div>
-</div>
+</section>
 
-<div class="lp-section">
-  <h2 class="lp-h2">決策階梯：從源頭治理到韌性降級</h2>
-  <p class="lp-h2sub">上層做得越好，下層被觸發得越少——我們的成功指標是韌性模式的啟動次數逐季下降。</p>
-  <div class="lp-ladder">
-    <b>第 0 層</b>　班表生成——排出來的那一刻就合規<br>
-    <b>第 1 層</b>　找合格替補——硬性排除、軟性排序、逐筆交代<br>
-    <b>第 2 層</b>　放寬試算＋全局指派——把選項與代價攤開，決定權在主管<br>
-    <b>第 3 層</b>　任務重新分配——極端情境下的降級運作方案，缺口誠實攤開
+<!-- ══ 決策階梯 ═════════════════════════════════ -->
+<section class="section" id="ladder">
+  <h2>決策階梯：從源頭治理到韌性降級</h2>
+  <p class="lead">上層做得越好，下層被觸發得越少——我們的成功指標，是韌性模式的啟動次數逐季下降。</p>
+  <div class="liquid-glass ladder">
+    <b>0</b>　班表生成——排出來的那一刻就合規<br>
+    <b>1</b>　找合格替補——硬性排除、軟性排序、逐筆交代<br>
+    <b>2</b>　放寬試算＋全局指派——把選項與代價攤開，決定權在主管<br>
+    <b>3</b>　任務重新分配——極端情境的降級運作方案，缺口誠實攤開
   </div>
-</div>
+</section>
 
-<div class="lp-section">
-  <div class="lp-honest">
-    <b>誠實聲明</b>：本站為教學展示——所有人員、班表、請假資料皆為虛構（代號 N-01～N-11），
+<!-- ══ 誠實聲明 ═════════════════════════════════ -->
+<section class="section" id="honest">
+  <div class="liquid-glass honest">
+    <b>誠實聲明</b>——本站為教學展示：所有人員、班表、請假資料皆為虛構（代號 N-01～N-11），
     不含任何病患資料；訊息解析為確定性關鍵詞規則（非真實模型），理解力有限但離線可跑、可驗證；
     Agent 不臆測缺漏欄位、不自行放寬規則、不代替主管決定，通知一律停在草稿。
   </div>
-</div>
+</section>
 
-<footer class="lp-footer">
+<footer class="footer">
   職游 NaviCareer × AWS × 伊雲谷｜AI 職涯實戰營 DEMO DAY　第 4 組<br>
   <a href="index.html">進入平台</a>　·
-  <a href="https://github.com/bobyu89/nursing-agent">GitHub（原始碼與文件）</a>　·
-  <a href="https://bobyu89.github.io/nursing-agent/tests.html">引擎測試（45 項）</a>
+  <a href="https://line.me/R/ti/p/@913sepht">LINE 機器人</a>　·
+  <a href="https://github.com/bobyu89/nursing-agent">GitHub</a>　·
+  <a href="tests.html">引擎測試（45 項）</a>
 </footer>
 
 </body>
