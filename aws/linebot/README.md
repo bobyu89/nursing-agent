@@ -1,4 +1,8 @@
-# 班守 ShiftGuard — LINE 通報機器人部署指南
+# 班守 ShiftGuard — LINE 通報機器人部署指南（AWS＋Bedrock 真模型版）
+
+> 💡 **想要零成本、不碰 AWS？** 用 [cloudflare/linebot](../../cloudflare/linebot/README.md)：
+> Cloudflare Workers 免費方案＋平台同一份確定性解析器，免信用卡、10 分鐘部署。
+> 本版（Bedrock 真模型解析）留作理解力升級選項，兩版可隨時切換（換 Webhook URL 即可）。
 
 > 一句話：**通報入口放在護理人員本來就在用的 LINE，解析與決策留在平台。**
 >

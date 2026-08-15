@@ -1,0 +1,11 @@
+name = "shiftguard-linebot"
+main = "worker.mjs"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+PLATFORM_URL = "https://bobyu89.github.io/nursing-agent/"
+
+# 機密（不放這裡，部署後用指令設定）：
+#   npx wrangler secret put LINE_CHANNEL_SECRET
+#   npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN

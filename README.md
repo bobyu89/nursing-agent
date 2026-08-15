@@ -154,8 +154,9 @@ src/app.js                  畫面渲染與流程
 tests/engine.test.js        引擎邊界條件測試（瀏覽器與 CI 共用同一份）
 tests/run-node.js           CI 用的 Node 測試 runner
 .github/workflows/test.yml  GitHub Actions：每次 push 自動跑引擎測試
+cloudflare/linebot/         LINE 通報機器人（零成本版：Workers 免費方案＋同一份 mock 解析器）
 aws/lambda/                 LLM Proxy（Lambda + Bedrock），接真實模型用
-aws/linebot/                LINE 通報機器人 Webhook（驗章、轉發解析、回覆追問）
+aws/linebot/                LINE 通報機器人（真模型版：Bedrock 解析）
 aws/deploy.ps1              一鍵部署兩顆 Lambda（冪等；含冒煙測試與後續步驟輸出）
 aws/README.md               Bedrock 部署步驟（含成本護欄與疑難排解）
 docs/BLUEPRINT.md           系統藍圖（五模組平台視野、四階段演進、AWS 目標架構）
