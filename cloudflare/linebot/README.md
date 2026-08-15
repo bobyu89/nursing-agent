@@ -34,13 +34,13 @@
 - 終端機執行（會開瀏覽器要你按一次「Allow」授權）：
 
 ```bash
-cd cloudflare/linebot && npx wrangler login
+cd cloudflare/linebot; npx wrangler login
 ```
 
 ### 2. 部署 Worker
 
 ```bash
-cd cloudflare/linebot && npx wrangler deploy
+cd cloudflare/linebot; npx wrangler deploy
 ```
 
 輸出會給你正式網址：`https://shiftguard-linebot.<你的子網域>.workers.dev`
@@ -57,11 +57,11 @@ cd cloudflare/linebot && npx wrangler deploy
 把兩個值設成 Worker 機密（指令會提示你貼值，值不會留在任何檔案或指令歷史）：
 
 ```bash
-cd cloudflare/linebot && npx wrangler secret put LINE_CHANNEL_SECRET
+cd cloudflare/linebot; npx wrangler secret put LINE_CHANNEL_SECRET
 ```
 
 ```bash
-cd cloudflare/linebot && npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
+cd cloudflare/linebot; npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
 ```
 
 回 LINE Developers → Messaging API 分頁 → **Webhook URL** 填步驟 2 的 workers.dev 網址
@@ -107,7 +107,7 @@ https://bobyu89.github.io/nursing-agent/
 | Webhook Verify 失敗 | 多半是 `LINE_CHANNEL_SECRET` 還沒 `secret put`（驗章 403）；設定後重按 Verify |
 | 傳訊息沒回覆 | `LINE_CHANNEL_ACCESS_TOKEN` 貼錯 → `npx wrangler tail` 看即時 log 找 `LINE reply failed: 401` |
 | wrangler login 開不了瀏覽器 | 手動開它印出的網址完成授權 |
-| 想看即時 log | `cd cloudflare/linebot && npx wrangler tail` |
+| 想看即時 log | `cd cloudflare/linebot; npx wrangler tail` |
 
 ## Demo Day 演法（30 秒）
 
