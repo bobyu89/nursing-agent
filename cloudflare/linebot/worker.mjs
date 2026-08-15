@@ -2,24 +2,27 @@
  * worker.mjs — 班守 ShiftGuard LINE 通報機器人（Cloudflare Workers 免費版）
  *
  * 零成本路線：不碰 AWS、不呼叫任何 LLM。
- * 解析器就是平台的同一份確定性 mock 解析器（src/llm.js 關鍵詞規則）——
+ * 解析器與決策引擎都是平台的同一份程式碼（src/llm.js、src/engine.js）——
  * wrangler 打包時直接引入原始檔，「同一份程式碼在瀏覽器、測試頁、
- * CI 與 LINE bot 上跑」的故事延伸到第四個環境。
+ * CI 與 LINE bot 上跑」。
  *
- * 誠實聲明（與平台一致）：關鍵詞規則的理解力弱於真實模型，
- * 但確定性、離線可驗證，且通報訊息只在本 Worker 內處理、
- * 不送往任何第三方模型端點——個資面反而更乾淨。
+ * 互動流程（無狀態；條件以 postback data 夾帶，不需要任何資料庫）：
+ *   1. 傳請假訊息 → 確定性解析（日期／班別／事由，缺漏不臆測）
+ *   2. 缺哪個條件，就跳「快速回覆按鈕」讓主管點選（班別 → 單位 → 必要資格）
+ *   3. 條件齊全 → 同一份 evaluateGap 引擎排序 → 回覆替補建議前三名
+ *      （分數＋依據）＋排除摘要＋平台連結
  *
- * 治理邊界：機器人只做解析與轉達；不建立正式事件、不指派、不代替主管決定。
+ * 治理邊界：機器人提供「建議」，不做指派決定——正式確認與決策留痕在平台。
+ * 誠實聲明：示範資料（虛構人員）；解析為確定性關鍵詞規則。
  */
 import crypto from 'node:crypto';
 import data from '../../src/data.js';
 import rules from '../../src/rules.js';
-import engine from '../../src/engine.js';
+import engineMod from '../../src/engine.js';
 import llm from '../../src/llm.js';
 
 // 依 index.html 的載入語義把全域掛回（與 tests/run-node.js 同一招）
-Object.assign(globalThis, data, rules, engine, llm);
+Object.assign(globalThis, data, rules, engineMod, llm);
 
 const FIELD_TW = { date: '日期', shift: '班別', unit: '單位', requiredCerts: '必要資格', reason: '事由' };
 
@@ -37,44 +40,139 @@ function validSignature(secret, rawBody, signature) {
   return mac.length === sig.length && crypto.timingSafeEqual(mac, sig);
 }
 
-async function lineReply(channelToken, replyToken, text) {
+/** 回覆訊息（可含快速回覆按鈕） */
+async function lineReply(channelToken, replyToken, text, quickItems) {
+  const message = { type: 'text', text: text.slice(0, 4900) };
+  if (quickItems && quickItems.length) {
+    message.quickReply = {
+      items: quickItems.map(({ label, dataStr }) => ({
+        type: 'action',
+        action: { type: 'postback', label: label.slice(0, 20), data: dataStr, displayText: label },
+      })),
+    };
+  }
   const res = await fetch('https://api.line.me/v2/bot/message/reply', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${channelToken}` },
-    body: JSON.stringify({ replyToken, messages: [{ type: 'text', text: text.slice(0, 4900) }] }),
+    body: JSON.stringify({ replyToken, messages: [message] }),
   });
   if (!res.ok) console.log('LINE reply failed:', res.status, await res.text());
 }
 
-/** 解析結果 → LINE 文字訊息（label 由解析器生成，本檔不改寫任何解析值） */
-function formatParsed(parsed, platformUrl) {
-  const ex = (parsed && parsed.extracted) || {};
-  const lines = ['【班守 ShiftGuard】已收到缺班通報，解析如下：'];
-  ['date', 'shift', 'unit', 'requiredCerts', 'reason'].forEach((f) => {
-    const field = ex[f];
-    if (field && field.label) lines.push(`・${FIELD_TW[f]}：${field.label}`);
-  });
-  const missing = (parsed && parsed.missing) || [];
-  if (missing.length) {
-    lines.push('', '訊息未載明、需主管補充：');
-    missing.forEach((m) => lines.push(`・${m.question || FIELD_TW[m.field] || m.field}`));
+/* ── 缺班條件的無狀態編碼（postback data ≤ 300 字，綽綽有餘）── */
+
+function encodeParams(p) {
+  const qs = new URLSearchParams();
+  Object.entries(p).forEach(([k, v]) => { if (v !== null && v !== undefined) qs.set(k, v); });
+  return qs.toString();
+}
+
+function decodeParams(str) {
+  const qs = new URLSearchParams(str || '');
+  return {
+    d: qs.get('d'),                                  // 日期 YYYY-MM-DD
+    s: qs.get('s'),                                  // 班別代碼 D/E/N
+    u: qs.get('u'),                                  // 單位代碼
+    c: qs.has('c') ? qs.get('c') : null,             // 資格代碼逗號串（'' = 明確選了「無需資格」）
+  };
+}
+
+/* ── 逐步補條件：缺什麼就出哪一組按鈕 ── */
+
+function askNext(p) {
+  const base = { d: p.d, s: p.s, u: p.u, c: p.c };
+  if (!p.s) {
+    return {
+      text: '缺的是哪一個班別？（點下方按鈕選擇）',
+      items: Object.entries(SHIFT_TYPES).map(([code, t]) => ({
+        label: t.name, dataStr: encodeParams({ ...base, s: code }),
+      })),
+    };
   }
-  lines.push(
-    '',
-    '主管請至平台確認條件並評估替補（每一步留痕）：',
+  if (!p.u) {
+    return {
+      text: '這筆缺班在哪一個照護單位？',
+      items: Object.entries(UNITS).map(([code, name]) => ({
+        label: name, dataStr: encodeParams({ ...base, u: code }),
+      })),
+    };
+  }
+  if (p.c === null) {
+    const combos = [
+      { label: 'ACLS', c: 'ACLS' },
+      { label: 'ACLS＋化療給藥', c: 'ACLS,CHEMO' },
+      { label: 'ACLS＋靜脈注射', c: 'ACLS,IV' },
+      { label: 'ACLS＋呼吸器', c: 'ACLS,VENT' },
+      { label: '無需特殊資格', c: '' },
+    ];
+    return {
+      text: '當班需要哪些必要資格？',
+      items: combos.map(({ label, c }) => ({ label, dataStr: encodeParams({ ...base, c }) })),
+    };
+  }
+  return null;   // 條件齊全
+}
+
+/* ── 條件齊全 → 同一份引擎評估，回覆替補建議 ── */
+
+function evaluateAndFormat(p, platformUrl) {
+  const engine = createEngine({
+    staff: STAFF, shifts: SHIFTS, shiftTypes: SHIFT_TYPES, roleLevels: ROLE_LEVELS,
+    certs: CERTS, units: UNITS, registry: RULE_REGISTRY, staffingMin: UNIT_MIN_STAFF,
+  });
+  const gap = {
+    date: p.d, shift: p.s, unit: p.u,
+    requiredRole: '護理師',
+    requiredCerts: p.c ? p.c.split(',').filter(Boolean) : [],
+    originalStaffId: null,
+  };
+  const { candidates, excluded } = engine.evaluateGap(gap);
+
+  const head = `【替補建議】${shortDate(gap.date)}（${weekdayOf(gap.date)}）${SHIFT_TYPES[gap.shift].name}｜${UNITS[gap.unit]}\n` +
+    `需求：護理師以上${gap.requiredCerts.length ? '＋' + gap.requiredCerts.map((c) => CERTS[c].replace(/\s.*/, '')).join('、') : ''}`;
+
+  if (candidates.length === 0) {
+    const codes = [...new Set(excluded.flatMap((e) => e.violations.map((v) => v.code)))].filter((c) => c !== '—');
+    return [
+      head, '',
+      `⚠ 查無合格替補（${excluded.length} 人全數排除，涉及規則：${codes.join('、')}）。`,
+      '請至平台查看放寬試算與第 3 層任務重分配（決策階梯會引導）：',
+      platformUrl,
+      '',
+      '＊示範資料（虛構人員）；正式決策以平台留痕為準',
+    ].join('\n');
+  }
+
+  const medal = ['1️⃣', '2️⃣', '3️⃣'];
+  const top = candidates.slice(0, 3).map((c, i) => {
+    const why = [...c.score.breakdown].sort((a, b) => b.points - a.points).slice(0, 2)
+      .map((b) => `${b.name} ${b.points} 分`).join('、');
+    const warn = c.flags.length ? `\n　⚠ ${c.flags.map((f) => f.code).join('、')}${c.needsApproval ? '（需額外核准）' : ''}` : '';
+    return `${medal[i]} ${c.staff.id}　${c.score.total}／${c.score.maxTotal} 分\n　${why}${warn}`;
+  }).join('\n');
+
+  const exCodes = [...new Set(excluded.flatMap((e) => e.violations.map((v) => v.code)))].filter((c) => c !== '—');
+  return [
+    head, '', top, '',
+    `另有 ${excluded.length} 人被排除（${exCodes.slice(0, 4).join('、')}），逐筆原因見平台。`,
+    '正式指派請至平台完成主管確認（寫回班表＋決策留痕）：',
     platformUrl,
     '',
-    '－機器人只做解析與轉達，不做任何排班決定；',
-    '　解析為確定性關鍵詞規則，內容以主管確認為準－',
-  );
-  return lines.join('\n');
+    '＊建議由確定性引擎計算；機器人不做指派決定',
+    '＊示範資料（虛構人員）',
+  ].join('\n');
 }
+
+/* ── 事件處理 ── */
 
 const welcomeText = (platformUrl) => [
   '【班守 ShiftGuard】值班通報機器人',
   '',
-  '臨時請假／缺班，把訊息直接傳到這裡，我會解析日期、班別與事由並轉達值班主管。',
-  '範例：「護理長不好意思，我明天白班發燒沒辦法上，很抱歉」',
+  '臨時請假／缺班，把訊息直接傳到這裡：',
+  '範例：「護理長不好意思，我明天白班發燒沒辦法上」',
+  '',
+  '我會解析日期、班別與事由；缺的條件用按鈕點選，',
+  '條件齊全後直接給你合規的替補建議排序。',
   '',
   '提醒：請以人員代號通報；訊息中請勿包含任何病人資訊。',
   `平台入口：${platformUrl}`,
@@ -82,18 +180,56 @@ const welcomeText = (platformUrl) => [
 
 async function handleEvent(ev, env) {
   const platformUrl = env.PLATFORM_URL || 'https://bobyu89.github.io/nursing-agent/';
+  const token = env.LINE_CHANNEL_ACCESS_TOKEN;
+
   if (ev.type === 'follow' && ev.replyToken) {
-    return lineReply(env.LINE_CHANNEL_ACCESS_TOKEN, ev.replyToken, welcomeText(platformUrl));
+    return lineReply(token, ev.replyToken, welcomeText(platformUrl));
   }
+
+  /* 按鈕回傳：條件逐步補齊 → 齊全即評估 */
+  if (ev.type === 'postback' && ev.replyToken) {
+    const p = decodeParams(ev.postback && ev.postback.data);
+    if (!p.d) return lineReply(token, ev.replyToken, '這筆通報的日期不明，請重新傳一次請假訊息（例：我明天白班沒辦法上）。');
+    const ask = askNext(p);
+    if (ask) return lineReply(token, ev.replyToken, ask.text, ask.items);
+    return lineReply(token, ev.replyToken, evaluateAndFormat(p, platformUrl));
+  }
+
   if (ev.type !== 'message' || !ev.message || ev.message.type !== 'text' || !ev.replyToken) return;
 
+  /* 文字訊息：確定性解析 → 顯示解析結果 → 續問缺漏條件 */
   const text = String(ev.message.text || '').slice(0, 2000);
-  // mock 解析的日期換算基準取自 GAP_EVENT.raisedAt（demo 固定日）；
-  // 通報機器人以「台灣的今天」為基準，「明天／禮拜天」才會算對
-  globalThis.GAP_EVENT.raisedAt = `${todayTaipei()} 08:00`;
-  globalThis.LLM.mode = 'mock';   // Worker 恆為確定性解析，不走任何外部端點
+  globalThis.GAP_EVENT.raisedAt = `${todayTaipei()} 08:00`;   // 「明天」以台灣今天為基準
+  globalThis.LLM.mode = 'mock';                                // 恆為確定性解析
   const parsed = await globalThis.llmParseGapMessage(text);
-  return lineReply(env.LINE_CHANNEL_ACCESS_TOKEN, ev.replyToken, formatParsed(parsed, platformUrl));
+  const ex = (parsed && parsed.extracted) || {};
+
+  const lines = ['【班守 ShiftGuard】已收到缺班通報，解析如下：'];
+  ['date', 'shift', 'unit', 'requiredCerts', 'reason'].forEach((f) => {
+    if (ex[f] && ex[f].label) lines.push(`・${FIELD_TW[f]}：${ex[f].label}`);
+  });
+
+  const p = {
+    d: ex.date && ex.date.value ? ex.date.value : null,
+    s: ex.shift && ex.shift.value ? ex.shift.value : null,
+    u: ex.unit && ex.unit.value ? ex.unit.value : null,
+    c: ex.requiredCerts && Array.isArray(ex.requiredCerts.value) && ex.requiredCerts.value.length
+      ? ex.requiredCerts.value.join(',') : null,
+  };
+
+  if (!p.d) {
+    lines.push('', '訊息中的日期無法明確換算（或含多個時間線索）——',
+      '請補傳一句明確的說法，例如「明天」「8/20」「下週三」。');
+    return lineReply(token, ev.replyToken, lines.join('\n'));
+  }
+
+  const ask = askNext(p);
+  if (ask) {
+    lines.push('', ask.text);
+    return lineReply(token, ev.replyToken, lines.join('\n'), ask.items);
+  }
+  lines.push('', '條件齊全，開始評估──');
+  await lineReply(token, ev.replyToken, evaluateAndFormat(p, platformUrl));
 }
 
 export default {
