@@ -6,9 +6,13 @@
   <!-- CSP：只允許同源資源；file: 是為了保留「雙擊 index.html 離線可跑」的流程；
        connect-src 保留 https 供 api 模式呼叫 LLM 端點；不載入任何第三方資源 -->
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'">
+        content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' file: data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'">
   <meta name="referrer" content="no-referrer">
   <title>班守 ShiftGuard｜醫護排班治理平台</title>
+  <!-- 字型與 Landing Page 同語彙；離線雙擊時自動退回系統字型，功能不受影響 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500;700&family=Noto+Serif+TC:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
@@ -22,6 +26,7 @@
     </div>
   </div>
   <div class="topbar-right">
+    <a class="badge badge-llm" href="home.html">← 回首頁</a>
     <span class="badge badge-demo">模擬資料 · 非真實人員</span>
     <span class="badge badge-llm" id="llm-mode-badge">LLM 模式：載入中</span>
   </div>
