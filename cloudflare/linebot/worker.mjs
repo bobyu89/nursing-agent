@@ -86,7 +86,17 @@ function validSignature(secret, rawBody, signature) {
   return mac.length === sig.length && crypto.timingSafeEqual(mac, sig);
 }
 
-/** 回覆訊息（可含快速回覆按鈕） */
+/** 低階回覆：直接送 messages 陣列（文字、Flex 皆可） */
+async function lineReplyMessages(channelToken, replyToken, messages) {
+  const res = await fetch('https://api.line.me/v2/bot/message/reply', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${channelToken}` },
+    body: JSON.stringify({ replyToken, messages }),
+  });
+  if (!res.ok) console.log('LINE reply failed:', res.status, await res.text());
+}
+
+/** 回覆文字訊息（可含快速回覆按鈕） */
 async function lineReply(channelToken, replyToken, text, quickItems) {
   const message = { type: 'text', text: text.slice(0, 4900) };
   if (quickItems && quickItems.length) {
@@ -97,12 +107,7 @@ async function lineReply(channelToken, replyToken, text, quickItems) {
       })),
     };
   }
-  const res = await fetch('https://api.line.me/v2/bot/message/reply', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${channelToken}` },
-    body: JSON.stringify({ replyToken, messages: [message] }),
-  });
-  if (!res.ok) console.log('LINE reply failed:', res.status, await res.text());
+  return lineReplyMessages(channelToken, replyToken, [message]);
 }
 
 /* ── 缺班條件的無狀態編碼（postback data ≤ 300 字，綽綽有餘）── */
@@ -264,16 +269,103 @@ async function draftAndFormat(p, platformUrl) {
   };
 }
 
+/* ── 戰情儀表板（Flex Message）──────────────────────────
+ * 與平台管理總覽同一份引擎即時計算：缺口方程式、帶班平衡、單點依賴、
+ * 證照效期、結構性訊號＋前三項行動。輸入「儀表板」即生成。
+ */
+const C = { red: '#B0413E', amber: '#A8842C', green: '#5E7F58', ink: '#3D3A34', faint: '#8A877E', line: '#E4E1D9' };
+
+function buildDashboardFlex(platformUrl) {
+  const eng = createEngine({
+    staff: STAFF, shifts: SHIFTS, shiftTypes: SHIFT_TYPES, roleLevels: ROLE_LEVELS,
+    ladderLevels: LADDER_LEVELS, certs: CERTS, units: UNITS,
+    registry: RULE_REGISTRY, staffingMin: UNIT_MIN_STAFF,
+  });
+  const UNIT = 'MED-3A';
+  const gap = eng.workforceGapAnalysis({ dates: WEEK_DATES, demand: UNIT_MIN_STAFF });
+  const cap = eng.capabilityAnalysis({ dates: WEEK_DATES, unit: UNIT });
+
+  const cells = gap.cells.filter((c) => c.unit === UNIT);
+  const gapCells = cells.filter((c) => c.gap > 0);
+  const need = cells.reduce((n, c) => n + c.need, 0);
+  const sched = cells.reduce((n, c) => n + Math.min(c.scheduled, c.need), 0);
+  const fills = gap.absorb.fills.filter((f) => f.unit === UNIT);
+  const flagged = fills.filter((f) => f.flags.length > 0);
+  const residual = gap.absorb.residual.filter((u) => u.unit === UNIT).length;
+  const structural = gap.structural.filter((s) => s.unit === UNIT);
+
+  const balance = ['D', 'E', 'N'].map((code) => {
+    const staffed = cap.shiftMix.filter((x) => x.shift === code && !x.empty);
+    return { code, staffed: staffed.length, ok: staffed.filter((x) => x.hasSenior).length };
+  }).filter((b) => b.staffed > 0);
+  const worst = balance.reduce((w, b) => (b.ok / b.staffed < w.ok / w.staffed ? b : w), balance[0]);
+  const sp = cap.certSinglePoints.filter((c) => c.count <= 1);
+  const expired = cap.expiring.filter((x) => x.status === 'expired').length;
+  const expSoon = cap.expiring.filter((x) => x.status === 'expiring').length;
+
+  const kpiRow = (label, value, color) => ({
+    type: 'box', layout: 'horizontal', margin: 'md',
+    contents: [
+      { type: 'text', text: label, size: 'sm', color: C.ink, flex: 5 },
+      { type: 'text', text: value, size: 'sm', weight: 'bold', color, align: 'end', flex: 3 },
+    ],
+  });
+  const actions = [];
+  balance.filter((b) => b.ok < b.staffed).forEach((b) =>
+    actions.push(`${SHIFT_TYPES[b.code].name}資深覆蓋 ${b.ok}/${b.staffed} 天 → 輪入 N3↑`));
+  sp.forEach((c) => actions.push(`${CERTS[c.code].replace(/\s.*/, '')}${c.count === 0 ? '無人持有' : `僅 ${c.holders[0]}`} → 培訓第二人`));
+  if (expired) actions.push(`${expired} 張證照已過期 → 安排回訓`);
+  if (flagged.length) actions.push(`吸收方案 ${flagged.length} 筆有公平代價 → 留意集中`);
+
+  return {
+    type: 'flex',
+    altText: `班守戰情：缺口 ${gapCells.length} 班次、殘餘 ${residual}、行動 ${actions.length} 項`,
+    contents: {
+      type: 'bubble',
+      body: {
+        type: 'box', layout: 'vertical', paddingAll: 'lg',
+        contents: [
+          { type: 'text', text: '班守 ShiftGuard｜今日戰情', weight: 'bold', size: 'md', color: C.ink },
+          { type: 'text', text: `${UNITS[UNIT]}・本週（示範資料）`, size: 'xs', color: C.faint, margin: 'sm' },
+          { type: 'separator', margin: 'lg', color: C.line },
+          { type: 'text', margin: 'lg', size: 'sm', color: C.ink, wrap: true,
+            text: `缺口方程式：需 ${need} − 排 ${sched} ＝ 缺 ${gapCells.length} → 可吸收 ${fills.length} ＝ 殘餘 ${residual}` },
+          kpiRow('殘餘缺口', `${residual} 班次`, residual ? C.red : C.green),
+          kpiRow(`帶班平衡（最弱：${SHIFT_TYPES[worst.code].name}）`, `${worst.ok}/${worst.staffed} 天`, worst.ok < worst.staffed ? C.red : C.green),
+          kpiRow('資格單點依賴', `${sp.length} 項`, sp.length ? C.red : C.green),
+          kpiRow('證照 過期＋將到期', `${expired}＋${expSoon}`, (expired + expSoon) ? C.amber : C.green),
+          kpiRow('結構性缺口', structural.length ? structural.map((s) => SHIFT_TYPES[s.shift].name).join('、') : '無', structural.length ? C.red : C.green),
+          { type: 'separator', margin: 'lg', color: C.line },
+          { type: 'text', text: '需要行動', weight: 'bold', size: 'sm', color: C.ink, margin: 'lg' },
+          ...(actions.length ? actions.slice(0, 3).map((t) => ({
+            type: 'text', text: `・${t}`, size: 'xs', color: C.ink, wrap: true, margin: 'sm',
+          })) : [{ type: 'text', text: '目前無需行動事項', size: 'xs', color: C.faint, margin: 'sm' }]),
+        ],
+      },
+      footer: {
+        type: 'box', layout: 'vertical', paddingAll: 'md',
+        contents: [{
+          type: 'button', style: 'primary', height: 'sm', color: C.ink,
+          action: { type: 'uri', label: '開啟完整儀表板', uri: platformUrl },
+        }],
+      },
+    },
+  };
+}
+
+const DASHBOARD_RE = /^(儀表板|戰情|狀態|缺口|dashboard)$/i;
+
 /* ── 事件處理 ── */
 
 const welcomeText = (platformUrl) => [
   '【班守 ShiftGuard】值班通報機器人',
   '',
-  '臨時請假／缺班，把訊息直接傳到這裡：',
-  '範例：「護理長不好意思，我明天白班發燒沒辦法上」',
-  '',
-  '我會解析日期、班別與事由；缺的條件用按鈕點選，',
-  '條件齊全後直接給你合規的替補建議排序。',
+  '兩種用法：',
+  '① 通報缺班：直接傳請假訊息，例如',
+  '　「護理長不好意思，我明天白班發燒沒辦法上」',
+  '　我會解析並用按鈕補條件，給你合規替補建議。',
+  '② 看戰情：輸入「儀表板」，立刻回覆本週缺口、',
+  '　帶班平衡、單點依賴與需要行動的事項。',
   '',
   '提醒：請以人員代號通報；訊息中請勿包含任何病人資訊。',
   `平台入口：${platformUrl}`,
@@ -335,8 +427,11 @@ async function handleEvent(ev, env) {
 
   if (ev.type !== 'message' || !ev.message || ev.message.type !== 'text' || !ev.replyToken) return;
 
-  /* 文字訊息：確定性解析 → 顯示解析結果 → 續問缺漏條件 */
+  /* 文字訊息：儀表板指令 → Flex 戰情卡；其餘走解析流程 */
   const text = String(ev.message.text || '').slice(0, 2000);
+  if (DASHBOARD_RE.test(text.trim())) {
+    return lineReplyMessages(token, ev.replyToken, [buildDashboardFlex(platformUrl)]);
+  }
   globalThis.GAP_EVENT.raisedAt = `${todayTaipei()} 08:00`;   // 「明天」以台灣今天為基準
   globalThis.LLM.mode = 'mock';                                // 恆為確定性解析
   const parsed = await globalThis.llmParseGapMessage(text);
