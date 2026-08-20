@@ -580,3 +580,65 @@ tbody tr:hover td { background: #142a3d; }
   }
   html { scroll-behavior: auto; }
 }
+
+/* ── ⌂ 系統入口（Portal）─────────────────────────────── */
+.portal-head { text-align: center; margin: 26px 0 26px; }
+.portal-head h1 { font-size: 34px; }
+.portal-head .lede { margin-left: auto; margin-right: auto; }
+
+.portal-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+  max-width: 880px; margin: 0 auto;
+}
+.portal-card {
+  appearance: none; font: inherit; text-align: left; cursor: pointer;
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 14px;
+  padding: 26px 26px 22px; display: flex; flex-direction: column; gap: 10px;
+  box-shadow: var(--shadow);
+  transition: border-color .18s ease, transform .15s ease, box-shadow .18s ease;
+}
+.portal-card:hover { border-color: var(--brand); transform: translateY(-2px); box-shadow: 0 4px 26px rgba(79,179,197,.18); }
+.portal-card:active { transform: translateY(0); }
+.portal-glyph {
+  width: 52px; height: 52px; border-radius: 13px; flex: none;
+  display: grid; place-items: center;
+  font-family: var(--font-display); font-size: 26px; font-weight: 400;
+  background: var(--brand-tint); color: var(--brand-dark);
+  border: 1px solid #1d4254;
+}
+.portal-card h2 { font-family: var(--font-display); font-weight: 400; font-size: 24px; letter-spacing: 0; }
+.portal-card p { margin: 0; font-size: 13.5px; color: var(--ink-soft); line-height: 1.8; flex: 1; }
+.portal-status { font-size: 12.5px; color: var(--ink-faint); }
+.portal-status b { color: var(--warn); }
+.portal-go { font-size: 14px; font-weight: 700; color: var(--brand-dark); margin-top: 4px; }
+.portal-card:hover .portal-go { text-decoration: underline; text-underline-offset: 3px; }
+
+.portal-sub {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px; max-width: 880px; margin: 16px auto 0;
+}
+.portal-mini {
+  appearance: none; font: inherit; text-align: left; cursor: pointer;
+  color: var(--ink-soft); background: none;
+  border: 1px solid var(--line); border-radius: 10px; padding: 13px 16px;
+  display: flex; flex-direction: column; gap: 2px;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.portal-mini:hover { border-color: var(--ink-faint); color: var(--ink); background: var(--surface); }
+.portal-mini b { font-size: 13.5px; color: var(--ink); }
+.portal-mini span { font-size: 12px; color: var(--ink-faint); }
+
+@media (max-width: 720px) {
+  .portal-grid { grid-template-columns: 1fr; }
+  .portal-head h1 { font-size: 26px; }
+}
+
+/* ── 9. FHIR 介接 ─────────────────────────────────────── */
+.fhir-pre {
+  margin: 12px 0 0; padding: 14px 16px; max-height: 420px; overflow: auto;
+  background: #0d2030; border: 1px solid var(--line); border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; line-height: 1.6; color: var(--ink-soft);
+  white-space: pre; tab-size: 2;
+}

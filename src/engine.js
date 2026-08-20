@@ -67,6 +67,24 @@ function weekDatesOf(dateStr) {
 }
 
 const HOUR_MS = 3600 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * 四週彈性工時的「固定週期」劃分（勞基法第 30 條之 1）。
+ * 週期不是滾動窗口：自錨點（雇主公告的週期起始日）起每 periodDays 天一期，
+ * 勞檢即以固定週期核對。Math.round 吸收跨日光節約時區的毫秒誤差；
+ * 負索引（錨點之前的日期）由 Math.floor 正確歸入前面的週期。
+ */
+function cycleStartOf(dateStr, periodDays, anchor) {
+  const diff = Math.round((parseDate(dateStr) - parseDate(anchor)) / DAY_MS);
+  return addDays(anchor, Math.floor(diff / periodDays) * periodDays);
+}
+
+/** 該日期所屬固定週期的全部日期 */
+function cycleDatesOf(dateStr, periodDays, anchor) {
+  const start = cycleStartOf(dateStr, periodDays, anchor);
+  return Array.from({ length: periodDays }, (_, i) => addDays(start, i));
+}
 
 function clamp01(x) {
   return Math.max(0, Math.min(1, x));
@@ -113,6 +131,15 @@ function createEngine(db) {
 
   function totalSoftWeight() {
     return db.registry.soft.reduce((sum, r) => sum + r.weight, 0);
+  }
+
+  /**
+   * 四週彈性工時週期錨點：由資料層注入（院方行事曆公告的週期起始日）。
+   * 未注入時退回 1970-01-05（週一的中性紀元），任何日期都能穩定歸期，
+   * 但正式導入時必須注入真實錨點，否則週期劃分與院方公告不一致。
+   */
+  function flexAnchor() {
+    return db.flexCycleAnchor || '1970-01-05';
   }
 
   /**
@@ -268,6 +295,59 @@ function createEngine(db) {
       const projected = weeklyHours(staff.id, gap.date) + db.shiftTypes[gap.shift].hours;
       if (projected > cap) {
         violations.push({ code: 'H6', detail: `替補後當週工時 ${projected} 小時，超過絕對上限 ${cap} 小時` });
+      }
+    }
+
+    /* ── 四週彈性工時（勞基法第 30 條之 1；固定週期制，錨點由資料層注入）──
+     * H7 雙週例假／H8 四週工時總量／H9 四週休息日總量。
+     * 「已排班日集合 + 缺班日」的天數計算刻意用 Set：同一日多筆班次
+     * （H2 停用時可能出現）只算一天，工時則照實累計。 */
+
+    // H7 每二週內至少 N 日例假
+    const h7 = getHardRule('H7');
+    if (h7 && h7.enabled) {
+      const minRest = getHardParam('H7', 2);
+      const period = cycleDatesOf(gap.date, 14, flexAnchor());
+      const worked = new Set(shiftsOf(staff.id).filter((s) => period.includes(s.date)).map((s) => s.date));
+      worked.add(gap.date);
+      const off = 14 - worked.size;
+      if (off < minRest) {
+        violations.push({
+          code: 'H7',
+          detail: `替補後二週週期（${shortDate(period[0])}–${shortDate(period[13])}）僅餘 ${off} 日例假，未達法定 ${minRest} 日`,
+        });
+      }
+    }
+
+    // H8 每四週正常工時總量上限
+    const h8 = getHardRule('H8');
+    if (h8 && h8.enabled) {
+      const cap = getHardParam('H8', 160);
+      const period = cycleDatesOf(gap.date, 28, flexAnchor());
+      const hours = shiftsOf(staff.id)
+        .filter((s) => period.includes(s.date))
+        .reduce((sum, s) => sum + db.shiftTypes[s.shift].hours, 0) + db.shiftTypes[gap.shift].hours;
+      if (hours > cap) {
+        violations.push({
+          code: 'H8',
+          detail: `替補後四週週期（${shortDate(period[0])}–${shortDate(period[27])}）工時 ${hours} 小時，超過正常工時總量 ${cap} 小時`,
+        });
+      }
+    }
+
+    // H9 每四週內例假＋休息日至少 N 日
+    const h9 = getHardRule('H9');
+    if (h9 && h9.enabled) {
+      const minOff = getHardParam('H9', 8);
+      const period = cycleDatesOf(gap.date, 28, flexAnchor());
+      const worked = new Set(shiftsOf(staff.id).filter((s) => period.includes(s.date)).map((s) => s.date));
+      worked.add(gap.date);
+      const off = 28 - worked.size;
+      if (off < minOff) {
+        violations.push({
+          code: 'H9',
+          detail: `替補後四週週期（${shortDate(period[0])}–${shortDate(period[27])}）僅餘 ${off} 日例假與休息日，未達法定 ${minOff} 日`,
+        });
       }
     }
 
@@ -452,6 +532,9 @@ function createEngine(db) {
     const softCap = getSoftParam('S2', 48);
     const hardCap = getHardParam('H6', 60);
     const saturation = getSoftParam('S1', 5);
+    const biweekRest = getHardParam('H7', 2);
+    const fourWeekCap = getHardParam('H8', 160);
+    const fourWeekOff = getHardParam('H9', 8);
 
     db.staff.forEach((staff) => {
       const ss = shiftsOf(staff.id).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -495,6 +578,39 @@ function createEngine(db) {
         } else if (weeks[wk] >= softCap) {
           warnings.push({ level: 'medium', code: 'F1', staffId: staff.id,
             text: `${shortDate(wk)} 起當週已排 ${weeks[wk]} 小時，已達軟性上限 ${softCap} 小時，不宜再指派` });
+        }
+      });
+
+      // 四週彈性工時固定週期：二週例假（H7）、四週工時與休息日總量（H8／H9）
+      const p14 = {};
+      const p28 = {};
+      ss.forEach((s) => {
+        const k14 = cycleStartOf(s.date, 14, flexAnchor());
+        (p14[k14] = p14[k14] || new Set()).add(s.date);
+        const k28 = cycleStartOf(s.date, 28, flexAnchor());
+        const rec = (p28[k28] = p28[k28] || { days: new Set(), hours: 0 });
+        rec.days.add(s.date);
+        rec.hours += db.shiftTypes[s.shift].hours;
+      });
+      Object.entries(p14).forEach(([start, days]) => {
+        const off = 14 - days.size;
+        if (off < biweekRest) {
+          warnings.push({ level: 'high', code: 'H7', staffId: staff.id,
+            text: `${shortDate(start)} 起二週週期已排 ${days.size} 天，僅餘 ${off} 日例假（法定至少 ${biweekRest} 日）` });
+        }
+      });
+      Object.entries(p28).forEach(([start, rec]) => {
+        if (rec.hours > fourWeekCap) {
+          warnings.push({ level: 'high', code: 'H8', staffId: staff.id,
+            text: `${shortDate(start)} 起四週週期已排 ${rec.hours} 小時，超過正常工時總量 ${fourWeekCap} 小時` });
+        } else if (rec.hours + 8 > fourWeekCap) {
+          warnings.push({ level: 'medium', code: 'H8', staffId: staff.id,
+            text: `${shortDate(start)} 起四週週期已排 ${rec.hours} 小時，再排一班即超過正常工時總量 ${fourWeekCap} 小時` });
+        }
+        const off = 28 - rec.days.size;
+        if (off < fourWeekOff) {
+          warnings.push({ level: 'high', code: 'H9', staffId: staff.id,
+            text: `${shortDate(start)} 起四週週期已排 ${rec.days.size} 天，僅餘 ${off} 日例假與休息日（法定至少 ${fourWeekOff} 日）` });
         }
       });
 
@@ -674,6 +790,7 @@ function createEngine(db) {
         shiftTypes: db.shiftTypes, roleLevels: db.roleLevels,
         certs: db.certs, units: db.units,
         registry: db.registry, staffingMin: db.staffingMin,
+        flexCycleAnchor: db.flexCycleAnchor,
       });
       const fills = [];
       const unfilled = [];
@@ -785,6 +902,7 @@ function createEngine(db) {
       shiftTypes: db.shiftTypes, roleLevels: db.roleLevels,
       certs: db.certs, units: db.units,
       registry: db.registry, staffingMin: db.staffingMin,
+      flexCycleAnchor: db.flexCycleAnchor,
     });
 
     const totalCount = {};
@@ -887,6 +1005,7 @@ function createEngine(db) {
       shiftTypes: db.shiftTypes, roleLevels: db.roleLevels,
       certs: db.certs, units: db.units,
       registry: db.registry, staffingMin: db.staffingMin,
+      flexCycleAnchor: db.flexCycleAnchor,
     });
   }
 
@@ -1085,5 +1204,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     createEngine, parseDate, formatDate, addDays, weekdayOf,
     shortDate, weekDatesOf, WEEKDAY_TW, isValidDateStr, reallocateTasks,
+    cycleStartOf, cycleDatesOf,
   };
 }

@@ -35,6 +35,7 @@ const engine = createEngine({
   units: UNITS,
   registry: RULE_REGISTRY,
   staffingMin: UNIT_MIN_STAFF,
+  flexCycleAnchor: FLEX_CYCLE_ANCHOR,
 });
 
 const $ = (sel) => document.querySelector(sel);
@@ -111,6 +112,9 @@ const PARAM_RANGE = {
   H4: [0, 24],    // 班間休息時數
   H5: [1, 14],    // 連續上班天數上限
   H6: [8, 168],   // 週工時絕對上限
+  H7: [0, 14],    // 二週週期最少例假日數
+  H8: [40, 320],  // 四週正常工時總量上限
+  H9: [0, 28],    // 四週週期最少例假＋休息日數
   S1: [1, 99],    // 公平性飽和次數
   S2: [8, 168],   // 週工時軟性上限
 };
@@ -205,30 +209,36 @@ function resetSchedule() {
   location.reload();
 }
 
-/** 班表變更後的統一重算：排班工作區、缺口總覽、能力儀表板、主動預警 */
+/** 班表變更後的統一重算：排班工作區、缺口總覽、能力儀表板、主動預警、入口狀態、FHIR 統計 */
 function refreshAfterScheduleChange() {
   renderRoster();
   renderOverview();
   renderCapability();
   renderWarnings();
+  renderPortalStatus();
+  renderFhirStats();
 }
 
 /* ══ 兩層導覽與分頁切換 ═════════════════════════════════
- * 4 個大分頁收納 10 個畫面；畫面 id 與編號不變（台本與文件以編號指涉）。 */
+ * 首層依「系統」分流：入口 → 排班系統／替班系統 → 總覽／治理。
+ * 畫面 id 與編號不變（台本與文件以編號指涉）。 */
 
 const NAV_GROUPS = [
-  { key: 'ov', label: '總覽', screens: [
-    ['overview', '人力缺口', '◎'], ['capability', '能力與出勤', '★'],
+  { key: 'home', label: '入口', screens: [
+    ['portal', '系統入口', '⌂'],
   ] },
-  { key: 'gap', label: '缺班處理', screens: [
+  { key: 'sched', label: '排班系統', screens: [
+    ['roster', '班表工作區', '5'], ['generate', '班表生成', '8'],
+  ] },
+  { key: 'gap', label: '替班系統', screens: [
     ['intake', '通報解析', '1'], ['candidates', '替補候選', '2'],
     ['confirm', '主管確認', '3'], ['multi', '多筆與韌性', '7'],
   ] },
-  { key: 'sched', label: '排班', screens: [
-    ['roster', '班表工作區', '5'], ['generate', '班表生成', '8'],
+  { key: 'ov', label: '總覽', screens: [
+    ['overview', '人力缺口', '◎'], ['capability', '能力與出勤', '★'],
   ] },
   { key: 'gov', label: '治理', screens: [
-    ['dashboard', '公平與留痕', '4'], ['rules', '規則庫', '6'],
+    ['dashboard', '公平與留痕', '4'], ['rules', '規則庫', '6'], ['fhir', 'FHIR 介接', '9'],
   ] },
 ];
 
@@ -248,7 +258,45 @@ function renderNav(active) {
 function switchScreen(name) {
   $$('.screen').forEach((s) => s.classList.toggle('active', s.id === `screen-${name}`));
   renderNav(name);
+  // 讓每個畫面可直接以 #hash 連結（home.html 的「排班／替班」按鈕即靠這個進場）
+  try { history.replaceState(null, '', `#${name}`); } catch (e) { /* file:// 受限時略過 */ }
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/** 進場畫面：#hash 指名畫面（#roster）或分組（#sched → 該組第一個畫面），否則入口 */
+function screenFromHash() {
+  const h = decodeURIComponent((location.hash || '').replace(/^#/, ''));
+  if (h && document.getElementById(`screen-${h}`)) return h;
+  const g = NAV_GROUPS.find((x) => x.key === h);
+  return g ? g.screens[0][0] : 'portal';
+}
+
+/* ══ ⌂ 系統入口（Portal）═══════════════════════════════ */
+
+/** 入口卡上的即時狀態：排班側看違規預警與缺口，替班側看缺口可否合法吸收。
+ *  口徑與「人力缺口總覽」一致：只算名單完整的示範單位（內科 3A），
+ *  避免部分名單單位的殘缺資料撐出嚇人的假數字。 */
+function renderPortalStatus() {
+  const schedEl = $('#portal-sched-status');
+  const gapEl = $('#portal-gap-status');
+  if (!schedEl || !gapEl) return;
+  const UNIT = 'MED-3A';
+  const high = engine.rosterWarnings().filter((w) => w.level === 'high').length;
+  const r = engine.workforceGapAnalysis({ dates: WEEK_DATES, demand: UNIT_MIN_STAFF });
+  const gapCells = r.cells.filter((c) => c.unit === UNIT && c.gap > 0).length;
+  const residual = r.absorb.residual.filter((u) => u.unit === UNIT).length;
+  schedEl.innerHTML = high
+    ? `目前班表有 <b>${high}</b> 條「已違規」預警（工時／班距／四週彈性工時），請優先處理`
+    : `目前班表無「已違規」預警；${UNITS[UNIT]}本週尚有 <b>${gapCells}</b> 個缺口班次可從源頭排補`;
+  gapEl.innerHTML = residual
+    ? `${UNITS[UNIT]}本週 ${gapCells} 個缺口中 <b>${residual}</b> 個無人可合法替補，需走升級路徑`
+    : `${UNITS[UNIT]}本週 ${gapCells} 個缺口皆有合法替補人選可指派`;
+}
+
+function initPortal() {
+  $('#portal-sched').addEventListener('click', () => switchScreen('roster'));
+  $('#portal-gap').addEventListener('click', () => switchScreen('intake'));
+  $$('.portal-mini').forEach((b) => b.addEventListener('click', () => switchScreen(b.dataset.goto)));
 }
 
 /* ══ 儀表板圖表：手寫 SVG（零依賴，深色主題原生）═══════ */
@@ -1861,6 +1909,149 @@ function handleRecalc() {
   renderOverview();   // 門檻改變會影響缺口與吸收模擬
 }
 
+/* ══ 畫面 9：FHIR 介接 ═════════════════════════════════ */
+
+/** FHIR 轉換使用與引擎同一份注入資料（同一份參照，寫回即時反映） */
+function fhirDb() {
+  return { staff: STAFF, shifts: SHIFTS, units: UNITS, shiftTypes: SHIFT_TYPES, certs: CERTS, ladderLevels: LADDER_LEVELS };
+}
+
+let fhirPendingImport = null;   // 「解析並驗證」通過、待主管按「套用」的班次
+
+function renderFhirStats() {
+  const el = $('#fhir-export-stats');
+  if (!el) return;
+  const stats = fhirBundleStats(fhirExportBundle(fhirDb()));
+  el.textContent = Object.entries(stats).map(([t, n]) => `${t}×${n}`).join('　');
+}
+
+async function handleFhirPush() {
+  const out = $('#fhir-push-result');
+  const base = ($('#fhir-endpoint').value || '').trim().replace(/\/+$/, '');
+  // 端點白名單：僅 https（本機測試放行 http://localhost）——班表不走明文外網
+  if (!/^https:\/\/.+/.test(base) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(base)) {
+    out.innerHTML = '<p class="fineprint" style="color:var(--danger)">請填 https:// 開頭的 FHIR Base URL（本機測試允許 http://localhost）。</p>';
+    return;
+  }
+  const btn = $('#btn-fhir-push');
+  btn.disabled = true;
+  btn.textContent = '推送中…';
+  const bundle = fhirExportBundle(fhirDb(), { mode: 'batch', timestamp: new Date().toISOString() });
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    const res = await fetch(base, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/fhir+json' },
+      body: JSON.stringify(bundle),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body.resourceType === 'Bundle' && Array.isArray(body.entry)) {
+        const codes = body.entry.map((e) => (e.response && e.response.status) || '?');
+        detail += `；${codes.filter((c) => /^2/.test(c)).length}／${codes.length} 筆資源成功`;
+      } else if (body.resourceType === 'OperationOutcome') {
+        detail += `；OperationOutcome：${(body.issue || []).map((i) => i.diagnostics || i.code).slice(0, 3).join('；')}`;
+      }
+    } catch (e) { /* 非 JSON 回應，僅顯示狀態碼 */ }
+    out.innerHTML = `<p class="fineprint" style="color:${res.ok ? 'var(--ok)' : 'var(--danger)'}">${res.ok ? '✓ 已送出' : '✗ 伺服器回應異常'}——${esc(detail)}</p>`;
+    logAction('推送 FHIR Bundle', `batch → ${base}：${detail}`);
+  } catch (err) {
+    const why = err && err.name === 'AbortError' ? '逾時（20 秒）' : String((err && err.message) || err);
+    out.innerHTML = `<p class="fineprint" style="color:var(--danger)">✗ 推送失敗：${esc(why)}——請確認網址、CORS 設定與伺服器狀態。</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '推送 batch Bundle';
+  }
+}
+
+function handleFhirImport() {
+  const out = $('#fhir-import-result');
+  fhirPendingImport = null;
+  let bundle;
+  try {
+    bundle = JSON.parse($('#fhir-import-text').value);
+  } catch (e) {
+    out.innerHTML = '<p class="fineprint" style="color:var(--danger)">✗ 不是有效的 JSON，請確認貼上內容完整。</p>';
+    return;
+  }
+  const r = fhirImportBundle(bundle, fhirDb());
+  const list = r.shifts.slice(0, 10).map((s) => `
+    <div class="fact">
+      <span><b>${esc(s.staffId)}</b>　${shortDate(s.date)}（${weekdayOf(s.date)}）</span>
+      <span>${SHIFT_TYPES[s.shift].name} @ ${esc(UNITS[s.unit])}</span>
+    </div>`).join('');
+  const errs = r.errors.slice(0, 8).map((x) => `<div class="sc-evi expired">${esc(x)}</div>`).join('');
+  out.innerHTML = `
+    <p class="fineprint">Slot 共 ${r.counts.slots} 筆：<b style="color:var(--ok)">${r.counts.imported} 筆通過白名單驗證</b>${r.counts.rejected ? `、<b style="color:var(--danger)">${r.counts.rejected} 筆拒絕</b>` : ''}。</p>
+    ${list}${r.shifts.length > 10 ? `<p class="fineprint">…其餘 ${r.shifts.length - 10} 筆略。</p>` : ''}
+    ${errs}${r.errors.length > 8 ? `<p class="fineprint">…其餘 ${r.errors.length - 8} 項錯誤略。</p>` : ''}
+    ${r.shifts.length ? `<div class="btn-row"><button class="btn btn-primary" id="btn-fhir-apply" style="margin-top:0">套用 ${r.shifts.length} 班次到班表（取代涵蓋的人員×日期）</button></div>` : ''}`;
+  if (r.shifts.length) {
+    fhirPendingImport = r.shifts;
+    $('#btn-fhir-apply').addEventListener('click', applyFhirImport);
+  }
+  logAction('FHIR Bundle 解析', `Slot ${r.counts.slots} 筆：通過 ${r.counts.imported}、拒絕 ${r.counts.rejected}${r.errors.length ? `（首項原因：${r.errors[0]}）` : ''}`);
+}
+
+function applyFhirImport() {
+  if (!fhirPendingImport) return;
+  const pairs = new Set(fhirPendingImport.map((s) => `${s.staffId}|${s.date}`));
+  for (let i = SHIFTS.length - 1; i >= 0; i--) {
+    if (pairs.has(`${SHIFTS[i].staffId}|${SHIFTS[i].date}`)) SHIFTS.splice(i, 1);
+  }
+  fhirPendingImport.forEach((s) => SHIFTS.push({ staffId: s.staffId, date: s.date, shift: s.shift, unit: s.unit }));
+  const n = fhirPendingImport.length;
+  fhirPendingImport = null;
+  saveSchedule();
+  logAction('FHIR Bundle 匯入套用', `寫入 ${n} 班次（涵蓋的人員×日期原班次已取代），經白名單驗證`);
+  refreshAfterScheduleChange();
+  renderStaffTable();
+  $('#fhir-import-result').innerHTML =
+    '<p class="fineprint" style="color:var(--ok)">✓ 已套用；可到「排班系統 → 班表工作區」檢視，變更已保存並留痕。</p>';
+}
+
+function initFhir() {
+  const pre = $('#fhir-preview');
+
+  $('#btn-fhir-download').addEventListener('click', () => {
+    const bundle = fhirExportBundle(fhirDb(), { timestamp: new Date().toISOString() });
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/fhir+json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `shiftguard-fhir-bundle-${nowStamp().replace(/[: ]/g, '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    logAction('匯出 FHIR Bundle', `collection：${Object.entries(fhirBundleStats(bundle)).map(([t, n]) => `${t}×${n}`).join('、')}`);
+  });
+
+  $('#btn-fhir-preview').addEventListener('click', () => {
+    if (!pre.hidden) {
+      pre.hidden = true;
+      $('#btn-fhir-preview').textContent = '預覽 JSON';
+      return;
+    }
+    const bundle = fhirExportBundle(fhirDb(), { timestamp: new Date().toISOString() });
+    pre.textContent = JSON.stringify(bundle, null, 2);   // textContent：JSON 不進 HTML 解析器
+    pre.hidden = false;
+    $('#btn-fhir-preview').textContent = '收合預覽';
+  });
+
+  $('#btn-fhir-copy').addEventListener('click', () => {
+    const bundle = fhirExportBundle(fhirDb(), { timestamp: new Date().toISOString() });
+    copyToClipboard(JSON.stringify(bundle, null, 2)).then((ok) => {
+      $('#btn-fhir-copy').textContent = ok ? '已複製 ✓' : '複製失敗';
+      setTimeout(() => { $('#btn-fhir-copy').textContent = '複製到剪貼簿'; }, 1600);
+    });
+  });
+
+  $('#btn-fhir-push').addEventListener('click', handleFhirPush);
+  $('#btn-fhir-import').addEventListener('click', handleFhirImport);
+}
+
 /* ══ 啟動 ═══════════════════════════════════════════════ */
 
 /**
@@ -1954,7 +2145,14 @@ function init() {
     const t = ev.target.closest('.tab');
     if (t) switchScreen(t.dataset.screen);
   });
-  renderNav('overview');
+  initPortal();
+  initFhir();
+  // 支援 #hash 直達（home.html 的「排班系統／替班系統」按鈕、書籤、返回鍵）
+  window.addEventListener('hashchange', () => {
+    const name = screenFromHash();
+    const cur = document.querySelector('.screen.active');
+    if (!cur || cur.id !== `screen-${name}`) switchScreen(name);
+  });
   $('#btn-parse').addEventListener('click', handleParse);
 
   // 範例訊息一鍵帶入並解析
@@ -2030,6 +2228,9 @@ function init() {
   renderGenScenario();
   renderOverview();
   renderCapability();
+  renderPortalStatus();
+  renderFhirStats();
+  switchScreen(screenFromHash());
 }
 
 document.addEventListener('DOMContentLoaded', init);

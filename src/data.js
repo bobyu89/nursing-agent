@@ -65,6 +65,14 @@ const LADDER_LEVELS = {
 const WEEK = { start: '2026-08-03', end: '2026-08-09', label: '2026 年 8 月第 1 週（8/03 一 – 8/09 日）' };
 const WEEK_DATES = ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07', '2026-08-08', '2026-08-09'];
 
+/* ── 四週彈性工時週期錨點（勞基法第 30 條之 1）─────────────
+ * 醫療保健服務業為勞動部指定得實施四週彈性工時之行業。
+ * 週期為「固定劃分」：自此日（須為週一）起每 28 天為一個四週週期、
+ * 對半為二週週期；H7（雙週例假）、H8（四週工時總量）、
+ * H9（四週休息日總量）皆以此劃分計算，勞檢亦以固定週期核對。
+ * 正式導入時應改為院方行事曆公告之週期起始日。 */
+const FLEX_CYCLE_ANCHOR = '2026-08-03';
+
 /* ── 人員主檔 ───────────────────────────────────────────── */
 /**
  * certs        資格代碼 → 效期（YYYY-MM-DD），過期即視為不具備
@@ -331,6 +339,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SHIFT_TYPES, UNITS, CERTS, ROLE_LEVELS, LADDER_LEVELS, WEEK, WEEK_DATES,
     STAFF, SHIFTS, RAW_MESSAGE, GAP_EVENT, UNIT_MIN_STAFF, MULTI_GAP_SCENARIO,
-    SAMPLE_MESSAGES, TASK_REALLOC_SCENARIO, GEN_SCENARIO,
+    SAMPLE_MESSAGES, TASK_REALLOC_SCENARIO, GEN_SCENARIO, FLEX_CYCLE_ANCHOR,
   };
 }

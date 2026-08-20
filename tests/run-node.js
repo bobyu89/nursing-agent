@@ -21,9 +21,11 @@ globalThis.assertEqual = (actual, expected, msg) => {
 Object.assign(globalThis, require('../src/data.js'));
 Object.assign(globalThis, require('../src/rules.js'));
 Object.assign(globalThis, require('../src/engine.js'));
+Object.assign(globalThis, require('../src/fhir.js'));
 Object.assign(globalThis, require('../src/llm.js'));
 
 require('./engine.test.js');
+require('./fhir.test.js');
 
 (async () => {
   let pass = 0, fail = 0;

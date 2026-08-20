@@ -637,3 +637,91 @@ test('班表生成：公平輪值——三人輪六天白班，每人恰好兩�
   assertEqual(r.spread.max, 2, '最多 2 班');
   assertEqual(r.spread.min, 2, '最少 2 班——完全均衡');
 });
+
+/* ── 四週彈性工時（勞基法第 30 條之 1：H7／H8／H9）── */
+
+test('H7 雙週例假：固定二週週期內排班 12 天為法定極限，第 13 天被擋', () => {
+  // 二週週期 8/03–8/16；H5 調高到 14 天以隔離變因（本測試只驗 H7）
+  const reg = structuredClone(RULE_REGISTRY);
+  reg.hard.find((r) => r.code === 'H5').param.value = 14;
+  const opts = { flexCycleAnchor: '2026-08-03', registry: reg };
+  const A = mkStaff('A');
+  const work12 = ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07',
+    '2026-08-09', '2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13',
+    '2026-08-15', '2026-08-16'].map((day) => d('A', day));   // 休 8/08、8/14
+
+  // 已排 11 天 + 缺班日 = 12 天：恰保留 2 日例假，應通過
+  const pass = mkEngine([A], work12.slice(0, 11), opts)
+    .checkHardConstraints(A, mkGap({ date: '2026-08-16' }));
+  assert(!pass.some((v) => v.code === 'H7'), `12 天恰為極限應通過，實際：${pass.map((v) => v.code).join(',')}`);
+
+  // 已排 12 天 + 缺班日 = 13 天：僅餘 1 日例假，應觸發 H7
+  const fail = mkEngine([A], work12, opts)
+    .checkHardConstraints(A, mkGap({ date: '2026-08-08' }));
+  assert(fail.some((v) => v.code === 'H7'), `二週 13 天應觸發 H7，實際：${fail.map((v) => v.code).join(',') || '（無）'}`);
+});
+
+test('H8 四週正常工時總量：160 小時為法定總量，第 161 小時起被擋', () => {
+  // 用 10 小時班隔離 H9（16 班 × 10h = 160h，但工作日僅 17 天、休息日仍 ≥ 8）
+  const types = Object.assign({}, SHIFT_TYPES, {
+    X: { code: 'X', name: '十小時班', start: '07:00', end: '17:00', hours: 10, overnight: false },
+  });
+  const opts = { flexCycleAnchor: '2026-08-03', shiftTypes: types };
+  const A = mkStaff('A');
+  // 四週（8/03–8/30）每週一～四各一班 = 16 班 × 10 小時 = 160 小時
+  const work16 = [
+    '2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06',
+    '2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13',
+    '2026-08-17', '2026-08-18', '2026-08-19', '2026-08-20',
+    '2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27',
+  ].map((day) => d('A', day, 'X'));
+
+  // 15 班 + 缺班 = 160 小時整：法規為「總量 160」，恰好用滿應通過
+  const pass = mkEngine([A], work16.slice(0, 15), opts)
+    .checkHardConstraints(A, mkGap({ date: '2026-08-27', shift: 'X' }));
+  assert(!pass.some((v) => v.code === 'H8'), `160 小時整應通過，實際：${pass.map((v) => v.code).join(',')}`);
+
+  // 16 班 + 缺班 = 170 小時：超過總量，應觸發 H8
+  const fail = mkEngine([A], work16, opts)
+    .checkHardConstraints(A, mkGap({ date: '2026-08-28', shift: 'X' }));
+  assert(fail.some((v) => v.code === 'H8'), `170 小時應觸發 H8，實際：${fail.map((v) => v.code).join(',') || '（無）'}`);
+});
+
+test('H9 四週例假與休息日總量：至少 8 日未排班，排到第 21 天被擋', () => {
+  // 用 6 小時班隔離 H8（21 班 × 6h = 126h < 160h，休息日卻只剩 7 天）
+  const types = Object.assign({}, SHIFT_TYPES, {
+    S: { code: 'S', name: '六小時班', start: '08:00', end: '14:00', hours: 6, overnight: false },
+  });
+  const opts = { flexCycleAnchor: '2026-08-03', shiftTypes: types };
+  const A = mkStaff('A');
+  // 四週每週一～五各一班 = 20 天（H5 連 5 天、H7 每二週 10 天，皆合法）
+  const work20 = [
+    '2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07',
+    '2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14',
+    '2026-08-17', '2026-08-18', '2026-08-19', '2026-08-20', '2026-08-21',
+    '2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28',
+  ].map((day) => d('A', day, 'S'));
+
+  // 19 天 + 缺班 = 20 天：恰保留 8 日休息，應通過
+  const pass = mkEngine([A], work20.slice(0, 19), opts)
+    .checkHardConstraints(A, mkGap({ date: '2026-08-28', shift: 'S' }));
+  assert(!pass.some((v) => v.code === 'H9'), `20 天恰為極限應通過，實際：${pass.map((v) => v.code).join(',')}`);
+
+  // 20 天 + 缺班（週六）= 21 天：僅餘 7 日，應觸發 H9
+  const fail = mkEngine([A], work20, opts)
+    .checkHardConstraints(A, mkGap({ date: '2026-08-29', shift: 'S' }));
+  assert(fail.some((v) => v.code === 'H9'), `21 天應觸發 H9，實際：${fail.map((v) => v.code).join(',') || '（無）'}`);
+});
+
+test('四週彈性工時：固定週期歸屬正確，且不影響既有 demo 情境', () => {
+  assertEqual(cycleStartOf('2026-08-16', 14, '2026-08-03'), '2026-08-03', '8/16 屬 8/03 起的二週週期');
+  assertEqual(cycleStartOf('2026-08-17', 14, '2026-08-03'), '2026-08-17', '8/17 起進入下一個二週週期');
+  assertEqual(cycleStartOf('2026-08-30', 28, '2026-08-03'), '2026-08-03', '8/30 屬 8/03 起的四週週期');
+  assertEqual(cycleStartOf('2026-08-02', 28, '2026-08-03'), '2026-07-06', '錨點之前的日期歸入前一個週期');
+  // demo 資料在 H7–H9 之下照常運作：合格候選與排除名單不變
+  const e = mkEngine(STAFF, SHIFTS.slice(), { flexCycleAnchor: FLEX_CYCLE_ANCHOR });
+  const ev = e.evaluateGap(GAP_EVENT);
+  assertEqual(ev.candidates.map((c) => c.staff.id), ['N-02', 'N-08', 'N-10', 'N-01'],
+    '加入 H7–H9 後 demo 劇本不得改變');
+  assert(e.rosterWarnings().every((w) => w.level !== 'high'), 'demo 班表在四週彈性工時下仍應零違規');
+});

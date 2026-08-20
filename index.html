@@ -38,8 +38,40 @@
 
 <main>
 
+  <!-- ══ ⌂ 系統入口（預設首頁）═══════════════════════ -->
+  <section class="screen active" id="screen-portal">
+    <div class="screen-head portal-head">
+      <h1>今天要做什麼？</h1>
+      <p class="lede">班守把兩件事分開做：<strong>排班</strong>是事前把班表排好、排合法；<strong>替班</strong>是臨時有人請假時，快速找到合法又公平的替補。從下面選一個開始。</p>
+    </div>
+    <div class="portal-grid">
+      <button class="portal-card" id="portal-sched">
+        <div class="portal-glyph">排</div>
+        <h2>排班系統</h2>
+        <p>排定與管理班表：點格編輯、Excel 貼上匯入、一鍵生成下週合規草稿。
+           H1–H9 規則（含勞基法四週彈性工時）在班表排出來的那一刻就把關。</p>
+        <div class="portal-status" id="portal-sched-status"></div>
+        <div class="portal-go">進入排班系統 →</div>
+      </button>
+      <button class="portal-card" id="portal-gap">
+        <div class="portal-glyph">替</div>
+        <h2>替班系統</h2>
+        <p>有人臨時請假？貼上通報訊息，Agent 解析追問、列出合格替補與完整評分依據；
+           找不到人時提供放寬試算、全局指派與任務重分配三層升級路徑。</p>
+        <div class="portal-status" id="portal-gap-status"></div>
+        <div class="portal-go">進入替班系統 →</div>
+      </button>
+    </div>
+    <div class="portal-sub">
+      <button class="portal-mini" data-goto="overview"><b>◎ 人力缺口總覽</b><span>缺多少、缺在哪、吸收後剩多少</span></button>
+      <button class="portal-mini" data-goto="capability"><b>★ 能力與出勤</b><span>證照效期、帶班平衡、公平分佈</span></button>
+      <button class="portal-mini" data-goto="dashboard"><b>公平性與決策留痕</b><span>風險預警與可稽核的 audit log</span></button>
+      <button class="portal-mini" data-goto="fhir"><b>FHIR 介接</b><span>班表 ↔ HL7 FHIR R4（TW Core IG）</span></button>
+    </div>
+  </section>
+
   <!-- ══ ◎ 人力缺口總覽（管理首頁）═══════════════════ -->
-  <section class="screen active" id="screen-overview">
+  <section class="screen" id="screen-overview">
     <div class="screen-head">
       <h1>人力缺口總覽</h1>
       <p class="lede">缺工不是「感覺人不夠」，是一筆可以算的帳：<strong>營運所需人力 − 可合法且合理排入的人力 ＝ 實際人力缺口</strong>。這一頁把缺口變成可量化、可追蹤、可行動的管理資訊——缺在哪、缺多少、吸收後剩多少、是偶發還是結構性。</p>
@@ -289,6 +321,87 @@
     <div id="gen-result"></div>
   </section>
 
+  <!-- ══ 9. FHIR 介接 ═════════════════════════════════ -->
+  <section class="screen" id="screen-fhir">
+    <div class="screen-head">
+      <h1>FHIR 介接（HL7 FHIR R4／TW Core IG）</h1>
+      <p class="lede">衛福部正以 FHIR 與台灣核心實作指引（TW Core IG）作為醫療資訊交換的推動標準。這一頁把班表轉成 <strong>Practitioner／Schedule／Slot 等標準資源</strong>與院內系統對接：匯出成檔、推送至 FHIR Server、或把外部系統的班表匯入本平台——匯入一律經白名單驗證，不合法逐筆報告、不套用。</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <h2>匯出班表為 FHIR Bundle</h2>
+          <span class="tag tag-neutral" id="fhir-export-stats">計算中</span>
+        </div>
+        <p class="fineprint" style="margin-top:0">
+          內容：Organization（醫院）＋Location（單位）＋Practitioner（人員，含證照效期與 N1–N4 進階）＋
+          PractitionerRole（職務×單位）＋Schedule（人員×單位班表）＋Slot（每一班次一筆，含替補標記；大夜跨日正確表達）。
+          人員一律代號化，不含姓名與病患資料。
+        </p>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-fhir-download" style="margin-top:0">下載 Bundle（collection）</button>
+          <button class="btn" id="btn-fhir-preview">預覽 JSON</button>
+          <button class="btn" id="btn-fhir-copy">複製到剪貼簿</button>
+        </div>
+        <pre id="fhir-preview" class="fhir-pre" hidden></pre>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>推送至 FHIR Server</h2>
+          <span class="tag tag-neutral">batch／PUT，重送不重複建立</span>
+        </div>
+        <div class="q-hint" style="color:var(--ink-faint);margin-bottom:6px">FHIR Base URL（例：https://your-server/fhir）</div>
+        <input type="text" id="fhir-endpoint" placeholder="https://twcore-fhir-server.example.tw/fhir" spellcheck="false">
+        <button class="btn btn-primary" id="btn-fhir-push">推送 batch Bundle</button>
+        <div id="fhir-push-result"></div>
+        <p class="fineprint">
+          以 POST {base} 送出、Content-Type: application/fhir+json；每筆資源帶 PUT request（idempotent upsert）。
+          DEMO 不附驗證資訊；正式導入應以 SMART on FHIR（OAuth 2.0）授權，並經院方資安審查。
+        </p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>自 FHIR Bundle 匯入班表</h2>
+        <span class="tag tag-danger">白名單驗證，不合法不套用</span>
+      </div>
+      <textarea id="fhir-import-text" rows="6" spellcheck="false"
+        placeholder="貼上 FHIR Bundle JSON（需含 Slot 及其 Schedule／Practitioner／Location 參照鏈）。&#10;可先用左上「預覽 JSON」看本平台匯出的格式。"></textarea>
+      <button class="btn btn-primary" id="btn-fhir-import">解析並驗證</button>
+      <div id="fhir-import-result"></div>
+      <p class="fineprint">
+        驗證鏈：Slot.schedule → Schedule.actor → Practitioner.identifier（staff-id）／Location.identifier（unit-id）；
+        人員、單位、日期、班別全部通過白名單才會列入套用清單。套用時僅取代匯入內容涵蓋的（人員×日期），其餘班次不動。
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>資源對映：內部資料 ↔ FHIR</h2>
+        <span class="tag tag-neutral">TW Core IG 對齊聲明</span>
+      </div>
+      <div class="table-scroll"><table>
+        <thead><tr><th>內部資料</th><th>FHIR 資源</th><th>Profile</th><th>關鍵欄位</th></tr></thead>
+        <tbody>
+          <tr><td>醫院</td><td>Organization</td><td>TW Core</td><td>name、active</td></tr>
+          <tr><td>單位（UNITS）</td><td>Location</td><td>TW Core</td><td>identifier（unit-id）、name、managingOrganization</td></tr>
+          <tr><td>人員主檔（STAFF，代號）</td><td>Practitioner</td><td>TW Core</td><td>identifier（staff-id）、qualification（證照＋效期、N1–N4／AHN）</td></tr>
+          <tr><td>職務 × 所屬單位</td><td>PractitionerRole</td><td>TW Core</td><td>practitioner、organization、code、location</td></tr>
+          <tr><td>人員 × 單位的班表</td><td>Schedule</td><td>R4 基礎</td><td>actor（Practitioner＋Location）、planningHorizon</td></tr>
+          <tr><td>班次（SHIFTS）</td><td>Slot</td><td>R4 基礎</td><td>schedule、serviceType（D／E／N）、start／end（大夜跨日）、status: busy</td></tr>
+        </tbody>
+      </table></div>
+      <p class="fineprint">
+        誠實聲明：FHIR R4 沒有「排班表」專用資源，Schedule＋Slot 是 HL7 對人員值班時段的標準表達法；
+        TW Core IG 未對此二資源另訂 profile，故以 R4 基礎資源表達，Practitioner 等四項則宣告 TW Core profile 並取必填子集。
+        命名系統目前為示範 URL，正式導入時改為院方登記之 OID／URL。
+      </p>
+    </div>
+  </section>
+
 </main>
 
 <footer class="footer">
@@ -299,6 +412,7 @@
 <script src="src/data.js"></script>
 <script src="src/rules.js"></script>
 <script src="src/engine.js"></script>
+<script src="src/fhir.js"></script>
 <script src="src/llm.js"></script>
 <script src="src/app.js"></script>
 </body>

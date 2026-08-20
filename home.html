@@ -112,6 +112,10 @@
       max-width: 42rem; margin-top: 32px; line-height: 1.8;
     }
     .hero .cta { margin-top: 48px; padding: 20px 56px; font-size: 16px; }
+    .cta-row { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin-top: 48px; }
+    .cta-row .cta { margin-top: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 46px; }
+    .cta-row .cta b { font-size: 18px; font-weight: 500; }
+    .cta-row .cta span { font-size: 12.5px; color: var(--muted-foreground); }
     .hero .cta-sub { margin-top: 18px; font-size: 13px; color: var(--muted-foreground); }
     .hero .cta-sub a { border-bottom: 1px solid var(--border); padding-bottom: 2px; }
     .hero .cta-sub a:hover { color: var(--foreground); }
@@ -175,9 +179,17 @@
       在人力最沉默的地方，把缺口變成可量化、可追蹤、可行動的管理資訊；
       每一個判斷，都交代得出依據。
     </p>
-    <a class="liquid-glass btn-glass cta animate-fade-rise-delay-2" href="index.html">進入平台</a>
+    <div class="cta-row animate-fade-rise-delay-2">
+      <a class="liquid-glass btn-glass cta" href="index.html#roster">
+        <b>排班系統</b><span>排定班表・生成合規草稿</span>
+      </a>
+      <a class="liquid-glass btn-glass cta" href="index.html#intake">
+        <b>替班系統</b><span>缺班通報・合法替補建議</span>
+      </a>
+    </div>
     <p class="cta-sub animate-fade-rise-delay-2">
-      或 <a href="https://line.me/R/ti/p/@913sepht">加入 LINE 通報機器人</a>，在聊天室裡完成通報與替補建議
+      不確定從哪開始？先進 <a href="index.html">系統入口</a>看全貌，
+      或 <a href="https://line.me/R/ti/p/@913sepht">加入 LINE 通報機器人</a>在聊天室完成通報與替補建議
     </p>
   </section>
 </div>
@@ -189,7 +201,7 @@
   <div class="grid g3">
     <div class="liquid-glass card">
       <h3>算得準</h3>
-      <p>工時、班距、連續天數、證照效期——全部由確定性規則引擎計算，45 項邊界測試釘住。語言模型不碰任何數字：算錯工時在醫療場域是合規事故，不是體驗瑕疵。</p>
+      <p>工時、班距、連續天數、證照效期、勞基法四週彈性工時——全部由確定性規則引擎計算，54 項邊界測試釘住。語言模型不碰任何數字：算錯工時在醫療場域是合規事故，不是體驗瑕疵。</p>
     </div>
     <div class="liquid-glass card">
       <h3>說得清</h3>
@@ -205,7 +217,7 @@
 <!-- ══ 功能 ═════════════════════════════════════ -->
 <section class="section" id="features">
   <h2>功能總覽</h2>
-  <p class="lead">進入平台後以四個分頁組織：總覽 ・ 缺班處理 ・ 排班 ・ 治理</p>
+  <p class="lead">進入平台後先選系統：<b>排班系統</b>（事前把班排好、排合法）或<b>替班系統</b>（臨時缺人快速找合法替補）；總覽與治理隨時在導覽列可查。</p>
   <div class="grid g2">
     <div class="liquid-glass card">
       <h3><span class="no">◎</span>人力缺口儀表板</h3>
@@ -230,6 +242,14 @@
     <div class="liquid-glass card">
       <h3><span class="no">L</span>LINE 通報機器人</h3>
       <p>通報入口放在護理師本來就在用的 LINE：訊息解析、按鈕補條件、替補建議、詢問草稿、戰情儀表板——同一份引擎，零學習成本。</p>
+    </div>
+    <div class="liquid-glass card">
+      <h3><span class="no">法</span>勞基法四週彈性工時</h3>
+      <p>醫療保健業適用的四週變形工時直接寫進硬規則：雙週例假（H7）、四週正常工時總量 160 小時（H8）、四週例假＋休息日 8 日（H9），加上班距 11 小時與連續上班上限——違法的班，在源頭就排不出來。</p>
+    </div>
+    <div class="liquid-glass card">
+      <h3><span class="no">F</span>FHIR 標準介接</h3>
+      <p>班表一鍵轉為 HL7 FHIR R4 資源（Practitioner／Schedule／Slot，對齊衛福部 TW Core IG）：可匯出存檔、推送 FHIR Server、自外部系統匯入——接軌院內系統與國家推動的交換標準。</p>
     </div>
   </div>
 </section>
@@ -260,7 +280,7 @@
   <a href="index.html">進入平台</a>　·
   <a href="https://line.me/R/ti/p/@913sepht">LINE 機器人</a>　·
   <a href="https://github.com/bobyu89/nursing-agent">GitHub</a>　·
-  <a href="tests.html">引擎測試（45 項）</a>
+  <a href="tests.html">引擎與介接測試（54 項）</a>
 </footer>
 
 </body>

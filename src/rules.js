@@ -50,9 +50,9 @@ const RULE_REGISTRY = {
       code: 'H5',
       name: '連續上班天數上限',
       desc: '替補後連續上班天數不得超過門檻',
-      basis: '勞動基準法第 36 條（例假）',
+      basis: '勞動基準法第 36 條（例假）；四週彈性工時下依勞動部函釋（勞動條 3 字第 1070130320 號）連續工作不得逾 12 日，本院從嚴以 6 日管理',
       param: { key: 'maxConsecutiveDays', label: '連續上班天數上限', value: 6, unit: '天' },
-      relax: { allowed: false, note: '法定下限，七日內必須有一日例假' },
+      relax: { allowed: false, note: '院內從嚴門檻可經主管核准調整，但法定極限（連續 12 日）絕不可逾越' },
       enabled: true,
     },
     {
@@ -62,6 +62,37 @@ const RULE_REGISTRY = {
       basis: '勞動基準法第 32 條（延長工時上限）',
       param: { key: 'hardWeeklyHourCap', label: '週工時絕對上限', value: 60, unit: '小時' },
       relax: { allowed: false, note: '法定上限，不得放寬' },
+      enabled: true,
+    },
+
+    /* ── 四週彈性工時（勞基法第 30 條之 1；醫療保健服務業為勞動部指定行業）──
+     * 週期為固定劃分（非滾動窗口）：自 FLEX_CYCLE_ANCHOR 起每 28 天一期、
+     * 對半為二週期，勞檢即以雇主公告的固定週期核對。 */
+    {
+      code: 'H7',
+      name: '雙週例假保障（四週彈性工時）',
+      desc: '任一固定二週週期內至少須保留門檻日數未排班（例假）；即二週內排班不得超過 12 天',
+      basis: '勞動基準法第 36 條第 2 項第 3 款（四週彈性工時：每二週內至少應有二日之例假）',
+      param: { key: 'biweeklyRestDays', label: '二週週期內最少例假日數', value: 2, unit: '日' },
+      relax: { allowed: false, note: '法定下限，放寬即構成違法（例假出勤另有天災事變等嚴格要件）' },
+      enabled: true,
+    },
+    {
+      code: 'H8',
+      name: '四週正常工時總量',
+      desc: '任一固定四週週期內之總排班工時不得超過門檻；超過部分屬延長工時，應另依加班程序管制',
+      basis: '勞動基準法第 30 條之 1（四週彈性工時：四週內正常工時總量 160 小時）',
+      param: { key: 'fourWeekHourCap', label: '四週正常工時總量上限', value: 160, unit: '小時' },
+      relax: { allowed: false, note: '法定總量，不得放寬。確需加班應個案簽核並受每月 46 小時延長工時上限管制' },
+      enabled: true,
+    },
+    {
+      code: 'H9',
+      name: '四週例假與休息日總量',
+      desc: '任一固定四週週期內至少須保留門檻日數未排班（例假＋休息日合計）；即四週內排班不得超過 20 天',
+      basis: '勞動基準法第 36 條第 2 項第 3 款（四週彈性工時：每四週內之例假及休息日至少應有八日）',
+      param: { key: 'fourWeekOffDays', label: '四週週期內最少例假＋休息日數', value: 8, unit: '日' },
+      relax: { allowed: false, note: '法定下限，不得放寬。休息日出勤須經個別同意並加給休息日工資' },
       enabled: true,
     },
   ],
