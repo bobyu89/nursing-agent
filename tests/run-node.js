@@ -23,9 +23,11 @@ Object.assign(globalThis, require('../src/rules.js'));
 Object.assign(globalThis, require('../src/engine.js'));
 Object.assign(globalThis, require('../src/fhir.js'));
 Object.assign(globalThis, require('../src/llm.js'));
+Object.assign(globalThis, require('../src/botcore.js'));
 
 require('./engine.test.js');
 require('./fhir.test.js');
+require('./botcore.test.js');
 
 (async () => {
   let pass = 0, fail = 0;

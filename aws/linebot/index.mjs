@@ -1,14 +1,22 @@
 /**
- * linebot/index.mjs — 班守 ShiftGuard LINE 通報機器人（Webhook Lambda）
+ * linebot/index.mjs — 班守 ShiftGuard LINE 通報機器人（Webhook Lambda，真模型版）
  *
- * 定位：通報入口放在護理人員本來就在用的 LINE；解析與決策留在平台。
- *   護理師 LINE 訊息 → LINE Messaging API → 本 Lambda（驗章）
- *     → 既有 LLM Proxy（aws/lambda，Bedrock 解析）→ 回覆解析摘要＋追問＋平台連結
+ * 定位：通報入口放在護理人員本來就在用的 LINE。
+ *   解析走既有 LLM Proxy（aws/lambda → Bedrock）；解析結果經 sanitizeParsed
+ *   白名單消毒後，走與 Cloudflare 版完全相同的互動流程（src/botcore.js）：
+ *   缺條件出按鈕 → 條件齊全跑同一份 evaluateGap 引擎（規則 H1–H9，
+ *   含勞基法四週彈性工時 H7–H9）→ 替補建議前三名 → 詢問草稿 → 戰情儀表板。
+ *
+ * 與 Cloudflare 版的差別只有兩件事：
+ *   1. 解析優先用 Bedrock 真模型（LLM_PROXY_URL）；Proxy 未設定或失敗時
+ *      退回本機確定性解析（同一份 src/llm.js mock），服務不中斷。
+ *   2. 部署打包：aws/deploy.ps1 會把 src/{data,rules,engine,llm,botcore}.js
+ *      連同 src/package.json（{"type":"commonjs"}）一起裝進 zip——
+ *      「同一份程式碼在瀏覽器、測試頁、CI、Workers 與 Lambda 上跑」。
  *
  * 治理邊界（與平台一致）：
- * - 機器人只做「解析與轉達」——不建立正式缺班事件、不指派、不代替主管決定。
- * - 訊息沒寫的欄位轉為追問，不臆測（由 LLM Proxy 的不臆測原則保證）。
- * - 未設定 LLM_PROXY_URL 時退化為「確認收到＋轉達」，服務不中斷（同 mock 退路哲學）。
+ * - 機器人提供「建議」，不做指派決定——正式確認與決策留痕在平台。
+ * - 訊息沒寫的欄位轉為追問（按鈕），不臆測；模型輸出一律經白名單消毒。
  *
  * 資安：
  * - 所有請求先驗 X-Line-Signature（HMAC-SHA256 + timingSafeEqual），
@@ -16,9 +24,17 @@
  * - 金鑰只存在 Lambda 環境變數；本檔不落地任何憑證。
  * - 只使用 reply message（回覆免費、不消耗推播額度），不主動推播。
  *
- * Runtime：nodejs20.x，零相依（global fetch ＋ node:crypto）。
+ * Runtime：nodejs20.x，零外部相依（global fetch ＋ node:crypto）。
  */
 import crypto from 'node:crypto';
+import data from './src/data.js';
+import rules from './src/rules.js';
+import engineMod from './src/engine.js';
+import llm from './src/llm.js';
+import botcore from './src/botcore.js';
+
+// 依 index.html 的載入語義把全域掛回（與 tests/run-node.js、worker.mjs 同一招）
+Object.assign(globalThis, data, rules, engineMod, llm, botcore);
 
 const CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET || '';
 const CHANNEL_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || '';
@@ -40,16 +56,31 @@ function validSignature(rawBody, signature) {
   return mac.length === sig.length && crypto.timingSafeEqual(mac, sig);
 }
 
-async function lineReply(replyToken, text) {
+/** 低階回覆：直接送 messages 陣列（文字、Flex 皆可） */
+async function lineReplyMessages(replyToken, messages) {
   const res = await fetch('https://api.line.me/v2/bot/message/reply', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${CHANNEL_TOKEN}` },
-    body: JSON.stringify({ replyToken, messages: [{ type: 'text', text: text.slice(0, 4900) }] }),
+    body: JSON.stringify({ replyToken, messages }),
   });
   if (!res.ok) console.error('LINE reply failed:', res.status, await res.text());
 }
 
-/** 轉發既有 LLM Proxy 解析；失敗回 null（呼叫端走退路，服務不中斷） */
+/** 回覆文字訊息（可含快速回覆按鈕） */
+async function lineReply(replyToken, text, quickItems) {
+  const message = { type: 'text', text: text.slice(0, 4900) };
+  if (quickItems && quickItems.length) {
+    message.quickReply = {
+      items: quickItems.map(({ label, dataStr }) => ({
+        type: 'action',
+        action: { type: 'postback', label: label.slice(0, 20), data: dataStr, displayText: label },
+      })),
+    };
+  }
+  return lineReplyMessages(replyToken, [message]);
+}
+
+/** 轉發既有 LLM Proxy 解析；失敗回 null（呼叫端退回本機確定性解析） */
 async function parseViaProxy(rawText) {
   if (!LLM_PROXY_URL) return null;
   try {
@@ -70,60 +101,81 @@ async function parseViaProxy(rawText) {
   }
 }
 
-const FIELD_TW = { date: '日期', shift: '班別', unit: '單位', requiredCerts: '必要資格', reason: '事由' };
-
-/** 解析結果 → LINE 文字訊息（label 由 Proxy 生成，本檔不改寫任何解析值） */
-function formatParsed(parsed) {
-  const ex = parsed.extracted || {};
-  const lines = ['【班守 ShiftGuard】已收到缺班通報，解析如下：'];
-  ['date', 'shift', 'unit', 'requiredCerts', 'reason'].forEach((f) => {
-    const field = ex[f];
-    if (field && field.label) lines.push(`・${FIELD_TW[f]}：${field.label}`);
-  });
-  const missing = parsed.missing || [];
-  if (missing.length) {
-    lines.push('', '訊息未載明、需主管補充：');
-    missing.forEach((m) => lines.push(`・${m.question || FIELD_TW[m.field] || m.field}`));
+/**
+ * 解析：Bedrock（Proxy）優先，退回本機確定性規則（同一份 src/llm.js mock）。
+ * 模型輸出不可直接信任——一律經 sanitizeParsed 白名單消毒；
+ * 消毒失敗（形狀不符）視同解析失敗，走本機退路，服務不中斷。
+ */
+async function parseMessage(text) {
+  globalThis.GAP_EVENT.raisedAt = `${todayTaipei()} 08:00`;   // 「明天」以台灣今天為基準
+  const viaProxy = await parseViaProxy(text);
+  if (viaProxy && viaProxy.extracted) {
+    try { return globalThis.sanitizeParsed(viaProxy); }
+    catch (err) { console.error('sanitize failed, fallback to mock:', err); }
   }
-  lines.push(
-    '',
-    '主管請至平台確認條件並評估替補（每一步留痕）：',
-    PLATFORM_URL,
-    '',
-    '－機器人只做解析與轉達，不做任何排班決定－',
-  );
-  return lines.join('\n');
+  globalThis.LLM.mode = 'mock';
+  return globalThis.llmParseGapMessage(text);
 }
 
-/** 解析服務未啟用／暫時失敗時的退路：確認收到、原文轉達，服務不中斷 */
-function formatFallback(text) {
-  return [
-    '【班守 ShiftGuard】已收到缺班通報（解析服務暫未啟用，原文已轉達值班主管）：',
-    '',
-    `「${text.slice(0, 300)}」`,
-    '',
-    '主管請至平台建立缺班事件：',
-    PLATFORM_URL,
-  ].join('\n');
-}
-
-const WELCOME = [
-  '【班守 ShiftGuard】值班通報機器人',
-  '',
-  '臨時請假／缺班，把訊息直接傳到這裡，我會解析日期、班別與事由並轉達值班主管。',
-  '範例：「護理長不好意思，我明天白班發燒沒辦法上，很抱歉」',
-  '',
-  '提醒：請以人員代號通報；訊息中請勿包含任何病人資訊。',
-  `平台入口：${PLATFORM_URL}`,
-].join('\n');
+/* ── 事件處理（流程與訊息組裝在 src/botcore.js，與 Cloudflare 版同一份）── */
 
 async function handleEvent(ev) {
-  if (ev.type === 'follow' && ev.replyToken) return lineReply(ev.replyToken, WELCOME);
+  if (ev.type === 'follow' && ev.replyToken) return lineReply(ev.replyToken, welcomeText(PLATFORM_URL));
+
+  /* 按鈕回傳：條件逐步補齊 → 齊全即評估；帶 id 則產生詢問草稿 */
+  if (ev.type === 'postback' && ev.replyToken) {
+    const p = decodeParams(ev.postback && ev.postback.data);
+    if (!p.d) return lineReply(ev.replyToken, '這筆通報的日期不明，請重新傳一次請假訊息（例：我明天白班沒辦法上）。');
+    if (p.id) {
+      const out = await draftAndFormat(p, PLATFORM_URL);
+      return lineReply(ev.replyToken, out.text, out.items);
+    }
+    const ask = askNext(p);
+    if (ask) return lineReply(ev.replyToken, ask.text, ask.items);
+    const out = evaluateAndFormat(p, PLATFORM_URL);
+    return lineReply(ev.replyToken, out.text, out.items);
+  }
+
   if (ev.type !== 'message' || !ev.message || ev.message.type !== 'text' || !ev.replyToken) return;
+
+  /* 文字訊息：指令（儀表板／選單）優先，其餘走解析流程 */
   const text = String(ev.message.text || '').slice(0, 2000);
-  const parsed = await parseViaProxy(text);
-  const reply = parsed && parsed.extracted ? formatParsed(parsed) : formatFallback(text);
-  return lineReply(ev.replyToken, reply);
+  if (DASHBOARD_RE.test(text.trim())) {
+    return lineReplyMessages(ev.replyToken, [buildDashboardFlex(PLATFORM_URL)]);
+  }
+  if (MENU_RE.test(text.trim())) {
+    return lineReplyMessages(ev.replyToken, [menuMessage(PLATFORM_URL)]);
+  }
+
+  const parsed = await parseMessage(text);
+  const ex = (parsed && parsed.extracted) || {};
+
+  const lines = ['【班守 ShiftGuard】已收到缺班通報，解析如下：'];
+  ['date', 'shift', 'unit', 'requiredCerts', 'reason'].forEach((f) => {
+    if (ex[f] && ex[f].label) lines.push(`・${FIELD_TW[f]}：${ex[f].label}`);
+  });
+
+  const p = {
+    d: ex.date && ex.date.value ? ex.date.value : null,
+    s: ex.shift && ex.shift.value ? ex.shift.value : null,
+    u: ex.unit && ex.unit.value ? ex.unit.value : null,
+    c: ex.requiredCerts && Array.isArray(ex.requiredCerts.value) && ex.requiredCerts.value.length
+      ? ex.requiredCerts.value.join(',') : null,
+  };
+
+  if (!p.d) {
+    lines.push('', '訊息中的日期無法明確換算（或含多個時間線索）——',
+      '請補傳一句明確的說法，例如「明天」「8/20」「下週三」。');
+    return lineReply(ev.replyToken, lines.join('\n'));
+  }
+
+  const ask = askNext(p);
+  if (ask) {
+    lines.push('', ask.text);
+    return lineReply(ev.replyToken, lines.join('\n'), ask.items);
+  }
+  const out = evaluateAndFormat(p, PLATFORM_URL);
+  return lineReply(ev.replyToken, out.text, out.items);
 }
 
 export const handler = async (event) => {

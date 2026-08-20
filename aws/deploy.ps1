@@ -124,9 +124,23 @@ $proxyUrl = Ensure-Url 'shiftguard-llm-proxy' $true
 
 # ══ 2. LINE Bot ═══════════════════════════════════════
 Step '3. 打包並部署 shiftguard-linebot'
+# index.mjs 內嵌平台同一份決策引擎（規則 H1–H9 含四週彈性工時）：
+# 把 src/{data,rules,engine,llm,botcore}.js 一起裝進 zip，
+# 並放一個 {"type":"commonjs"} 的 src/package.json——
+# 這些檔案是 CJS 風格（module.exports），不能被外層 "type":"module" 波及。
+$botStage = Join-Path $env:TEMP 'shiftguard-linebot-stage'
+if (Test-Path $botStage) { Remove-Item $botStage -Recurse -Force }
+New-Item -ItemType Directory -Path (Join-Path $botStage 'src') -Force | Out-Null
+Copy-Item (Join-Path $root 'linebot\index.mjs') $botStage
+Copy-Item (Join-Path $root 'linebot\package.json') $botStage
+$repoSrc = Join-Path (Split-Path -Parent $root) 'src'
+foreach ($f in 'data.js', 'rules.js', 'engine.js', 'llm.js', 'botcore.js') {
+  Copy-Item (Join-Path $repoSrc $f) (Join-Path $botStage 'src')
+}
+Set-Content -Path (Join-Path $botStage 'src\package.json') -Value '{"type":"commonjs"}' -Encoding Ascii
 $botZip = Join-Path $env:TEMP 'shiftguard-linebot.zip'
 if (Test-Path $botZip) { Remove-Item $botZip -Force }
-Compress-Archive -Path (Join-Path $root 'linebot\index.mjs'), (Join-Path $root 'linebot\package.json') -DestinationPath $botZip
+Compress-Archive -Path (Join-Path $botStage '*') -DestinationPath $botZip
 $botRole = Ensure-Role 'shiftguard-linebot-role' $false
 
 # LINE 憑證：沿用既有設定（尚未設定時留空，稍後由使用者以指令補上）

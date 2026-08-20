@@ -44,6 +44,15 @@
 - 推送方式：`POST {FHIR base URL}`、`Content-Type: application/fhir+json`。
   DEMO 不附驗證資訊；正式導入應以 **SMART on FHIR（OAuth 2.0）** 授權並經院方資安審查。
 
+### 實測紀錄（2026-08-20）
+
+對公開測試沙盒 **HAPI FHIR R4**（`https://hapi.fhir.org/baseR4`）由平台 UI 推送
+batch Bundle：HTTP 200、**80／80 筆資源全數成功**（PUT upsert）。
+伺服器端回讀驗證：`Practitioner/pra-N-01`（identifier／代號化 name／TW Core
+profile／4 筆 qualification 完整）、`Slot/slot-N-07-20260808-N`
+（大夜 23:00 → 翌日 07:00、schedule 參照、serviceType=N 正確）。
+注意：公開沙盒資料定期清空、任何人可讀寫，僅供介接測試——切勿送真實資料。
+
 ## 匯入（白名單驗證）
 
 `fhirImportBundle(bundle, db)` → `{ shifts, errors, counts }`

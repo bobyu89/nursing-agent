@@ -4,23 +4,29 @@
 > Cloudflare Workers 免費方案＋平台同一份確定性解析器，免信用卡、10 分鐘部署。
 > 本版（Bedrock 真模型解析）留作理解力升級選項，兩版可隨時切換（換 Webhook URL 即可）。
 
-> 一句話：**通報入口放在護理人員本來就在用的 LINE，解析與決策留在平台。**
+> 一句話：**通報入口放在護理人員本來就在用的 LINE，正式決策與留痕留在平台。**
 >
 > ```
 > 護理師 LINE 訊息 → LINE Messaging API → Webhook Lambda（本目錄，驗章）
->   → 既有 LLM Proxy（aws/lambda → Bedrock）解析
->   → 回覆：解析摘要＋缺漏追問＋平台連結（reply 免費，不吃推播額度）
+>   → 解析：既有 LLM Proxy（aws/lambda → Bedrock）優先；未設定或失敗時
+>     退回平台同一份確定性解析（src/llm.js），服務不中斷
+>   → 缺漏條件用「快速回覆按鈕」逐步點選（班別 → 單位 → 必要資格）
+>   → 條件齊全 → src/engine.js 同一份 evaluateGap 引擎
+>     （規則 H1–H9，含勞基法四週彈性工時 H7–H9）
+>   → 回覆：替補建議前三名（分數＋依據＋風險標記）＋詢問草稿＋排除摘要
+>     ＋平台連結；輸入「儀表板」回 Flex 戰情卡（reply 免費，不吃推播額度）
 > ```
 >
-> 機器人只做「解析與轉達」：不建立正式缺班事件、不指派、不代替主管決定——
-> 與平台的治理邊界完全一致。
+> 互動流程與 Cloudflare 版共用同一份 `src/botcore.js`；模型輸出一律經
+> `sanitizeParsed` 白名單消毒才進引擎。機器人提供「建議」，不做指派決定——
+> 正式確認與決策留痕在平台，與平台的治理邊界完全一致。
 
 ## 0. 前置條件
 
 - 一個 LINE 帳號（免費）。
 - AWS 帳號（Lambda 免費額度即足夠）。
 - （建議）已依 [aws/README.md](../README.md) 部署 LLM Proxy——沒有它機器人也能運作，
-  但只會「確認收到＋原文轉達」，不做解析（退路模式）。
+  解析自動退回平台同一份確定性關鍵詞規則（理解力較弱，功能不減）。
 
 ## 1. 建立 LINE Messaging API Channel
 
@@ -39,10 +45,27 @@
 
 ## 2. 部署 Webhook Lambda
 
+最省事的方式是一鍵腳本（會自動把平台引擎一起打包）：
+
+```bash
+powershell -ExecutionPolicy Bypass -File aws/deploy.ps1
+```
+
+手動部署時注意：本函式**內嵌平台引擎**，zip 必須含下列結構
+（`src/package.json` 內容為 `{"type":"commonjs"}`，缺了它 Node 會把
+引擎檔誤判為 ESM）：
+
+```
+index.mjs
+package.json
+src/data.js src/rules.js src/engine.js src/llm.js src/botcore.js
+src/package.json
+```
+
 1. AWS Console → Lambda → Create function：
    - Runtime：**Node.js 20.x**、架構 arm64（便宜）或 x86 皆可
    - Timeout 調成 **15 秒**（LLM Proxy 冷啟動緩衝）
-2. 把本目錄的 `index.mjs` 內容貼進程式碼編輯器（零相依，不需要 npm install），Deploy。
+2. 上傳依上述結構打包的 zip（零外部相依，不需要 npm install），Deploy。
 3. Configuration → Environment variables：
 
    | 變數 | 必填 | 說明 |
@@ -68,11 +91,11 @@
 
 1. 用手機掃 Messaging API 分頁的 QR code 加機器人好友 → 應收到歡迎訊息。
 2. 傳：「護理長不好意思，我明天白班發燒沒辦法上，很抱歉」
-3. 預期回覆（已設 LLM_PROXY_URL）：
-   - 日期（依「明天」以台灣時區換算）、班別 白班、事由 病假
-   - 「訊息未載明、需主管補充」：單位、必要資格
-   - 平台連結
-4. 未設 LLM_PROXY_URL：回覆「已收到缺班通報（解析服務暫未啟用…）」＋原文＋平台連結。
+3. 預期回覆：解析摘要（日期依「明天」以台灣時區換算、班別 白班、事由 病假）
+   ＋「這筆缺班在哪一個照護單位？」快速回覆按鈕 → 點選單位、必要資格
+   → 替補建議前三名（分數＋依據）＋詢問草稿按鈕。
+4. 輸入「儀表板」→ Flex 戰情卡；輸入「選單」→ 功能快速按鈕。
+5. 未設 LLM_PROXY_URL：流程完全相同，解析改用本機確定性規則（理解力較弱）。
 
 ## 5. 成本與額度
 
@@ -96,7 +119,8 @@
 | Webhook Verify 失敗 | Function URL 貼錯／Lambda 未部署／`LINE_CHANNEL_SECRET` 填錯（驗章 403 也算失敗）——看 CloudWatch Logs 是否出現 `signature validation failed` |
 | 加好友沒有歡迎訊息 | OA Manager 的「加入好友的歡迎訊息」與 webhook 重複——關掉內建歡迎訊息，或接受兩則並存 |
 | 傳訊息沒有回覆 | `LINE_CHANNEL_ACCESS_TOKEN` 失效或貼錯 → CloudWatch 看 `LINE reply failed: 401`；重新 Issue token |
-| 回覆是退路模式 | `LLM_PROXY_URL`／`DEMO_TOKEN` 未設或錯誤 → CloudWatch 看 `proxy status: 403` 等 |
+| 解析理解力變弱（複雜句抓不到日期） | `LLM_PROXY_URL`／`DEMO_TOKEN` 未設或錯誤，已退回本機規則 → CloudWatch 看 `proxy status: 403` 等 |
+| 部署後傳訊息完全沒反應且 log 有 import 錯誤 | zip 缺 `src/` 引擎檔或缺 `src/package.json`（`{"type":"commonjs"}`）→ 改用 `aws/deploy.ps1` 打包 |
 | 回覆很慢 | LLM Proxy 冷啟動；重試一次即暖。Demo 前先傳一則暖機 |
 
 ## 8. Demo Day 演法（30 秒）

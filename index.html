@@ -358,6 +358,7 @@
         <div id="fhir-push-result"></div>
         <p class="fineprint">
           以 POST {base} 送出、Content-Type: application/fhir+json；每筆資源帶 PUT request（idempotent upsert）。
+          已對公開沙盒 https://hapi.fhir.org/baseR4 實測通過（80／80 筆）——沙盒僅供測試、資料定期清空，<b>切勿送真實資料</b>。
           DEMO 不附驗證資訊；正式導入應以 SMART on FHIR（OAuth 2.0）授權，並經院方資安審查。
         </p>
       </div>

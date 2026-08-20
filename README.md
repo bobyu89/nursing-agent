@@ -162,15 +162,17 @@ src/data.js                 模擬資料（人員／班表／請假／缺班事�
 src/rules.js                規則庫 Rule Registry（H1–H9／S1–S5／F1–F4）
 src/engine.js               確定性決策引擎（createEngine，資料由外部注入）
 src/fhir.js                 FHIR R4 介接層（匯出/匯入 Bundle，對齊 TW Core IG）
+src/botcore.js              LINE bot 共用互動核心（兩套 bot 同一份流程與引擎）
 src/llm.js                  語言模型轉接層（mock／api）
 src/app.js                  畫面渲染與流程
 tests/engine.test.js        引擎邊界條件測試（瀏覽器與 CI 共用同一份）
 tests/fhir.test.js          FHIR 介接測試（roundtrip／白名單／跨日班次）
+tests/botcore.test.js       LINE bot 互動核心測試（與平台引擎同規則同錨點）
 tests/run-node.js           CI 用的 Node 測試 runner
 .github/workflows/test.yml  GitHub Actions：每次 push 自動跑引擎測試
-cloudflare/linebot/         LINE 通報機器人（零成本版：解析＋按鈕選條件＋同一份引擎給替補建議）
+cloudflare/linebot/         LINE 通報機器人（零成本版：確定性解析＋botcore 互動＋H1–H9 引擎）
 aws/lambda/                 LLM Proxy（Lambda + Bedrock），接真實模型用
-aws/linebot/                LINE 通報機器人（真模型版：Bedrock 解析）
+aws/linebot/                LINE 通報機器人（真模型版：Bedrock 解析＋同一份 botcore 與 H1–H9 引擎）
 aws/deploy.ps1              一鍵部署兩顆 Lambda（冪等；含冒煙測試與後續步驟輸出）
 aws/README.md               Bedrock 部署步驟（含成本護欄與疑難排解）
 docs/BLUEPRINT.md           系統藍圖（五模組平台視野、四階段演進、AWS 目標架構）
