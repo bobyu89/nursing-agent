@@ -642,3 +642,89 @@ tbody tr:hover td { background: #142a3d; }
   font-size: 12px; line-height: 1.6; color: var(--ink-soft);
   white-space: pre; tab-size: 2;
 }
+
+/* ══ 畫面 1：快速通報（班表點選）══════════════════════ */
+.qp-week { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.qp-week .tag { min-width: 180px; text-align: center; }
+#qp-days { margin-bottom: 12px; }
+#qp-days .chip.active {
+  background: var(--brand); border-color: var(--brand); color: #06222d; font-weight: 700;
+}
+#qp-days .chip .qp-cnt { opacity: .65; font-size: 11px; margin-left: 4px; }
+#qp-days .chip:disabled { opacity: .4; cursor: not-allowed; }
+
+.qp-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 6px; }
+@media (max-width: 900px) { .qp-board { grid-template-columns: 1fr; } }
+.qp-col { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface); }
+.qp-col-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.qp-col-head b { font-size: 13.5px; }
+.qp-col-head .qp-time { color: var(--ink-faint); font-size: 12px; }
+.qp-col-empty { color: var(--ink-faint); font-size: 12.5px; padding: 4px 0 2px; }
+.qp-people { display: flex; flex-wrap: wrap; gap: 8px; }
+.qp-person {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;
+  background: var(--line-soft); color: var(--ink); font-size: 13px; cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+.qp-person .qp-unit { font-size: 11px; color: var(--ink-faint); }
+.qp-person:hover { border-color: var(--brand); color: var(--brand-dark); background: var(--brand-tint); }
+.qp-person.sel { background: var(--brand); border-color: var(--brand); color: #06222d; font-weight: 700; }
+.qp-person.sel .qp-unit { color: #06222d; opacity: .75; }
+
+.qp-sel-row {
+  display: grid; grid-template-columns: minmax(190px, 240px) 1fr auto auto;
+  gap: 10px 14px; align-items: center;
+  border: 1px solid var(--line); border-left: 3px solid var(--brand);
+  border-radius: 10px; padding: 10px 14px; margin: 8px 0; background: var(--surface);
+}
+@media (max-width: 900px) { .qp-sel-row { grid-template-columns: 1fr; } }
+.qp-sel-who { font-size: 13.5px; line-height: 1.5; }
+.qp-sel-who b { font-size: 14.5px; }
+.qp-sel-row .checks { gap: 10px 14px; }
+.qp-sel-row .checks label { font-size: 13px; }
+.qp-sel-row select { width: auto; padding: 6px 10px; font-size: 13px; }
+.qp-sel-head { font-size: 13px; color: var(--ink-faint); margin: 12px 0 2px; }
+
+/* ══ 圖示（inline SVG，stroke 繼承文字色）═════════════════ */
+.ico {
+  width: 15px; height: 15px; flex: none;
+  vertical-align: -2.5px; margin-right: 7px;
+  display: inline-block;
+}
+.np .ico { width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px; opacity: .85; }
+.portal-mini .ico { width: 15px; height: 15px; vertical-align: -2.5px; margin-right: 6px; color: var(--brand-dark); }
+.btn-sm .ico { width: 13px; height: 13px; vertical-align: -2px; margin-right: 5px; }
+
+/* ══ Toast 通知 ═══════════════════════════════════════════ */
+#toast-stack {
+  position: fixed; right: 20px; bottom: 20px; z-index: 200;
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+  pointer-events: none;
+}
+.toast {
+  display: flex; align-items: center; max-width: 380px;
+  padding: 10px 16px; border-radius: 10px; font-size: 13.5px;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-left-width: 3px;
+  box-shadow: var(--shadow);
+  animation: toast-in .3s cubic-bezier(.21,1.02,.55,1) both;
+  transition: opacity .35s ease, transform .35s ease;
+}
+.toast.out { opacity: 0; transform: translateY(6px); }
+.toast .ico { margin-right: 9px; }
+.toast-ok     { border-left-color: var(--ok); }
+.toast-ok     .ico { color: var(--ok); }
+.toast-warn   { border-left-color: var(--warn); }
+.toast-warn   .ico { color: var(--warn); }
+.toast-danger { border-left-color: var(--danger); }
+.toast-danger .ico { color: var(--danger); }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(14px) scale(.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ══ 微互動：卡片 hover 與鍵盤焦點 ════════════════════════ */
+.card { transition: border-color .18s ease; }
+.card:hover { border-color: #2d4459; }
+.td-edit:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; border-radius: 4px; }

@@ -15,6 +15,9 @@ const state = {
   multiQueue: [],      // 畫面 7 帶入的缺班佇列（{gap, suggestedId}）
   suggestedId: null,   // 當前評估中，全局指派建議的人選（畫面標示用）
   rosterWeekStart: WEEK.start,   // 畫面 5 目前顯示的週（週一）
+  qpWeekStart: WEEK.start,       // 畫面 1 快速通報目前顯示的週（週一）
+  qpDay: GAP_EVENT.date,         // 快速通報目前選定的日期
+  quickSel: new Map(),           // 快速通報已點選的缺班（key sid|date|shift → {staffId,date,shift,unit,certs,role}）
 };
 
 /** 開場時的替補次數基準值，用來標示本次連線期間的變化 */
@@ -40,6 +43,131 @@ const engine = createEngine({
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+/* ══ 動畫層（anime.js v4，assets/anime.umd.min.js）══════════
+ * 動畫是妝點不是依賴：檔案沒載到（極端離線環境）或使用者設定
+ * prefers-reduced-motion 時，整層靜默成 no-op，功能與版面完全不受影響。
+ * 所有進場動畫由 JS 設定起點（opacity 0），不在 CSS 預先隱藏——
+ * 動畫層失效時元素照常可見。 */
+const MOTION = (() => {
+  const lib = (typeof anime !== 'undefined' && anime && typeof anime.animate === 'function') ? anime : null;
+  const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const on = !!lib && !reduced;
+
+  /** 區塊進場：淡入上移、交錯出現。root 可傳選擇器或元素，childSel 縮小動畫對象 */
+  function enter(root, childSel) {
+    if (!on) return;
+    const el = typeof root === 'string' ? $(root) : root;
+    if (!el) return;
+    const targets = childSel ? Array.from(el.querySelectorAll(childSel)) : Array.from(el.children);
+    if (!targets.length) return;
+    lib.utils.remove(targets);   // 快速連續切換時砍掉舊動畫，避免疊加
+    lib.animate(targets, {
+      opacity: [0, 1], translateY: [12, 0],
+      duration: 400, delay: lib.stagger(45, { start: 30 }), ease: 'out(2.5)',
+    });
+  }
+
+  /** 小元件回饋：縮放彈出（chip 點選、格子編輯） */
+  function pop(el) {
+    if (!on || !el) return;
+    lib.utils.remove(el);
+    lib.animate(el, { scale: [0.82, 1], duration: 260, ease: 'out(3)' });
+  }
+
+  /** 數字滾動：只動元素的第一個文字節點（「74.5 <small>/ 100</small>」只滾 74.5）。
+   *  結束時寫回原始字串，確保畫面數字與引擎輸出一字不差。 */
+  function count(els, { duration = 700 } = {}) {
+    if (!on) return;
+    els.forEach((el) => {
+      const node = el.firstChild;
+      if (!node || node.nodeType !== Node.TEXT_NODE) return;
+      const orig = node.textContent;
+      const target = parseFloat(orig);
+      if (!isFinite(target) || target === 0) return;
+      const decimals = /\.\d/.test(orig.trim()) ? 1 : 0;
+      const o = { v: 0 };
+      lib.animate(o, {
+        v: target, duration, ease: 'out(3)',
+        onUpdate: () => { node.textContent = o.v.toFixed(decimals); },
+        onComplete: () => { node.textContent = orig; },
+      });
+    });
+  }
+
+  /** 評分長條由 0 長到定位（讀 inline width 為終點，結束值即引擎算出的比例） */
+  function bars(root) {
+    if (!on) return;
+    const el = typeof root === 'string' ? $(root) : root;
+    if (!el) return;
+    el.querySelectorAll('.bar > i').forEach((bar) => {
+      const w = bar.style.width;
+      if (!w) return;
+      lib.animate(bar, { width: ['0%', w], duration: 650, ease: 'out(2.5)' });
+    });
+  }
+
+  return { on, enter, pop, count, bars };
+})();
+
+/* ══ 圖示庫：手寫 inline SVG（24×24 線條風）════════════════
+ * 不用 icon font 也不外連 CDN——CSP 同源、離線雙擊、主題色
+ * （stroke: currentColor）三個條件一次滿足。裝飾性圖示一律
+ * aria-hidden，可見文字仍是唯一的語意來源。 */
+const ICONS = {
+  home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>',
+  swap: '<path d="M17 2l4 4-4 4"/><path d="M3 12V10a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 12v2a4 4 0 0 1-4 4H3"/>',
+  chart: '<path d="M6 20v-8M12 20V5M18 20v-5"/><path d="M3 20h18"/>',
+  shield: '<path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="M9 11.5l2 2 4-4"/>',
+  sparkles: '<path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>',
+  layers: '<path d="M12 2l10 6-10 6L2 8z"/><path d="M2 13l10 6 10-6"/>',
+  zap: '<path d="M13 2L4 14h6l-1 8 9-12h-6z"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v5h-5"/>',
+  download: '<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/>',
+  clipboard: '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/>',
+  award: '<circle cx="12" cy="9" r="6"/><path d="M8.5 14L7 22l5-3 5 3-1.5-8"/>',
+  scale: '<path d="M12 3v18M8 21h8M5 7h14"/><path d="M7 7l-3 6a3 3 0 0 0 6 0z"/><path d="M17 7l-3 6a3 3 0 0 0 6 0z"/>',
+  link: '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/>',
+  check: '<path d="M4 12.5l5 5L20 6.5"/>',
+  alert: '<path d="M12 3L2 21h20z"/><path d="M12 10v5"/><path d="M12 18.5v.5"/>',
+  x: '<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>',
+  'user-check': '<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M16 11l2 2 4-4"/>',
+};
+
+function icon(name) {
+  const paths = ICONS[name];
+  if (!paths) return '';
+  return `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"` +
+    ` fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+}
+
+/* ══ Toast 通知：操作完成的輕量回饋 ═══════════════════════
+ * 進出場走 CSS animation／transition，prefers-reduced-motion 由
+ * 全域樣式歸零；aria-live=polite 讓螢幕報讀器也收得到回饋。
+ * 只在「使用者主動操作完成」時使用，系統自動重算不彈——
+ * 通知太多等於沒有通知。 */
+function toast(message, level = 'ok') {
+  const stack = $('#toast-stack');
+  if (!stack) return;
+  const el = document.createElement('div');
+  el.className = `toast toast-${level}`;
+  el.innerHTML = `${icon(level === 'ok' ? 'check' : level === 'warn' ? 'alert' : 'x')}<span></span>`;
+  el.querySelector('span').textContent = message;   // textContent：訊息不進 HTML 解析器
+  stack.appendChild(el);
+  while (stack.children.length > 4) stack.firstChild.remove();
+  const leave = () => {
+    if (!el.parentElement) return;
+    el.classList.add('out');
+    let gone = false;
+    const done = () => { if (!gone) { gone = true; el.remove(); } };
+    el.addEventListener('transitionend', done, { once: true });
+    setTimeout(done, 500);   // transitionend 沒觸發時的保險
+  };
+  setTimeout(leave, 3000);
+}
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) =>
@@ -212,6 +340,7 @@ function resetSchedule() {
 /** 班表變更後的統一重算：排班工作區、缺口總覽、能力儀表板、主動預警、入口狀態、FHIR 統計 */
 function refreshAfterScheduleChange() {
   renderRoster();
+  renderQuickPick();   // 快速通報的在班名單直接取自班表，班表變了要跟著變
   renderOverview();
   renderCapability();
   renderWarnings();
@@ -246,11 +375,13 @@ function navGroupOf(name) {
   return NAV_GROUPS.find((g) => g.screens.some(([id]) => id === name)) || NAV_GROUPS[0];
 }
 
+const NAV_ICONS = { home: 'home', sched: 'calendar', gap: 'swap', ov: 'chart', gov: 'shield' };
+
 function renderNav(active) {
   const g = navGroupOf(active);
   $('#nav').innerHTML = `
     <div class="nav-primary">${NAV_GROUPS.map((x) =>
-    `<button class="np${x.key === g.key ? ' active' : ''}" data-group="${x.key}">${x.label}</button>`).join('')}</div>
+    `<button class="np${x.key === g.key ? ' active' : ''}" data-group="${x.key}">${icon(NAV_ICONS[x.key])}${x.label}</button>`).join('')}</div>
     <div class="nav-secondary">${g.screens.map(([id, label, no]) =>
     `<button class="tab${id === active ? ' active' : ''}" data-screen="${id}"><span class="tab-no">${no}</span>${label}</button>`).join('')}</div>`;
 }
@@ -261,6 +392,12 @@ function switchScreen(name) {
   // 讓每個畫面可直接以 #hash 連結（home.html 的「排班／替班」按鈕即靠這個進場）
   try { history.replaceState(null, '', `#${name}`); } catch (e) { /* file:// 受限時略過 */ }
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  // 進場動畫：畫面頂層區塊交錯進場，KPI 數字滾動到定位（皆為妝點，數值不變）
+  const active = $(`#screen-${name}`);
+  if (active) {
+    MOTION.enter(active);
+    MOTION.count(Array.from(active.querySelectorAll('.ov-num, .kpi-num')));
+  }
 }
 
 /** 進場畫面：#hash 指名畫面（#roster）或分組（#sched → 該組第一個畫面），否則入口 */
@@ -716,14 +853,14 @@ async function handleParse() {
   parsing = true;
   const btn = $('#btn-parse');
   btn.disabled = true;
-  btn.textContent = '解析中…';
+  btn.innerHTML = `${icon('sparkles')}解析中…`;
   try {
     await doParse();
   } finally {
     // 不論成功失敗，按鈕都要回復可用——解析失敗時畫面不能卡在「解析中」
     parsing = false;
     btn.disabled = false;
-    btn.textContent = '重新解析';
+    btn.innerHTML = `${icon('sparkles')}重新解析`;
   }
 }
 
@@ -838,6 +975,244 @@ function handleEvaluate() {
   renderRoster();
   renderStaffTable();   // 證照效期以本次事件日期重新判定
   switchScreen('candidates');
+}
+
+/* ══ 畫面 1：快速通報（班表點選）════════════════════════
+ * 「貼訊息」是替代路徑，不是必經之路——缺班的人本來就在班表上。
+ * 點日期 → 當天三班在班名單 → 點人即通報：人、日期、班別、單位
+ * 直接取自班表（來源可稽核），只剩「必要資格」需要主管確認，
+ * 這一項系統不臆測（與訊息流程的追問同一原則）。
+ * 多選即多筆：交給 assignGreedy／assignJointly 一起計算，
+ * 再沿用畫面 7 的佇列機制逐筆走主管確認。 */
+
+const QP_DEFAULT_CERTS = ['ACLS'];   // 院內政策：每班需 ACLS（同畫面 8 生成條件），主管可調整
+const QP_MAX_BATCH = 4;              // 全局指派為完整枚舉，筆數上限防止組合爆炸（4 筆已逾一晚倒兩人的常態）
+
+function qpKey(sel) { return `${sel.staffId}|${sel.date}|${sel.shift}`; }
+
+function qpDates() {
+  return Array.from({ length: 7 }, (_, i) => addDays(state.qpWeekStart, i));
+}
+
+function renderQuickPick() {
+  if (!$('#qp-days')) return;
+  // 班表被編輯後，點選中的班次可能已不存在——逐筆核對，失效的自動移除
+  [...state.quickSel.values()].forEach((sel) => {
+    const alive = SHIFTS.some((s) => s.staffId === sel.staffId && s.date === sel.date && s.shift === sel.shift);
+    if (!alive) state.quickSel.delete(qpKey(sel));
+  });
+
+  const dates = qpDates();
+  $('#qp-week-label').textContent = state.qpWeekStart === WEEK.start
+    ? WEEK.label
+    : `${shortDate(dates[0])}（一）– ${shortDate(dates[6])}（日）`;
+
+  $('#qp-days').innerHTML = dates.map((d) => {
+    const n = SHIFTS.filter((s) => s.date === d).length;
+    return `<button class="chip${d === state.qpDay ? ' active' : ''}" data-day="${d}" aria-pressed="${d === state.qpDay}">` +
+      `${shortDate(d)}（${weekdayOf(d)}）<span class="qp-cnt">${n} 班</span></button>`;
+  }).join('');
+
+  $('#qp-board').innerHTML = Object.values(SHIFT_TYPES).map((t) => {
+    const rows = SHIFTS.filter((s) => s.date === state.qpDay && s.shift === t.code)
+      .slice().sort((a, b) => (a.staffId < b.staffId ? -1 : 1));
+    const people = rows.map((s) => {
+      const selected = state.quickSel.has(`${s.staffId}|${s.date}|${s.shift}`);
+      const label = `${selected ? '取消通報' : '通報缺班'}：${s.staffId} ${t.name} @ ${UNITS[s.unit] || s.unit}`;
+      return `<button class="qp-person${selected ? ' sel' : ''}" data-sid="${esc(s.staffId)}"` +
+        ` data-d="${s.date}" data-sh="${s.shift}" data-u="${esc(s.unit)}"` +
+        ` aria-pressed="${selected}" aria-label="${esc(label)}" title="${esc(label)}">` +
+        `${esc(s.staffId)}${s.isReplacement ? '<sup>替</sup>' : ''}<span class="qp-unit">${esc(s.unit)}</span></button>`;
+    }).join('');
+    return `<div class="qp-col">
+      <div class="qp-col-head"><b>${t.name}</b><span class="qp-time">${t.start}–${t.end}</span>
+        <span class="qp-time" style="margin-left:auto">${rows.length} 人在班</span></div>
+      ${people ? `<div class="qp-people">${people}</div>` : '<div class="qp-col-empty">當日此班別無人排班</div>'}
+    </div>`;
+  }).join('');
+
+  renderQuickSelected();
+}
+
+function qpSortedSels() {
+  return [...state.quickSel.values()]
+    .sort((a, b) => (a.date + a.shift + a.staffId < b.date + b.shift + b.staffId ? -1 : 1));
+}
+
+function renderQuickSelected() {
+  const sels = qpSortedSels();
+  $('#qp-selected').innerHTML = !sels.length ? '' : `
+    <div class="qp-sel-head">待通報缺班（${sels.length} 筆）——人／日期／班別／單位取自班表；請逐筆確認必要資格與職務門檻：</div>
+    ${sels.map((sel) => `
+      <div class="qp-sel-row" data-key="${esc(qpKey(sel))}">
+        <div class="qp-sel-who"><b>${esc(sel.staffId)}</b> 缺班<br>${multiGapLabel(sel)}</div>
+        <div class="checks">${Object.entries(CERTS).map(([k, nm]) => `
+          <label><input type="checkbox" class="qp-cert" value="${k}"${sel.certs.includes(k) ? ' checked' : ''}> ${esc(nm)}</label>`).join('')}</div>
+        <select class="qp-role">
+          ${['護理師', '資深護理師'].map((r) => `<option value="${r}"${sel.role === r ? ' selected' : ''}>${r}以上</option>`).join('')}
+        </select>
+        <button class="btn btn-sm qp-remove">移除</button>
+      </div>`).join('')}`;
+  updateQpRunBtn();
+}
+
+function updateQpRunBtn() {
+  const btn = $('#btn-qp-run');
+  if (!btn) return;
+  const n = state.quickSel.size;
+  btn.disabled = n === 0;
+  btn.innerHTML = icon('user-check') + (n === 0 ? '請先在上方點選缺班人員'
+    : n === 1 ? '建立缺班事件，開始尋找替補'
+      : `全局指派：${n} 筆缺班一起找替補`);
+}
+
+function qpTogglePerson(btnEl) {
+  const key = `${btnEl.dataset.sid}|${btnEl.dataset.d}|${btnEl.dataset.sh}`;
+  if (state.quickSel.has(key)) {
+    state.quickSel.delete(key);
+  } else {
+    state.quickSel.set(key, {
+      staffId: btnEl.dataset.sid, date: btnEl.dataset.d, shift: btnEl.dataset.sh,
+      unit: btnEl.dataset.u, certs: [...QP_DEFAULT_CERTS], role: '護理師',
+    });
+  }
+  $('#qp-result').innerHTML = '';   // 選擇一變，上一輪指派結果即過期，不得殘留誤導
+  renderQuickPick();
+  MOTION.pop($(`#qp-board .qp-person[data-sid="${btnEl.dataset.sid}"][data-d="${btnEl.dataset.d}"][data-sh="${btnEl.dataset.sh}"]`));
+}
+
+function buildQuickGap(sel) {
+  return {
+    id: `GAP-${sel.date.replace(/-/g, '')}-${sel.shift}-${sel.unit}`,
+    date: sel.date, shift: sel.shift, unit: sel.unit,
+    requiredRole: sel.role, requiredCerts: [...sel.certs],
+    originalStaffId: sel.staffId,
+    reason: `原班人員 ${sel.staffId} 臨時請假（快速通報）`,
+    raisedBy: '排班快速通報', raisedAt: nowStamp(),
+    contextNote: '必要資格由主管於快速通報清單確認',
+  };
+}
+
+/** 通報成立即事實：該員當日班次取消、標記臨時請假（同示範資料 N-05 的語義，
+ *  引擎的 H3 與缺口總覽因此看得到這筆缺勤）。僅存在於本次連線——
+ *  刻意不寫 localStorage，重新整理或「還原示範班表」即復原，方便重複演示。 */
+function vacateForQuickGap(sel) {
+  const idx = SHIFTS.findIndex((s) => s.staffId === sel.staffId && s.date === sel.date && s.shift === sel.shift);
+  if (idx >= 0) SHIFTS.splice(idx, 1);
+  const staff = STAFF.find((s) => s.id === sel.staffId);
+  if (staff && !engine.isOnLeave(staff, sel.date)) {
+    staff.leaves.push({ from: sel.date, to: sel.date, type: '臨時請假（快速通報）' });
+  }
+}
+
+function handleQuickRun() {
+  const sels = qpSortedSels();
+  if (!sels.length) return;
+  if (sels.length > QP_MAX_BATCH) {
+    alert(`一次最多 ${QP_MAX_BATCH} 筆（全局指派為完整枚舉所有組合，筆數過多會算不完），請分批處理。`);
+    return;
+  }
+  const noCert = sels.find((s) => s.certs.length === 0);
+  if (noCert) {
+    alert(`${noCert.staffId}（${multiGapLabel(noCert)}）：請至少勾選一項必要資格。`);
+    return;
+  }
+
+  const gaps = sels.map(buildQuickGap);
+  sels.forEach(vacateForQuickGap);
+  state.quickSel.clear();
+
+  gaps.forEach((g) => logAction('快速通報缺班',
+    `${multiGapLabel(g)}：原班人員 ${g.originalStaffId} 臨時請假，當日班次取消；` +
+    `必要資格 ${g.requiredCerts.map((c) => CERTS[c]).join('、')}、${g.requiredRole}以上（主管於清單確認）`));
+
+  refreshAfterScheduleChange();   // 班次取消 → 名單、缺口帳、預警即時重算
+  renderStaffTable();
+
+  if (gaps.length === 1) {
+    state.parsed = null;
+    state.gap = gaps[0];
+    state.chosen = null;
+    state.confirmed = false;
+    state.suggestedId = null;
+    state.multiQueue = [];
+    state.result = engine.evaluateGap(state.gap);
+    logAction('執行替補評估',
+      `評估 ${STAFF.length} 名人員，排除 ${state.result.excluded.length} 名，產生 ${state.result.candidates.length} 名合格候選人`,
+      '班守 ShiftGuard 規則引擎');
+    toast(`${state.gap.originalStaffId} 缺班已通報，合格候選 ${state.result.candidates.length} 位`,
+      state.result.candidates.length ? 'ok' : 'warn');
+    renderCandidates();
+    renderConfirmPlaceholder();
+    switchScreen('candidates');
+    return;
+  }
+
+  runQuickAssign(gaps);
+}
+
+/** 多筆：逐筆貪心與全局指派都算，結果並列；帶入主流程仍逐筆主管確認 */
+function runQuickAssign(gaps) {
+  const greedy = engine.assignGreedy(gaps);
+  const joint = engine.assignJointly(gaps);
+  const gFilled = greedy.filter((s) => s.staffId).length;
+
+  const rows = gaps.map((g, i) => {
+    const d = joint.details[i];
+    return `
+      <div class="fact">
+        <span>${multiGapLabel(g)}<br><small style="color:var(--ink-faint)">原班 ${esc(g.originalStaffId)}｜需 ${g.requiredCerts.map((c) => CERTS[c]).join('、')}</small></span>
+        <span>${d
+    ? `全局建議 <b>${esc(d.staffId)}</b>(${d.score} 分)`
+    : `<span class="expired">✗ 無人可指派</span> <button class="btn btn-sm qp-drill" data-i="${i}">看排除原因與放寬試算</button>`}</span>
+      </div>`;
+  }).join('');
+
+  $('#qp-result').innerHTML = `
+    <div class="card" style="margin-top:14px;border-color:var(--brand)">
+      <div class="card-head">
+        <h2>全局指派結果（${gaps.length} 筆一起看）</h2>
+        <span class="tag ${joint.filled < gaps.length ? 'tag-danger' : 'tag-ok'}">填補 ${joint.filled}／${gaps.length} 筆</span>
+      </div>
+      ${rows}
+      <p class="fineprint">
+        ${joint.filled > gFilled
+    ? `逐筆貪心只能補 ${gFilled} 筆：先處理的缺班會把稀缺人力用掉。全局指派把 ${gaps.length} 筆一起看（先求填補筆數、再求總分），多補了 ${joint.filled - gFilled} 筆——方法說明見「替班系統 → 多筆缺班」頁。`
+    : `逐筆貪心與全局指派結果一致（各補 ${joint.filled} 筆）；兩種算法皆為確定性運算，數字可完整重現。`}
+        ${joint.filled < gaps.length ? '無人可指派的缺班已誠實列示，請沿升級路徑處理（放寬試算／任務重分配），或於缺口總覽追蹤。' : ''}
+      </p>
+      ${joint.filled > 0 ? `
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-qp-apply" style="margin-top:0">將全局建議帶入主流程，逐筆確認</button>
+      </div>
+      <p class="fineprint">帶入後仍走完整的候選評估與主管確認；每筆確認寫回後，下一筆會以最新班表重新評估。</p>` : ''}
+    </div>`;
+
+  const applyBtn = $('#btn-qp-apply');
+  if (applyBtn) applyBtn.addEventListener('click', () => startMultiQueue(gaps, joint));
+  $$('#qp-result .qp-drill').forEach((b) => b.addEventListener('click', () => {
+    const g = gaps[Number(b.dataset.i)];
+    state.parsed = null;
+    state.gap = g;
+    state.chosen = null;
+    state.confirmed = false;
+    state.suggestedId = null;
+    state.result = engine.evaluateGap(g);
+    logAction('檢視無解缺班',
+      `${multiGapLabel(g)}：查無合格替補，開啟排除原因與放寬試算`);
+    renderCandidates();
+    renderConfirmPlaceholder();
+    switchScreen('candidates');
+  }));
+  MOTION.enter($('#qp-result'), '.fact, .card-head, .btn-row');
+
+  toast(`全局指派完成：填補 ${joint.filled}／${gaps.length} 筆`,
+    joint.filled < gaps.length ? 'warn' : 'ok');
+
+  logAction('快速通報多筆指派',
+    `${gaps.length} 筆缺班：逐筆貪心填補 ${gFilled} 筆，全局指派填補 ${joint.filled} 筆` +
+    `（${joint.assignment.map((id, i) => `${multiGapLabel(gaps[i])}→${id || '無'}`).join('、')}）`,
+    '班守 ShiftGuard 規則引擎');
 }
 
 /* ══ 畫面 2：替補候選人 ═════════════════════════════════ */
@@ -1039,6 +1414,12 @@ async function renderCandidates() {
     const toggle = () => {
       const open = h.parentElement.classList.toggle('open');
       h.setAttribute('aria-expanded', String(open));
+      if (open) {
+        // 展開評分卡：構面列交錯進場、長條由 0 長到引擎算出的比例
+        const body = h.parentElement.querySelector('.cand-body');
+        MOTION.enter(body, '.sc-row, .verdict, .reasons, .sc-total');
+        MOTION.bars(body);
+      }
     };
     h.addEventListener('click', (ev) => {
       if (ev.target.closest('.js-choose')) return;
@@ -1055,6 +1436,10 @@ async function renderCandidates() {
   $$('#candidates-body .js-choose').forEach((b) => {
     b.addEventListener('click', () => chooseCandidate(Number(b.dataset.idx)));
   });
+  // 進場動畫：候選與排除名單交錯出現、總分滾動、評分長條由 0 長到定位（數值不變）
+  MOTION.enter($('#candidates-body'), '.cand, .excl');
+  MOTION.count($$('#candidates-body .cand-head .score-num'));
+  MOTION.bars($('#candidates-body'));
   // 第 1 層無解時的階梯引導：一鍵前往第 3 層（畫面 7 韌性模式卡片）
   const gotoRealloc = $('#btn-goto-realloc');
   if (gotoRealloc) gotoRealloc.addEventListener('click', () => {
@@ -1152,6 +1537,7 @@ async function chooseCandidate(idx) {
   $('#btn-copy').addEventListener('click', () => {
     copyToClipboard(draft).then((ok) => {
       $('#btn-copy').textContent = ok ? '已複製 ✓' : '複製失敗，請手動選取草稿內容';
+      toast(ok ? '通知草稿已複製，發送與否由主管決定' : '複製失敗，請手動選取草稿內容', ok ? 'ok' : 'danger');
       if (ok) logAction('複製通知草稿', '主管手動複製，系統未發送');
     });
   });
@@ -1165,9 +1551,11 @@ async function chooseCandidate(idx) {
     logAction('主管確認替補',
       `核定 ${chosen.staff.id} 替補 ${shortDate(state.gap.date)} ${SHIFT_TYPES[state.gap.shift].name}` +
       `${chosen.needsApproval ? '（含需額外核准事項）' : ''}；正式調班登錄由主管於院內系統執行`);
+    toast(`已核定 ${chosen.staff.id} 替補，班表與公平性同步更新`);
     renderFairness();
     renderWarnings();
     renderRoster();
+    renderQuickPick();     // 替補班次寫回後，快速通報的在班名單同步更新
     renderOverview();      // 寫回後缺口帳即時重算
     renderCapability();    // 帶班組成同步更新
 
@@ -1213,6 +1601,8 @@ function startNextGap() {
   $('#candidates-body').className = 'empty-state';
   $('#candidates-body').textContent = '請先在「缺班事件」頁完成解析與確認。';
   $('#recalc-result').innerHTML = '';   // 上一筆事件的重算結果不得殘留到新事件
+  $('#qp-result').innerHTML = '';       // 上一輪快速通報的指派結果同樣不得殘留
+  renderQuickPick();
   renderConfirmPlaceholder();
   logAction('開始處理下一筆缺班', '評估狀態已重置；已寫回的班表與替補次數延續累計');
   switchScreen('intake');
@@ -1346,7 +1736,9 @@ function renderRoster() {
       const inner = sh
         ? `<span class="cell cell-${sh.shift}">${sh.shift}${sh.isReplacement ? '<sup>替</sup>' : ''}</span>`
         : '<span style="color:var(--ink-faint)">·</span>';
-      return `<td class="center td-edit" data-sid="${esc(s.id)}" data-d="${d}" title="點擊編輯：無→白→小夜→大夜→清除">${inner}</td>`;
+      return `<td class="center td-edit" data-sid="${esc(s.id)}" data-d="${d}" tabindex="0" role="button"` +
+        ` aria-label="${esc(s.id)} ${shortDate(d)}（${weekdayOf(d)}）目前${sh ? SHIFT_TYPES[sh.shift].name : '未排班'}，按 Enter 循環編輯"` +
+        ` title="點擊編輯：無→白→小夜→大夜→清除">${inner}</td>`;
     }).join('');
     return `<tr><td><b>${esc(s.id)}</b></td><td>${esc(s.role)}</td>${cells}<td class="center">${engine.weeklyHours(s.id, ws)} 小時</td></tr>`;
   }).join('');
@@ -1368,6 +1760,8 @@ function cycleShiftCell(staffId, date) {
   logAction('班表編輯',
     `${staffId} ${shortDate(date)}（${weekdayOf(date)}）：${cur ? SHIFT_TYPES[cur].name : '無'} → ${next ? SHIFT_TYPES[next].name : '清除'}`);
   refreshAfterScheduleChange();
+  // 編輯回饋：重繪後彈一下剛改的格子，眼睛不用找
+  MOTION.pop($(`#roster-table td[data-sid="${staffId}"][data-d="${date}"] .cell`));
 }
 
 /**
@@ -1438,6 +1832,8 @@ function handleRosterImport() {
   resultEl.innerHTML = `
     <p class="fineprint">✓ 已套用 ${staffIds.size} 人、${entries.length} 班次（該週原班次已取代）。</p>
     ${errors.length ? `<p class="fineprint" style="color:var(--danger)">未套用的列：${esc(errors.slice(0, 8).join('；'))}${errors.length > 8 ? `…共 ${errors.length} 項` : ''}</p>` : ''}`;
+  toast(`班表匯入完成：${staffIds.size} 人、${entries.length} 班次`,
+    errors.length ? 'warn' : 'ok');
 }
 
 function renderStaffTable() {
@@ -1537,6 +1933,7 @@ function handleMultiRun() {
 
   const applyBtn = $('#btn-multi-apply');
   if (applyBtn) applyBtn.addEventListener('click', () => startMultiQueue(gaps, joint));
+  MOTION.enter($('#multi-result'), '.card');
 
   logAction('多筆缺班指派比較',
     `${gaps.length} 筆缺班：逐筆指派填補 ${gFilled} 筆，全局指派填補 ${joint.filled} 筆` +
@@ -1648,6 +2045,8 @@ function handleReallocRun() {
         系統不自動刪任務、不假裝缺口不存在——第三層的價值是把「降級運作方案」與「殘餘缺口」同時攤開。
       </p>
     </div>`;
+
+  MOTION.enter($('#realloc-result'), '.excl, .fact, .card-head');
 
   logAction('任務重分配試算（韌性模式）',
     `${sc.gapLabel}：${sc.onDuty.length} 位在班人員承接 ${r.coveredCount}／${r.totalCount} 項任務，` +
@@ -1777,6 +2176,8 @@ function handleGenRun() {
     switchScreen('roster');
   });
 
+  MOTION.enter($('#gen-result'), '.card');
+
   logAction('班表生成（第 0 層源頭治理）',
     `${UNITS[sc.unit]} ${sc.label}：填滿 ${r.filled}／${r.slotCount} 格，` +
     `疊上現有班表重掃新增違規 ${v.newHigh.length} 條、達門檻 ${v.newMedium.length} 條；` +
@@ -1898,6 +2299,7 @@ function handleRecalc() {
   logAction('調整規則庫並重算',
     `軟性權重 ${RULE_REGISTRY.soft.map((r) => `${r.code}=${r.weight}`).join('、')}；排序 ${before.join('>')} → ${after.join('>')}`,
     '護理部 排班規則管理員');
+  toast(before.join() === after.join() ? '規則已套用重算，排序不變' : '規則已套用重算，排序已變動', 'ok');
 
   state.chosen = null;
   state.confirmed = false;
@@ -1959,6 +2361,7 @@ async function handleFhirPush() {
     } catch (e) { /* 非 JSON 回應，僅顯示狀態碼 */ }
     out.innerHTML = `<p class="fineprint" style="color:${res.ok ? 'var(--ok)' : 'var(--danger)'}">${res.ok ? '✓ 已送出' : '✗ 伺服器回應異常'}——${esc(detail)}</p>`;
     logAction('推送 FHIR Bundle', `batch → ${base}：${detail}`);
+    toast(res.ok ? `FHIR 推送成功（${detail}）` : `FHIR 推送異常：${detail}`, res.ok ? 'ok' : 'danger');
   } catch (err) {
     const why = err && err.name === 'AbortError' ? '逾時（20 秒）' : String((err && err.message) || err);
     out.innerHTML = `<p class="fineprint" style="color:var(--danger)">✗ 推送失敗：${esc(why)}——請確認網址、CORS 設定與伺服器狀態。</p>`;
@@ -2026,6 +2429,7 @@ function initFhir() {
     a.click();
     URL.revokeObjectURL(a.href);
     logAction('匯出 FHIR Bundle', `collection：${Object.entries(fhirBundleStats(bundle)).map(([t, n]) => `${t}×${n}`).join('、')}`);
+    toast('FHIR Bundle 已下載（collection）');
   });
 
   $('#btn-fhir-preview').addEventListener('click', () => {
@@ -2044,6 +2448,7 @@ function initFhir() {
     const bundle = fhirExportBundle(fhirDb(), { timestamp: new Date().toISOString() });
     copyToClipboard(JSON.stringify(bundle, null, 2)).then((ok) => {
       $('#btn-fhir-copy').textContent = ok ? '已複製 ✓' : '複製失敗';
+      toast(ok ? 'FHIR Bundle JSON 已複製' : '複製失敗，請改用下載或預覽', ok ? 'ok' : 'danger');
       setTimeout(() => { $('#btn-fhir-copy').textContent = '複製到剪貼簿'; }, 1600);
     });
   });
@@ -2127,6 +2532,7 @@ function init() {
     a.click();
     URL.revokeObjectURL(a.href);
     logAction('匯出決策留痕', `共 ${state.audit.length} 筆紀錄，含當前規則設定快照`);
+    toast(`決策留痕已匯出（${state.audit.length} 筆，含規則快照）`);
   });
 
   STAFF.forEach((s) => { BASELINE_STANDBY[s.id] = s.standbyCount30d; });
@@ -2166,6 +2572,48 @@ function init() {
   // 從 LINE 貼上訊息即自動解析（貼上內容於事件後才進入 value，延後一拍）
   $('#raw-message').addEventListener('paste', () => setTimeout(handleParse, 0));
   $('#btn-evaluate').addEventListener('click', handleEvaluate);
+
+  // 快速通報：週切換、日期與人員點選、清單編輯、執行（事件委派，重繪不掉監聽）
+  $('#qp-week-prev').addEventListener('click', () => {
+    state.qpWeekStart = addDays(state.qpWeekStart, -7);
+    state.qpDay = addDays(state.qpDay, -7);
+    renderQuickPick();
+  });
+  $('#qp-week-next').addEventListener('click', () => {
+    state.qpWeekStart = addDays(state.qpWeekStart, 7);
+    state.qpDay = addDays(state.qpDay, 7);
+    renderQuickPick();
+  });
+  $('#qp-days').addEventListener('click', (ev) => {
+    const c = ev.target.closest('.chip');
+    if (!c) return;
+    state.qpDay = c.dataset.day;
+    renderQuickPick();
+    MOTION.enter($('#qp-board'), '.qp-person');
+  });
+  $('#qp-board').addEventListener('click', (ev) => {
+    const p = ev.target.closest('.qp-person');
+    if (p) qpTogglePerson(p);
+  });
+  $('#qp-selected').addEventListener('change', (ev) => {
+    const rowEl = ev.target.closest('.qp-sel-row');
+    if (!rowEl) return;
+    const sel = state.quickSel.get(rowEl.dataset.key);
+    if (!sel) return;
+    if (ev.target.classList.contains('qp-cert')) {
+      sel.certs = Array.from(rowEl.querySelectorAll('.qp-cert'))
+        .filter((c) => c.checked).map((c) => c.value);
+    }
+    if (ev.target.classList.contains('qp-role')) sel.role = ev.target.value;
+  });
+  $('#qp-selected').addEventListener('click', (ev) => {
+    const rm = ev.target.closest('.qp-remove');
+    if (!rm) return;
+    state.quickSel.delete(rm.closest('.qp-sel-row').dataset.key);
+    $('#qp-result').innerHTML = '';
+    renderQuickPick();
+  });
+  $('#btn-qp-run').addEventListener('click', handleQuickRun);
   $('#btn-recalc').addEventListener('click', handleRecalc);
   $('#btn-multi-run').addEventListener('click', handleMultiRun);
   $('#btn-realloc-run').addEventListener('click', handleReallocRun);
@@ -2184,6 +2632,17 @@ function init() {
   $('#roster-table').addEventListener('click', (ev) => {
     const td = ev.target.closest('td.td-edit');
     if (td) cycleShiftCell(td.dataset.sid, td.dataset.d);
+  });
+  // 鍵盤編輯班表：Enter／空白鍵循環班別；表格重繪後把焦點放回同一格，連續編輯不中斷
+  $('#roster-table').addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    const td = ev.target.closest('td.td-edit');
+    if (!td) return;
+    ev.preventDefault();
+    const { sid, d } = td.dataset;
+    cycleShiftCell(sid, d);
+    const again = $(`#roster-table td[data-sid="${sid}"][data-d="${d}"]`);
+    if (again) again.focus();
   });
   $('#btn-roster-import').addEventListener('click', handleRosterImport);
   $('#btn-roster-reset').addEventListener('click', () => {
@@ -2217,7 +2676,11 @@ function init() {
     }
   });
 
+  // 靜態按鈕的圖示注入：HTML 只標 data-ico，圖示唯一來源是 ICONS（改一處全站生效）
+  $$('[data-ico]').forEach((el) => el.insertAdjacentHTML('afterbegin', icon(el.dataset.ico)));
+
   renderRoster();
+  renderQuickPick();
   renderStaffTable();
   renderRules();
   renderFairness();

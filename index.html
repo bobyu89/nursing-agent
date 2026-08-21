@@ -63,10 +63,10 @@
       </button>
     </div>
     <div class="portal-sub">
-      <button class="portal-mini" data-goto="overview"><b>◎ 人力缺口總覽</b><span>缺多少、缺在哪、吸收後剩多少</span></button>
-      <button class="portal-mini" data-goto="capability"><b>★ 能力與出勤</b><span>證照效期、帶班平衡、公平分佈</span></button>
-      <button class="portal-mini" data-goto="dashboard"><b>公平性與決策留痕</b><span>風險預警與可稽核的 audit log</span></button>
-      <button class="portal-mini" data-goto="fhir"><b>FHIR 介接</b><span>班表 ↔ HL7 FHIR R4（TW Core IG）</span></button>
+      <button class="portal-mini" data-goto="overview"><b data-ico="target">人力缺口總覽</b><span>缺多少、缺在哪、吸收後剩多少</span></button>
+      <button class="portal-mini" data-goto="capability"><b data-ico="award">能力與出勤</b><span>證照效期、帶班平衡、公平分佈</span></button>
+      <button class="portal-mini" data-goto="dashboard"><b data-ico="scale">公平性與決策留痕</b><span>風險預警與可稽核的 audit log</span></button>
+      <button class="portal-mini" data-goto="fhir"><b data-ico="link">FHIR 介接</b><span>班表 ↔ HL7 FHIR R4（TW Core IG）</span></button>
     </div>
   </section>
 
@@ -92,20 +92,45 @@
   <section class="screen" id="screen-intake">
     <div class="screen-head">
       <h1>缺班事件建立</h1>
-      <p class="lede">護理長把人員的請假訊息貼進來，Agent 負責解析成結構化事件；<strong>訊息沒寫的欄位一律留空並主動追問</strong>，不自行補完。</p>
+      <p class="lede">兩條路建立缺班事件：<strong>快速通報</strong>直接在班表上點出缺班的人——人、日期、班別、單位零輸入；或把請假訊息貼給 Agent 解析。<strong>可多選：一次點出多筆缺班，交給全局指派一起找替補。</strong></p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>快速通報：點班表選出缺班的人</h2>
+        <span class="tag tag-brand">來源：班表點選，欄位零輸入</span>
+      </div>
+      <div class="qp-week">
+        <button class="btn btn-sm" id="qp-week-prev">◀ 前一週</button>
+        <span class="tag tag-neutral" id="qp-week-label"></span>
+        <button class="btn btn-sm" id="qp-week-next">後一週 ▶</button>
+      </div>
+      <div class="chips" id="qp-days"></div>
+      <div class="qp-board" id="qp-board"></div>
+      <div id="qp-selected"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-qp-run" disabled style="margin-top:0">請先在上方點選缺班人員</button>
+      </div>
+      <div id="qp-result"></div>
+      <p class="fineprint">
+        點日期看當天三班在班名單，<b>點人即通報缺班</b>（可跨日、跨班別多選）。
+        人、日期、班別、單位直接取自班表，來源可稽核；<b>必要資格系統不臆測</b>，
+        預設帶入院內政策（每班需 ACLS），請主管依當班治療排程確認或調整後執行。
+        通報會把該員當日班次標記為臨時請假（同示範資料語義），重新整理或「還原示範班表」可復原。
+      </p>
     </div>
 
     <div class="grid-2">
       <div class="card">
         <div class="card-head">
-          <h2>原始通報訊息</h2>
+          <h2>或：貼上請假訊息，交給 Agent 解析</h2>
           <span class="tag tag-neutral">來源：單位 LINE 群組（轉貼）</span>
         </div>
         <div class="chips" id="sample-chips"></div>
         <textarea id="raw-message" rows="6" spellcheck="false"></textarea>
         <div class="q-hint" style="margin:10px 0 4px;color:var(--ink-faint)">通報人員（代號）</div>
         <select id="ans-reporter"></select>
-        <button class="btn btn-primary" id="btn-parse">以 AI 解析通報訊息</button>
+        <button class="btn btn-primary" id="btn-parse" data-ico="sparkles">以 AI 解析通報訊息</button>
         <p class="fineprint">
           從 LINE <b>貼上訊息會自動解析</b>；也可點上方範例一鍵帶入，或直接改寫再解析——
           日期、班別、事由、單位與資格都是從文字內容比對而來，改了會跟著變。
@@ -125,7 +150,7 @@
         <span class="tag tag-warn" id="followup-note">條件不完整，需主管補充</span>
       </div>
       <div id="followup-body"></div>
-      <button class="btn btn-primary" id="btn-evaluate">確認缺班條件，開始尋找替補</button>
+      <button class="btn btn-primary" id="btn-evaluate" data-ico="search">確認缺班條件，開始尋找替補</button>
     </div>
   </section>
 
@@ -178,7 +203,7 @@
       <div class="card">
         <div class="card-head">
           <h2>決策留痕 Audit Log</h2>
-          <button class="btn btn-sm" id="btn-export-audit">匯出 JSON</button>
+          <button class="btn btn-sm" id="btn-export-audit" data-ico="download">匯出 JSON</button>
         </div>
         <div id="audit-log"></div>
         <p class="fineprint">匯出內容含全部操作紀錄與當前規則設定，可作為決策依據的留存檔。正式導入時將由後端以不可竄改方式儲存。</p>
@@ -228,7 +253,7 @@
       </div>
       <textarea id="roster-paste" rows="5" spellcheck="false"
         placeholder="從 Excel 複製後貼上，每列一人：代號 + 七欄班別（一～日）&#10;例：&#10;N-01&#9;D&#9;D&#9;&#9;E&#9;E&#9;&#9;N&#10;N-02&#9;D&#9;&#9;D&#9;D&#9;&#9;E&#9;&#10;支援：D/E/N、白/小/大、留空＝休"></textarea>
-      <button class="btn btn-primary" id="btn-roster-import">解析並套用到目前顯示的週</button>
+      <button class="btn btn-primary" id="btn-roster-import" data-ico="clipboard">解析並套用到目前顯示的週</button>
       <div id="roster-import-result"></div>
       <p class="fineprint">只影響貼上內容列出的人員（該週原班次會被取代）；代號與班別代碼經白名單驗證，不合法的列會逐列標示原因、不會套用。</p>
     </div>
@@ -254,7 +279,7 @@
         <span class="tag tag-neutral" id="weight-sum-tag">權重總和 <b id="weight-sum"></b> 分<span id="weight-sum-note"></span></span>
       </div>
       <div id="soft-rules"></div>
-      <button class="btn btn-primary" id="btn-recalc">套用規則並重新計算排序</button>
+      <button class="btn btn-primary" id="btn-recalc" data-ico="refresh">套用規則並重新計算排序</button>
       <button class="btn" id="btn-rules-reset">還原預設規則</button>
       <div id="recalc-result"></div>
       <p class="fineprint">規則調整與排班工作區的變更會自動保存在本機瀏覽器，重新整理不會遺失，各有還原按鈕可回到出廠設定。主管確認的替補寫回與決策留痕則於重新整理時重置，方便重複演示。</p>
@@ -274,7 +299,7 @@
         <span class="tag tag-neutral">以目前班表即時計算</span>
       </div>
       <div id="multi-scenario"></div>
-      <button class="btn btn-primary" id="btn-multi-run">執行兩種指派方式並比較</button>
+      <button class="btn btn-primary" id="btn-multi-run" data-ico="layers">執行兩種指派方式並比較</button>
       <p class="fineprint">情境重點：全院只有一位人員具備呼吸器照護資格，而他同時是第一筆缺班的最高分候選——考驗系統會不會把稀缺人力用錯地方。</p>
     </div>
 
@@ -292,7 +317,7 @@
         <strong>無人可承接的任務誠實標示為缺口</strong>，交主管啟動上報或調度。
       </p>
       <div id="realloc-scenario"></div>
-      <button class="btn btn-primary" id="btn-realloc-run">模擬：唯一合格者也倒下，啟動任務重分配</button>
+      <button class="btn btn-primary" id="btn-realloc-run" data-ico="zap">模擬：唯一合格者也倒下，啟動任務重分配</button>
       <div id="realloc-result"></div>
     </div>
   </section>
@@ -310,7 +335,7 @@
         <span class="tag tag-neutral">門檻與規則庫連動</span>
       </div>
       <div id="gen-scenario"></div>
-      <button class="btn btn-primary" id="btn-gen-run">生成下週班表</button>
+      <button class="btn btn-primary" id="btn-gen-run" data-ico="calendar">生成下週班表</button>
       <p class="fineprint">
         生成使用與缺班替補<b>完全相同的一份 H1–H6 檢查程式碼</b>與規則庫參數；
         現有班表作為邊界條件——週日大夜的殘影（H4）、跨週的連續上班天數（H5）都會約束下週的生成。
@@ -340,7 +365,7 @@
           人員一律代號化，不含姓名與病患資料。
         </p>
         <div class="btn-row">
-          <button class="btn btn-primary" id="btn-fhir-download" style="margin-top:0">下載 Bundle（collection）</button>
+          <button class="btn btn-primary" id="btn-fhir-download" data-ico="download" style="margin-top:0">下載 Bundle（collection）</button>
           <button class="btn" id="btn-fhir-preview">預覽 JSON</button>
           <button class="btn" id="btn-fhir-copy">複製到剪貼簿</button>
         </div>
@@ -371,7 +396,7 @@
       </div>
       <textarea id="fhir-import-text" rows="6" spellcheck="false"
         placeholder="貼上 FHIR Bundle JSON（需含 Slot 及其 Schedule／Practitioner／Location 參照鏈）。&#10;可先用左上「預覽 JSON」看本平台匯出的格式。"></textarea>
-      <button class="btn btn-primary" id="btn-fhir-import">解析並驗證</button>
+      <button class="btn btn-primary" id="btn-fhir-import" data-ico="shield">解析並驗證</button>
       <div id="fhir-import-result"></div>
       <p class="fineprint">
         驗證鏈：Slot.schedule → Schedule.actor → Practitioner.identifier（staff-id）／Location.identifier（unit-id）；
@@ -405,11 +430,15 @@
 
 </main>
 
+<div id="toast-stack" role="status" aria-live="polite"></div>
+
 <footer class="footer">
   職游 NaviCareer × AWS × 伊雲谷｜AI 職涯實戰營 DEMO DAY　第 4 組　題目（三）AI 醫護臨時缺班替補 Agent
   <span class="footer-note">本平台僅提供替補建議與風險提示，不重排完整月班表、不自動通知員工、不自動核准正式班表。</span>
 </footer>
 
+<!-- anime.js v4（官方 UMD 打包，MIT，vendored 於 assets/ 以符合 CSP self 與離線雙擊）-->
+<script src="assets/anime.umd.min.js"></script>
 <script src="src/data.js"></script>
 <script src="src/rules.js"></script>
 <script src="src/engine.js"></script>
