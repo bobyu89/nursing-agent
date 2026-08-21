@@ -59,8 +59,82 @@
     .animate-fade-rise { animation: fade-rise 0.8s ease-out both; }
     .animate-fade-rise-delay { animation: fade-rise 0.8s ease-out 0.2s both; }
     .animate-fade-rise-delay-2 { animation: fade-rise 0.8s ease-out 0.4s both; }
+    .animate-fade-rise-delay-3 { animation: fade-rise 0.8s ease-out 0.6s both; }
+
+    /* 標題進場：上移＋血絲聚焦（blur 收斂），電影感開場 */
+    @keyframes title-in {
+      from { opacity: 0; transform: translateY(30px); filter: blur(12px); }
+      to   { opacity: 1; transform: none; filter: blur(0); }
+    }
+    .animate-title { animation: title-in 1.15s cubic-bezier(.2,.7,.25,1) both; }
+
+    /* 導覽列：從上緣落下 */
+    @keyframes fade-drop {
+      from { opacity: 0; transform: translateY(-14px); }
+      to   { opacity: 1; transform: none; }
+    }
+    .animate-drop { animation: fade-drop .7s ease-out both; }
+
+    /* 兩張大 CTA：每幾秒掃過一道斜向光澤（液態玻璃的呼吸） */
+    .cta { position: relative; }
+    .cta::after {
+      content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      background: linear-gradient(115deg, transparent 38%, rgba(255,255,255,.14) 50%, transparent 62%);
+      transform: translateX(-160%);
+      animation: sheen 5.6s ease-in-out 1.6s infinite;
+    }
+    @keyframes sheen {
+      0% { transform: translateX(-160%); }
+      42%, 100% { transform: translateX(160%); }
+    }
+
+    /* 下半頁卡片 hover：微浮起＋外圈光暈（原 inset 高光保留） */
+    .grid .card, .ladder, .honest { transition: transform .25s ease, box-shadow .25s ease; }
+    .grid .card:hover {
+      transform: translateY(-4px);
+      box-shadow: inset 0 1px 1px rgba(255,255,255,.1), 0 16px 36px rgba(0,0,0,.38);
+    }
+
+    /* 捲動提示：hero 底部的浮動箭頭 */
+    .scroll-cue {
+      position: absolute; left: 50%; bottom: 26px; z-index: 10;
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.25); opacity: .75;
+      transform: translateX(-50%);
+      animation: cue-bob 2.4s ease-in-out 1.8s infinite;
+      transition: opacity .2s ease, border-color .2s ease;
+    }
+    .scroll-cue:hover { opacity: 1; border-color: rgba(255,255,255,.55); }
+    .scroll-cue::before {
+      content: ''; display: block; width: 9px; height: 9px;
+      border-right: 2px solid var(--foreground); border-bottom: 2px solid var(--foreground);
+      transform: rotate(45deg); margin: 11px auto 0;
+    }
+    @keyframes cue-bob {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50% { transform: translateX(-50%) translateY(7px); }
+    }
+
+    /* 捲動顯現：支援 scroll-driven animations 的瀏覽器才啟用；
+       其他瀏覽器（與 reduce-motion 使用者）維持完整可見——內容永不被藏死 */
+    @media (prefers-reduced-motion: no-preference) {
+      @supports (animation-timeline: view()) {
+        .reveal {
+          animation-name: fade-rise;
+          animation-timing-function: ease-out;
+          animation-fill-mode: both;
+          animation-timeline: view();
+          animation-range: entry 5% cover 32%;
+        }
+      }
+    }
+
     @media (prefers-reduced-motion: reduce) {
-      .animate-fade-rise, .animate-fade-rise-delay, .animate-fade-rise-delay-2 { animation: none; }
+      .animate-fade-rise, .animate-fade-rise-delay, .animate-fade-rise-delay-2,
+      .animate-fade-rise-delay-3, .animate-title, .animate-drop { animation: none; }
+      .cta::after, .scroll-cue { animation: none; }
+      html { scroll-behavior: auto; }
+      .grid .card, .ladder, .honest { transition: none; }
     }
 
     /* ── 影片背景層 ───────────────────────────── */
@@ -160,7 +234,7 @@
          src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260314_131748_f2ca2a28-fed7-44c8-b9a9-bd9acdd5ec31.mp4"></video>
   <div class="bg-scrim"></div>
 
-  <nav class="nav">
+  <nav class="nav animate-drop">
     <a class="logo" href="home.html">班守 ShiftGuard</a>
     <div class="nav-links">
       <a class="active" href="home.html">首頁</a>
@@ -173,7 +247,7 @@
   </nav>
 
   <section class="hero">
-    <h1 class="animate-fade-rise"><em>夜再深，</em>也要有人<br>守著班表<em>與彼此。</em></h1>
+    <h1 class="animate-title"><em>夜再深，</em>也要有人<br>守著班表<em>與彼此。</em></h1>
     <p class="sub animate-fade-rise-delay">
       班守 ShiftGuard——缺工情境下的排班與人力缺口決策支援工具。
       在人力最沉默的地方，把缺口變成可量化、可追蹤、可行動的管理資訊；
@@ -187,27 +261,28 @@
         <b>替班系統</b><span>缺班通報・合法替補建議</span>
       </a>
     </div>
-    <p class="cta-sub animate-fade-rise-delay-2">
+    <p class="cta-sub animate-fade-rise-delay-3">
       不確定從哪開始？先進 <a href="index.html">系統入口</a>看全貌，
       或 <a href="https://line.me/R/ti/p/@913sepht">加入 LINE 通報機器人</a>在聊天室完成通報與替補建議
     </p>
   </section>
+  <a class="scroll-cue" href="#claims" aria-label="往下看更多"></a>
 </div>
 
 <!-- ══ 三件事 ═══════════════════════════════════ -->
 <section class="section" id="claims">
-  <h2>三件事，缺一不可。</h2>
-  <p class="lead">只做「快」的話，Excel 篩選就夠了。平台存在的理由是後面兩件事。</p>
+  <h2 class="reveal">三件事，缺一不可。</h2>
+  <p class="lead reveal">只做「快」的話，Excel 篩選就夠了。平台存在的理由是後面兩件事。</p>
   <div class="grid g3">
-    <div class="liquid-glass card">
+    <div class="liquid-glass card reveal">
       <h3>算得準</h3>
       <p>工時、班距、連續天數、證照效期、勞基法四週彈性工時——全部由確定性規則引擎計算，58 項邊界測試釘住。語言模型不碰任何數字：算錯工時在醫療場域是合規事故，不是體驗瑕疵。</p>
     </div>
-    <div class="liquid-glass card">
+    <div class="liquid-glass card reveal">
       <h3>說得清</h3>
       <p>每一位候選人的分數攤得開、每一筆排除都寫明規則代碼與原因。「為什麼找他不找我」從此有答案——這是護理職場公平的起點。</p>
     </div>
-    <div class="liquid-glass card">
+    <div class="liquid-glass card reveal">
       <h3>留得下</h3>
       <p>每一步決策寫入雜湊鏈結的留痕，改任何一筆都會被抓到。勞檢、稽核、評鑑，一鍵匯出舉證。</p>
     </div>
@@ -216,38 +291,38 @@
 
 <!-- ══ 功能 ═════════════════════════════════════ -->
 <section class="section" id="features">
-  <h2>功能總覽</h2>
-  <p class="lead">進入平台後先選系統：<b>排班系統</b>（事前把班排好、排合法）或<b>替班系統</b>（臨時缺人快速找合法替補）；總覽與治理隨時在導覽列可查。</p>
+  <h2 class="reveal">功能總覽</h2>
+  <p class="lead reveal">進入平台後先選系統：<b>排班系統</b>（事前把班排好、排合法）或<b>替班系統</b>（臨時缺人快速找合法替補）；總覽與治理隨時在導覽列可查。</p>
   <div class="grid g2">
-    <div class="liquid-glass card">
+    <div class="liquid-glass card reveal">
       <h3><span class="no">◎</span>人力缺口儀表板</h3>
       <p>缺口方程式：營運所需 − 已排定 ＝ 缺口 → 合法吸收模擬（含代價）→ 誠實殘餘。結構性缺口自動判定，直接變成員額與預算的證據。</p>
     </div>
-    <div class="liquid-glass card">
+    <div class="liquid-glass card reveal">
       <h3><span class="no">★</span>能力徽章與帶班平衡</h3>
       <p>資格徽章（含效期）答「有沒有人會做」；進階徽章 N1–N4／AHN 答「有沒有人扛得住」。三班帶班平衡熱圖讓「夜班全是新人」無所遁形。</p>
     </div>
-    <div class="liquid-glass card">
+    <div class="liquid-glass card reveal">
       <h3><span class="no">1</span>缺班替補</h3>
       <p>貼上請假訊息 → 解析追問 → 合格候選排序與評分卡 → 主管確認留痕。找不到人時：放寬試算與多筆全局指派，只試算、不自行放寬。</p>
     </div>
-    <div class="liquid-glass card">
+    <div class="liquid-glass card reveal">
       <h3><span class="no">7</span>韌性模式</h3>
       <p>連替補都無解時，缺的不再是「一個人」，是「一班的任務」——任務重分配：資格硬性匹配、負荷平衡，補不上的誠實標示為缺口。</p>
     </div>
-    <div class="liquid-glass card">
+    <div class="liquid-glass card reveal">
       <h3><span class="no">8</span>班表生成</h3>
       <p>用與替補完全相同的一份規則生成下週班表——排出來的那一刻就合規；生成後疊回現有班表重掃驗證，零新增風險。</p>
     </div>
-    <div class="liquid-glass card">
+    <div class="liquid-glass card reveal">
       <h3><span class="no">L</span>LINE 通報機器人</h3>
       <p>通報入口放在護理師本來就在用的 LINE：訊息解析、按鈕補條件、替補建議、詢問草稿、戰情儀表板——同一份引擎，零學習成本。</p>
     </div>
-    <div class="liquid-glass card">
+    <div class="liquid-glass card reveal">
       <h3><span class="no">法</span>勞基法四週彈性工時</h3>
       <p>醫療保健業適用的四週變形工時直接寫進硬規則：雙週例假（H7）、四週正常工時總量 160 小時（H8）、四週例假＋休息日 8 日（H9），加上班距 11 小時與連續上班上限——違法的班，在源頭就排不出來。</p>
     </div>
-    <div class="liquid-glass card">
+    <div class="liquid-glass card reveal">
       <h3><span class="no">F</span>FHIR 標準介接</h3>
       <p>班表一鍵轉為 HL7 FHIR R4 資源（Practitioner／Schedule／Slot，對齊衛福部 TW Core IG）：可匯出存檔、推送 FHIR Server、自外部系統匯入——接軌院內系統與國家推動的交換標準。</p>
     </div>
@@ -256,9 +331,9 @@
 
 <!-- ══ 決策階梯 ═════════════════════════════════ -->
 <section class="section" id="ladder">
-  <h2>決策階梯：從源頭治理到韌性降級</h2>
-  <p class="lead">上層做得越好，下層被觸發得越少——我們的成功指標，是韌性模式的啟動次數逐季下降。</p>
-  <div class="liquid-glass ladder">
+  <h2 class="reveal">決策階梯：從源頭治理到韌性降級</h2>
+  <p class="lead reveal">上層做得越好，下層被觸發得越少——我們的成功指標，是韌性模式的啟動次數逐季下降。</p>
+  <div class="liquid-glass ladder reveal">
     <b>0</b>　班表生成——排出來的那一刻就合規<br>
     <b>1</b>　找合格替補——硬性排除、軟性排序、逐筆交代<br>
     <b>2</b>　放寬試算＋全局指派——把選項與代價攤開，決定權在主管<br>
@@ -268,7 +343,7 @@
 
 <!-- ══ 誠實聲明 ═════════════════════════════════ -->
 <section class="section" id="honest">
-  <div class="liquid-glass honest">
+  <div class="liquid-glass honest reveal">
     <b>誠實聲明</b>——本站為教學展示：所有人員、班表、請假資料皆為虛構（代號 N-01～N-11），
     不含任何病患資料；訊息解析為確定性關鍵詞規則（非真實模型），理解力有限但離線可跑、可驗證；
     Agent 不臆測缺漏欄位、不自行放寬規則、不代替主管決定，通知一律停在草稿。
