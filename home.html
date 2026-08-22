@@ -225,6 +225,59 @@
     }
     .footer a { border-bottom: 1px solid var(--accent); padding-bottom: 1px; }
     .footer a:hover { color: var(--foreground); }
+
+    /* ── 銷售區塊 ─────────────────────────────── */
+    .cta-solid {
+      display: inline-block; border-radius: 999px; cursor: pointer; white-space: nowrap;
+      background: var(--accent); color: #fff; font-size: 16px; font-weight: 600;
+      padding: 20px 56px; transition: transform .2s ease, filter .2s ease;
+      box-shadow: 0 10px 30px hsl(228 88% 66% / .35);
+    }
+    .cta-solid:hover { transform: scale(1.03); filter: brightness(1.08); }
+    .stat-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .stat { border-radius: 14px; padding: 28px 26px; }
+    .stat .num {
+      font-family: var(--font-display); font-size: clamp(40px, 5vw, 58px);
+      line-height: 1.1; letter-spacing: -0.02em;
+    }
+    .stat .num em { font-style: normal; color: var(--accent); }
+    .stat h3 { font-size: 15.5px; font-weight: 600; margin: 12px 0 8px; }
+    .stat p { font-size: 13px; color: var(--muted-foreground); line-height: 1.85; }
+    .stat .fix { margin-top: 12px; font-size: 13px; color: var(--foreground); }
+    .stat .fix b { color: var(--accent); font-weight: 600; }
+    .g4 { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+    .role-tag {
+      display: inline-block; font-size: 11.5px; letter-spacing: .12em; color: var(--accent);
+      border: 1px solid hsl(228 60% 40%); border-radius: 999px; padding: 3px 12px; margin-bottom: 12px;
+    }
+    .proof-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+    .proof { border-radius: 14px; padding: 22px 22px; }
+    .proof b { display: block; font-size: 22px; font-family: var(--font-display); font-weight: 400; margin-bottom: 6px; }
+    .proof p { font-size: 12.5px; color: var(--muted-foreground); line-height: 1.8; }
+    .price-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); align-items: stretch; }
+    .price { border-radius: 16px; padding: 30px 28px; display: flex; flex-direction: column; }
+    .price.featured { outline: 1.5px solid var(--accent); box-shadow: 0 12px 44px hsl(228 88% 66% / .18); }
+    .price h3 { font-size: 17px; font-weight: 600; }
+    .price .tagline { font-size: 12.5px; color: var(--muted-foreground); margin-top: 4px; }
+    .price .amount { font-family: var(--font-display); font-size: 38px; margin: 18px 0 2px; }
+    .price .amount small { font-size: 14px; color: var(--muted-foreground); font-family: var(--font-body); }
+    .price ul { list-style: none; margin: 16px 0 22px; flex: 1; }
+    .price li { font-size: 13px; color: var(--muted-foreground); line-height: 2.1; padding-left: 22px; position: relative; }
+    .price li::before { content: '✓'; position: absolute; left: 0; color: var(--accent); }
+    .price .btn-glass, .price .cta-solid { text-align: center; font-size: 14px; padding: 13px 20px; }
+    details.faq { border-bottom: 1px solid var(--border); }
+    details.faq summary {
+      cursor: pointer; list-style: none; padding: 20px 4px; font-size: 15px; font-weight: 500;
+      display: flex; justify-content: space-between; align-items: center; gap: 16px;
+    }
+    details.faq summary::-webkit-details-marker { display: none; }
+    details.faq summary::after { content: '\FF0B'; color: var(--muted-foreground); flex: none; }
+    details.faq[open] summary::after { content: '\FF0D'; }
+    details.faq .a { padding: 0 4px 22px; font-size: 13.5px; color: var(--muted-foreground); line-height: 1.95; max-width: 60rem; }
+    .final-band { text-align: center; padding: 40px 24px 8px; }
+    .final-band h2 { font-size: clamp(30px, 4.6vw, 46px) !important; }
+    .final-band .cta-solid { margin-top: 34px; }
+    .sec-note { font-size: 12px; color: var(--muted-foreground); margin-top: 14px; line-height: 1.8; }
   </style>
 </head>
 <body>
@@ -239,27 +292,27 @@
     <a class="logo" href="home.html">班守 ShiftGuard</a>
     <div class="nav-links">
       <a class="active" href="home.html">首頁</a>
+      <a href="#pain">為什麼</a>
+      <a href="#roles">角色收益</a>
       <a href="#features">功能</a>
-      <a href="#ladder">決策階梯</a>
-      <a href="#honest">誠實聲明</a>
+      <a href="#pricing">導入方案</a>
+      <a href="#faq">FAQ</a>
       <a href="https://github.com/bobyu89/nursing-agent">GitHub</a>
     </div>
     <a class="liquid-glass btn-glass" href="index.html">進入平台</a>
   </nav>
 
   <section class="hero">
-    <h1 class="animate-title"><em>夜再深，</em>也要有人<br>守著班表<em>與彼此。</em></h1>
+    <h1 class="animate-title">離職單上寫「家庭因素」，<br><em>真相藏在班表裡。</em></h1>
     <p class="sub animate-fade-rise-delay">
-      班守 ShiftGuard——缺工情境下的排班與人力缺口決策支援工具。
-      在人力最沉默的地方，把缺口變成可量化、可追蹤、可行動的管理資訊；
-      每一個判斷，都交代得出依據。
+      夜班誰最多、假日誰在扛、換完班誰違法、缺口到底缺幾個人——
+      班守 ShiftGuard 把排班的每一筆帳算清楚：<b>快、合規、公平可解釋</b>，
+      每一個判斷都交代得出依據。在她遞辭呈之前，先看見她。
     </p>
     <div class="cta-row animate-fade-rise-delay-2">
-      <a class="liquid-glass btn-glass cta" href="index.html#roster">
-        <b>排班系統</b><span>排定班表・生成合規草稿</span>
-      </a>
-      <a class="liquid-glass btn-glass cta" href="index.html#intake">
-        <b>替班系統</b><span>缺班通報・合法替補建議</span>
+      <a class="cta-solid" href="index.html">立即體驗 Demo</a>
+      <a class="liquid-glass btn-glass cta" href="#roles" style="flex-direction:row">
+        <b>90 秒看懂它幫誰省了什麼 ↓</b>
       </a>
     </div>
     <p class="cta-sub animate-fade-rise-delay-3">
@@ -267,8 +320,63 @@
       或 <a href="https://line.me/R/ti/p/@913sepht">加入 LINE 通報機器人</a>在聊天室完成通報與替補建議
     </p>
   </section>
-  <a class="scroll-cue" href="#claims" aria-label="往下看更多"></a>
+  <a class="scroll-cue" href="#pain" aria-label="往下看更多"></a>
 </div>
+
+<!-- ══ 痛點：為什麼現在 ═══════════════════════ -->
+<section class="section" id="pain">
+  <h2 class="reveal">三件事正在同時發生，而 Excel 接不住。</h2>
+  <p class="lead reveal">人力不會突然變多。能改變的，是每一個缺口被看見的速度，和每一次調度的公平。</p>
+  <div class="stat-grid">
+    <div class="liquid-glass stat reveal">
+      <div class="num">約 <em>6 成</em></div>
+      <h3>領照護理師實際執業比率</h3>
+      <p>全台領照護理人員超過三十萬，實際在臨床的僅約六成——離職不是個案，是常態。而離職的導火線，往往是「一直被壓在同一批人身上」的班。</p>
+      <div class="fix">→ 班守<b>留任雷達</b>把負荷算成看得見的帳，在遞辭呈之前先看見。</div>
+    </div>
+    <div class="liquid-glass stat reveal">
+      <div class="num"><em>三班護病比</em>入法</div>
+      <h3>2024 年起連動獎勵金與評鑑</h3>
+      <p>白班、小夜、大夜各有法定比率，達標與否直接影響獎勵金。需求端從此不是「感覺人不夠」，是一條算式。</p>
+      <div class="fix">→ 班守把需求寫成 <b>⌈占床÷護病比⌉</b>，缺口帳直接說法規的語言。</div>
+    </div>
+    <div class="liquid-glass stat reveal">
+      <div class="num">最高 <em>100 萬</em></div>
+      <h3>違反勞基法工時規定之單案罰鍰上限</h3>
+      <p>班距不足 11 小時、連上第 7 天、四週總量超標——人眼排班簽核，每一次都在賭。被罰的是醫院，簽名的是主管。</p>
+      <div class="fix">→ 班守 <b>H1–H10 規則引擎</b>在排出來的那一刻就把關，違法的班從源頭排不出來。</div>
+    </div>
+  </div>
+  <p class="sec-note reveal">行業數據為公開資訊之概略描述，實際以主管機關公告為準；本站為教學示範。</p>
+</section>
+
+<!-- ══ 角色收益 ═════════════════════════════════ -->
+<section class="section" id="roles">
+  <h2 class="reveal">四個角色，四本各自的帳。</h2>
+  <p class="lead reveal">班守不是照功能清單長出來的——是照這四個人的一天長出來的。</p>
+  <div class="grid g4">
+    <div class="liquid-glass card reveal">
+      <span class="role-tag">護理長</span>
+      <h3>簽核換班，不再用肉眼賭合規</h3>
+      <p>同仁在 LINE 談好換班，30 秒預檢：互換後兩人各自重跑 H1–H10——兩張班表各自看都沒問題的互換，交叉後可能連上七天。綠燈核准留痕，紅燈給依據。</p>
+    </div>
+    <div class="liquid-glass card reveal">
+      <span class="role-tag">值班督導</span>
+      <h3>半夜調度，不拆東牆補西牆</h3>
+      <p>ICU 倒一個人，棋盤一眼看全院：誰有餘裕、誰貼線。每個借調建議都過守恆律——借走之後，支援單位自己不能倒。</p>
+    </div>
+    <div class="liquid-glass card reveal">
+      <span class="role-tag">護理部主任</span>
+      <h3>離職前兆，變成看得見的帳</h3>
+      <p>夜班、假日、連續、代班五維負荷帳，單位內排行、單位間比較；改規則前先沙盤試算全院衝擊——拿數字進主管會議，不是拿感覺。</p>
+    </div>
+    <div class="liquid-glass card reveal">
+      <span class="role-tag">院長／管理層</span>
+      <h3>缺口變成員額與預算的證據</h3>
+      <p>營運所需 − 已排定 ＝ 缺口 → 合法吸收模擬 → 誠實殘餘。結構性缺口自動判定，向上要人的簡報，數字自己會說話。</p>
+    </div>
+  </div>
+</section>
 
 <!-- ══ 三件事 ═══════════════════════════════════ -->
 <section class="section" id="claims">
@@ -277,7 +385,7 @@
   <div class="grid g3">
     <div class="liquid-glass card reveal">
       <h3>算得準</h3>
-      <p>工時、班距、連續天數、證照效期、勞基法四週彈性工時——全部由確定性規則引擎計算，96 項邊界測試釘住。語言模型不碰任何數字：算錯工時在醫療場域是合規事故，不是體驗瑕疵。</p>
+      <p>工時、班距、連續天數、證照效期、勞基法四週彈性工時——全部由確定性規則引擎計算，98 項邊界測試釘住。語言模型不碰任何數字：算錯工時在醫療場域是合規事故，不是體驗瑕疵。</p>
     </div>
     <div class="liquid-glass card reveal">
       <h3>說得清</h3>
@@ -287,6 +395,19 @@
       <h3>留得下</h3>
       <p>每一步決策寫入雜湊鏈結的留痕，改任何一筆都會被抓到。勞檢、稽核、評鑑，一鍵匯出舉證。</p>
     </div>
+  </div>
+</section>
+
+<!-- ══ 信任證據 ═════════════════════════════════ -->
+<section class="section" id="proof">
+  <h2 class="reveal">不放假見證，放真肌肉。</h2>
+  <p class="lead reveal">給資訊室與稽核看的部分——每一項都可以當場驗證，不必相信我們的話。</p>
+  <div class="proof-grid">
+    <div class="liquid-glass proof reveal"><b>98 項邊界測試</b><p>班距 11 小時、連六天、四週 160 小時……合規事故等級的邊界全數釘住，每次更新自動重驗，<a href="tests.html" style="border-bottom:1px solid var(--accent)">現在就能跑</a>。</p></div>
+    <div class="liquid-glass proof reveal"><b>H1–H10 對條文</b><p>每一條硬規則標明法源：勞基法第 34、36、30-1、49 條與院內規範——勞檢來的時候，依據拿得出來。</p></div>
+    <div class="liquid-glass proof reveal"><b>HL7 FHIR R4</b><p>班表以國際標準（對齊衛福部 TW Core IG）與院內系統交換，不做資料孤島。</p></div>
+    <div class="liquid-glass proof reveal"><b>開源可稽核</b><p>整套程式碼公開在 GitHub——演算法怎麼排除、怎麼排序，逐行看得到，沒有黑箱。</p></div>
+    <div class="liquid-glass proof reveal"><b>零依賴・離線可跑</b><p>雙擊即用、嚴格 CSP、人事資料不經任何第三方服務——資安審查最喜歡的那種架構。</p></div>
   </div>
 </section>
 
@@ -342,11 +463,61 @@
   </div>
 </section>
 
+<!-- ══ 導入方案 ═════════════════════════════════ -->
+<section class="section" id="pricing">
+  <h2 class="reveal">導入方案</h2>
+  <p class="lead reveal">從一個病房開始，不必一次翻掉整套系統。（方案內容為示範規劃）</p>
+  <div class="price-grid">
+    <div class="liquid-glass price reveal">
+      <h3>開源自架</h3><div class="tagline">先讓引擎替你把關</div>
+      <div class="amount">NT$ 0<small>／永久</small></div>
+      <ul><li>完整 H1–H10 規則引擎與全部畫面</li><li>雙擊即用，資料留在院內</li><li>GitHub 開源、社群更新</li><li>98 項測試隨附</li></ul>
+      <a class="liquid-glass btn-glass" href="https://github.com/bobyu89/nursing-agent">從 GitHub 開始</a>
+    </div>
+    <div class="liquid-glass price featured reveal">
+      <h3>院內版</h3><div class="tagline">單位試點到全院上線</div>
+      <div class="amount">依床位數<small>／年（示範）</small></div>
+      <ul><li>對接院內 HIS／護病比與人事資料</li><li>LINE 官方帳號與圖文選單建置</li><li>規則庫依院內規範客製</li><li>決策留痕後端與稽核報表</li></ul>
+      <a class="cta-solid" href="index.html">先體驗 Demo</a>
+    </div>
+    <div class="liquid-glass price reveal">
+      <h3>企業版</h3><div class="tagline">醫療體系多院區</div>
+      <div class="amount">洽談<small>／客製</small></div>
+      <ul><li>多院區跨機構調度</li><li>SMART on FHIR 授權整合</li><li>真實模型（Bedrock）解析</li><li>導入顧問與教育訓練</li></ul>
+      <a class="liquid-glass btn-glass" href="https://github.com/bobyu89/nursing-agent">聯絡我們</a>
+    </div>
+  </div>
+</section>
+
+<!-- ══ FAQ ═════════════════════════════════════ -->
+<section class="section" id="faq">
+  <h2 class="reveal">決策者真的會問的問題</h2>
+  <div class="reveal" style="margin-top:20px">
+    <details class="faq"><summary>人事資料會不會離開醫院？</summary>
+      <div class="a">開源自架版可完全離線執行——零外部依賴、嚴格 CSP、不呼叫任何第三方服務；LINE 機器人僅以代號溝通、明確禁止病人資訊。與院內系統交換走 HL7 FHIR 標準，由院方伺服器對接。</div></details>
+    <details class="faq"><summary>AI 會不會算錯工時？</summary>
+      <div class="a">不會由 AI 算。這是班守的核心設計：工時、班距、連續天數全部由確定性規則引擎計算（98 項邊界測試釘住），語言模型只負責解析訊息與把數字寫成人話——模型不碰任何數字，也不得放寬任何規則。</div></details>
+    <details class="faq"><summary>需要換掉現有排班系統嗎？</summary>
+      <div class="a">不用。班守可以從「簽核前的預檢工具」開始用——換班預檢、缺班替補、負荷雷達都不要求你改變現有流程；班表可從 Excel 貼上匯入，也能經 FHIR 與既有系統同步。</div></details>
+    <details class="faq"><summary>我們醫院的排班規則很特殊，套得進去嗎？</summary>
+      <div class="a">規則庫是資料、不是寫死的程式：門檻與權重可由護理部自行調整，調整前還能用政策沙盤試算全院衝擊。法定下限（如班距 11 小時、母性保護）則刻意不可放寬——這是保護，不是限制。</div></details>
+    <details class="faq"><summary>導入要多久？</summary>
+      <div class="a">開源版：現在，雙擊 index.html。單位試點：把該病房名單與班表貼進來的那一天就能開始預檢與替補。全院與 HIS 對接依院內流程另計——我們建議從一個病房的「換班簽核」開始，那是最快感受到價值的地方。</div></details>
+  </div>
+</section>
+
+<!-- ══ 最終 CTA ═════════════════════════════════ -->
+<section class="section final-band" id="final">
+  <h2 class="reveal">夜再深，也要有人守著班表與彼此。</h2>
+  <p class="lead reveal" style="max-width:none">守班的人，值得被同一份認真對待。</p>
+  <a class="cta-solid reveal" href="index.html">立即體驗 Demo——免安裝，30 秒進入</a>
+</section>
+
 <!-- ══ 誠實聲明 ═════════════════════════════════ -->
 <section class="section" id="honest">
   <div class="liquid-glass honest reveal">
     <b>誠實聲明</b>——本站為教學展示：所有人員、班表、請假資料皆為虛構（代號 N-01～N-11），
-    不含任何病患資料；訊息解析為確定性關鍵詞規則（非真實模型），理解力有限但離線可跑、可驗證；
+    不含任何病患資料；本頁行業數據為公開資訊之概述、導入方案為示範規劃；訊息解析為確定性關鍵詞規則（非真實模型），理解力有限但離線可跑、可驗證；
     Agent 不臆測缺漏欄位、不自行放寬規則、不代替主管決定，通知一律停在草稿。
   </div>
 </section>
@@ -356,7 +527,7 @@
   <a href="index.html">進入平台</a>　·
   <a href="https://line.me/R/ti/p/@913sepht">LINE 機器人</a>　·
   <a href="https://github.com/bobyu89/nursing-agent">GitHub</a>　·
-  <a href="tests.html">引擎與介接測試（96 項）</a>
+  <a href="tests.html">引擎與介接測試（98 項）</a>
 </footer>
 
 </body>
