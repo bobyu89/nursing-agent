@@ -83,23 +83,23 @@ cd cloudflare/linebot; npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
 回 LINE Developers → Messaging API 分頁 → **Webhook URL** 填步驟 2 的 workers.dev 網址
 → **Verify**（應顯示 Success）→ 開啟 **Use webhook**。
 
-### 4½. 底部固定按鈕（圖文選單 Rich Menu，5 分鐘手動設定）
+### 4½. 底部固定按鈕（圖文選單 Rich Menu，一鍵腳本）
 
-讓聊天室下方常駐一排可點的大按鈕（像一般官方帳號）。在
-[manager.line.biz](https://manager.line.biz/) → 該帳號 → 左側 **聊天室相關 → 圖文選單** → **建立**：
+讓聊天室下方常駐六格大按鈕（戰情儀表板／換班預檢／調度棋盤／負荷雷達／通報缺班／開啟平台）。
+本目錄的 `richmenu.ps1` 會自動：用 Windows 內建 GDI+ 畫出與平台同視覺的 2500×1686 選單圖 →
+呼叫 Rich Menu API 建立選單 → 上傳圖片 → 設為所有人的預設選單 → 清掉舊版（安全換版）：
 
-1. **顯示設定**：標題 `班守選單`；使用期間選長期；「選單列顯示文字」填 `功能選單`；
-   **預設顯示：開啟**。
-2. **內容設定**：版型選 **3 格**；點 **建立圖片** 用內建工具做圖——
-   每格填上底色與文字即可：`📊 戰情儀表板`／`📝 通報缺班`／`🌐 開啟平台`。
-3. **動作**（關鍵）：
-   - A 格：類型 **文字** → 內容 `儀表板`
-   - B 格：類型 **文字** → 內容 `護理長不好意思，我明天白班發燒沒辦法上，很抱歉`
-   - C 格：類型 **連結** → `https://bobyu89.github.io/nursing-agent/`
-4. 儲存。聊天室下方立即出現固定按鈕。
+```powershell
+powershell -ExecutionPolicy Bypass -File richmenu.ps1
+```
 
-原理：圖文選單只是「代替使用者送出文字／開連結」的介面層——按下 A 格等於輸入
-「儀表板」，由 Worker 的指令路由接手，**不需要改任何程式**。沒空做圖的話，
+執行時會提示貼上 **Channel access token**（LINE Developers → Messaging API；請用原本那組——
+重新 Issue 會讓 Worker 裡的舊 token 失效，屆時記得同步 `npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN`）。
+只想預覽圖片：加 `-ImageOnly`。改文案或格子後重跑即可換版，Worker 程式不用動。
+
+原理：圖文選單只是「代替使用者送出文字／開連結」的介面層——按格子等於輸入指令文字，
+由 Worker 的指令路由接手。不想用腳本的話，manager.line.biz → 圖文選單也能手動建立
+（動作類型選「文字」，內容分別填 `儀表板`／`換班`／`調度`／`負荷`）；
 輸入「選單」也能隨時叫出同功能的快速按鈕（本 Worker 內建）。
 
 ## 5. 測試
