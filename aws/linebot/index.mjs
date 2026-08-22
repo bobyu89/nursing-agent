@@ -41,6 +41,7 @@ const CHANNEL_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || '';
 const LLM_PROXY_URL = process.env.LLM_PROXY_URL || '';   // 既有 aws/lambda 的 Function URL（可選）
 const DEMO_TOKEN = process.env.DEMO_TOKEN || '';          // 與 LLM Proxy 相同的通行碼
 const PLATFORM_URL = process.env.PLATFORM_URL || 'https://bobyu89.github.io/nursing-agent/';
+const LIFF_URL = process.env.LIFF_ID ? `https://liff.line.me/${process.env.LIFF_ID}` : null;   // LIFF（選配）
 
 /** 台北時區的今天（Lambda 預設 UTC；「明天」要以台灣日曆換算） */
 function todayTaipei() {
@@ -141,10 +142,10 @@ async function handleEvent(ev) {
   /* 文字訊息：指令（儀表板／選單）優先，其餘走解析流程 */
   const text = String(ev.message.text || '').slice(0, 2000);
   if (DASHBOARD_RE.test(text.trim())) {
-    return lineReplyMessages(ev.replyToken, [buildDashboardFlex(PLATFORM_URL)]);
+    return lineReplyMessages(ev.replyToken, [buildDashboardFlex(PLATFORM_URL, LIFF_URL)]);
   }
   if (MENU_RE.test(text.trim())) {
-    return lineReplyMessages(ev.replyToken, [menuMessage(PLATFORM_URL)]);
+    return lineReplyMessages(ev.replyToken, [menuMessage(PLATFORM_URL, LIFF_URL)]);
   }
   // 指令三兄弟：換班預檢／調度棋盤／負荷雷達（皆為確定性引擎，未命中回 null）
   const extra = extraCommand(text.trim(), PLATFORM_URL);

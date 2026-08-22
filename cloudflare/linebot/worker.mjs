@@ -118,6 +118,8 @@ async function lineReply(channelToken, replyToken, text, quickItems) {
 
 async function handleEvent(ev, env) {
   const platformUrl = env.PLATFORM_URL || 'https://bobyu89.github.io/nursing-agent/';
+  // LIFF（選配）：wrangler.toml 填入 LIFF_ID 後，入口按鈕改以全高視窗在 LINE 內開啟平台
+  const liffUrl = env.LIFF_ID ? `https://liff.line.me/${env.LIFF_ID}` : null;
   const token = env.LINE_CHANNEL_ACCESS_TOKEN;
   const userId = (ev.source && ev.source.userId) || 'unknown';
 
@@ -175,10 +177,10 @@ async function handleEvent(ev, env) {
   /* 文字訊息：指令（儀表板／選單）優先，其餘走解析流程 */
   const text = String(ev.message.text || '').slice(0, 2000);
   if (DASHBOARD_RE.test(text.trim())) {
-    return lineReplyMessages(token, ev.replyToken, [buildDashboardFlex(platformUrl)]);
+    return lineReplyMessages(token, ev.replyToken, [buildDashboardFlex(platformUrl, liffUrl)]);
   }
   if (MENU_RE.test(text.trim())) {
-    return lineReplyMessages(token, ev.replyToken, [menuMessage(platformUrl)]);
+    return lineReplyMessages(token, ev.replyToken, [menuMessage(platformUrl, liffUrl)]);
   }
   // 指令三兄弟：換班預檢／調度棋盤／負荷雷達（皆為確定性引擎，未命中回 null）
   const extra = extraCommand(text.trim(), platformUrl);

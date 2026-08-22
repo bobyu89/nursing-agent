@@ -132,3 +132,18 @@ test('botcore：儀表板 Flex 圖表——純 JSON 長條（零外部繪圖服�
   assert(bytes < 50000, `Flex JSON 需 < 50KB（LINE 上限），實際 ${bytes} bytes`);
   assert(str.includes('N-01'), '公平分佈應含代班最多的 N-01（4 次，飽和線前一格）');
 });
+
+test('botcore：LIFF 選配——設定時入口按鈕走 liff.line.me，未設定維持原網址', () => {
+  const plain = menuMessage('https://x.example/');
+  const plainUri = plain.quickReply.items.find((i) => i.action.label === '🌐 開啟平台').action.uri;
+  assertEqual(plainUri, 'https://x.example/', '未設定 LIFF 時維持平台網址');
+
+  const liff = menuMessage('https://x.example/', 'https://liff.line.me/123-abc');
+  const liffUri = liff.quickReply.items.find((i) => i.action.label === '🌐 開啟平台').action.uri;
+  assertEqual(liffUri, 'https://liff.line.me/123-abc', '設定 LIFF 後入口按鈕改走 liff.line.me');
+
+  const flex = JSON.stringify(buildDashboardFlex('https://x.example/', 'https://liff.line.me/123-abc'));
+  assert(flex.includes('https://liff.line.me/123-abc'), '儀表板底部按鈕同樣走 LIFF');
+  const flexPlain = JSON.stringify(buildDashboardFlex('https://x.example/'));
+  assert(!flexPlain.includes('liff.line.me'), '未設定時 Flex 卡不出現 LIFF 網址');
+});

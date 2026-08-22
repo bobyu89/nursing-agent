@@ -220,7 +220,14 @@ function flexBar(label, right, pct, color) {
   };
 }
 
-function buildDashboardFlex(platformUrl) {
+/**
+ * LIFF 支援（選配）：宿主設定 LIFF_ID 後，「開啟平台／完整儀表板」
+ * 按鈕改走 https://liff.line.me/{id} —— 在 LINE 內以全高視窗開啟平台，
+ * 體驗像原生功能。未設定則維持一般網址（LINE 內建瀏覽器）。
+ * 深鏈（#swap 等）維持一般網址：LIFF 會把 # 轉進 liff.state，
+ * 平台頁未載入 LIFF SDK（CSP 嚴格、零外部腳本），錨點會丟失——誠實取捨。
+ */
+function buildDashboardFlex(platformUrl, liffUrl) {
   const C = FLEX_C;
   const eng = createEngine({
     staff: STAFF, shifts: SHIFTS, shiftTypes: SHIFT_TYPES, roleLevels: ROLE_LEVELS,
@@ -317,7 +324,7 @@ function buildDashboardFlex(platformUrl) {
         type: 'box', layout: 'vertical', paddingAll: 'md',
         contents: [{
           type: 'button', style: 'primary', height: 'sm', color: C.brand,
-          action: { type: 'uri', label: '開啟完整儀表板', uri: platformUrl },
+          action: { type: 'uri', label: '開啟完整儀表板', uri: liffUrl || platformUrl },
         }],
       },
     },
@@ -479,7 +486,7 @@ const DASHBOARD_RE = /^(儀表板|戰情|狀態|缺口|dashboard)$/i;
 const MENU_RE = /^(選單|功能|幫助|menu|help)$/i;
 
 /** 功能選單：快速按鈕（圖文選單 Rich Menu 的輕量版，隨時可叫出） */
-function menuMessage(platformUrl) {
+function menuMessage(platformUrl, liffUrl) {
   return {
     type: 'text',
     text: '請選擇功能（也可以直接把請假訊息傳給我）：',
@@ -489,7 +496,7 @@ function menuMessage(platformUrl) {
       { type: 'action', action: { type: 'message', label: '🧭 調度棋盤', text: '調度' } },
       { type: 'action', action: { type: 'message', label: '📈 負荷雷達', text: '負荷' } },
       { type: 'action', action: { type: 'message', label: '📝 通報範例', text: '護理長不好意思，我明天白班發燒沒辦法上，很抱歉' } },
-      { type: 'action', action: { type: 'uri', label: '🌐 開啟平台', uri: platformUrl } },
+      { type: 'action', action: { type: 'uri', label: '🌐 開啟平台', uri: liffUrl || platformUrl } },
       { type: 'action', action: { type: 'uri', label: 'ℹ️ 功能介紹', uri: platformUrl.replace(/\/?$/, '/') + 'home.html' } },
     ] },
   };

@@ -102,6 +102,20 @@ powershell -ExecutionPolicy Bypass -File richmenu.ps1
 （動作類型選「文字」，內容分別填 `儀表板`／`換班`／`調度`／`負荷`）；
 輸入「選單」也能隨時叫出同功能的快速按鈕（本 Worker 內建）。
 
+### 4¾. LIFF：在 LINE 內全螢幕開平台（選配，3 分鐘）
+
+讓「開啟平台／完整儀表板」按鈕不再跳外部瀏覽器，而是在 LINE 裡以全高視窗開出平台頁：
+
+1. [LINE Developers](https://developers.line.biz/console/) → 同一個 Provider → **Create channel → LINE Login**
+   （名稱隨意，如「班守平台」；這是 LIFF 的掛載點，與 Messaging API channel 並存）。
+2. 進該 channel → **LIFF** 分頁 → **Add**：Endpoint URL 填
+   `https://bobyu89.github.io/nursing-agent/index.html`、Size 選 **Full** → 儲存，複製 **LIFF ID**
+   （長得像 `1234567890-Abcdefgh`；LIFF ID 會出現在網址中，不是機密）。
+3. 把 ID 貼進 `wrangler.toml` 的 `LIFF_ID = "..."` → `npx wrangler deploy`。
+
+誠實取捨：平台頁基於嚴格 CSP 不載入 LIFF SDK，故僅作全螢幕展示；
+指令回覆中的深鏈（#swap 等）維持一般網址——經 LIFF 轉址會遺失錨點。
+
 ## 5. 測試
 
 用手機掃 Messaging API 分頁的 QR code 加好友（會收到歡迎訊息），傳：
