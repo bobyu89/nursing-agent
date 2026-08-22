@@ -393,13 +393,28 @@ function navGroupOf(name) {
 
 const NAV_ICONS = { home: 'home', sched: 'calendar', gap: 'swap', ov: 'chart', gov: 'shield' };
 
+/** 每個畫面的側欄圖示（沒有專屬圖示的沿用群組圖示） */
+const SCREEN_ICONS = {
+  portal: 'home',
+  today: 'zap', overview: 'target', capability: 'award', retention: 'chart', ratio: 'scale',
+  intake: 'sparkles', candidates: 'user-check', confirm: 'check', multi: 'layers', dispatch: 'swap',
+  roster: 'calendar', swap: 'swap', generate: 'refresh',
+  dashboard: 'clipboard', rules: 'shield', policy: 'layers', fhir: 'link',
+};
+
 function renderNav(active) {
   const g = navGroupOf(active);
-  $('#nav').innerHTML = `
-    <div class="nav-primary">${NAV_GROUPS.map((x) =>
-    `<button class="np${x.key === g.key ? ' active' : ''}" data-group="${x.key}">${icon(NAV_ICONS[x.key])}${x.label}</button>`).join('')}</div>
-    <div class="nav-secondary">${g.screens.map(([id, label, no]) =>
-    `<button class="tab${id === active ? ' active' : ''}" data-screen="${id}"><span class="tab-no">${no}</span>${label}</button>`).join('')}</div>`;
+  $('#nav').innerHTML = NAV_GROUPS.map((x) => `
+    <div class="side-group">
+      <div class="side-label">${x.label}</div>
+      ${x.screens.map(([id, label, no]) => `
+        <button class="side-item${id === active ? ' active' : ''}" data-screen="${id}">
+          ${icon(SCREEN_ICONS[id] || NAV_ICONS[x.key])}<span class="side-txt">${label}</span><span class="side-no">${no}</span>
+        </button>`).join('')}
+    </div>`).join('');
+  const t = $('#top-title');
+  const cur = g.screens.find((sc) => sc[0] === active);
+  if (t) t.textContent = `${g.label}｜${cur ? cur[1] : ''}`;
 }
 
 function switchScreen(name) {
@@ -3122,16 +3137,10 @@ function init() {
     STAFF.map((s) => `<option value="${s.id}"${s.id === GAP_EVENT.originalStaffId ? ' selected' : ''}>` +
       `${s.id}　${s.role}　${UNITS[s.unit]}</option>`).join('');
 
-  // 兩層導覽：事件委派（導覽列每次切換都重繪，委派在容器上不掉監聽）
+  // 側欄導覽：事件委派（每次切換都重繪，委派在容器上不掉監聽）
   $('#nav').addEventListener('click', (ev) => {
-    const gp = ev.target.closest('.np');
-    if (gp) {
-      const g = NAV_GROUPS.find((x) => x.key === gp.dataset.group);
-      if (g) switchScreen(g.screens[0][0]);
-      return;
-    }
-    const t = ev.target.closest('.tab');
-    if (t) switchScreen(t.dataset.screen);
+    const item = ev.target.closest('.side-item');
+    if (item) switchScreen(item.dataset.screen);
   });
   initPortal();
   initFhir();

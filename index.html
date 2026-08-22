@@ -17,24 +17,28 @@
 </head>
 <body>
 
-<header class="topbar">
-  <div class="brand">
+<div class="shell">
+<aside class="sidebar">
+  <div class="side-brand">
     <div class="brand-mark">SG</div>
     <div class="brand-text">
       <div class="brand-name">班守 ShiftGuard</div>
-      <div class="brand-sub">缺工情境下的排班與人力缺口決策支援</div>
+      <div class="brand-sub">排班治理平台</div>
     </div>
   </div>
+  <!-- 側欄導覽：群組＋畫面（app.js 動態渲染）。畫面編號維持 Demo 分幕順序，台本與文件以編號指涉。 -->
+  <nav id="nav" aria-label="主導覽"></nav>
+  <a class="side-home" href="home.html">← 回 Landing Page</a>
+</aside>
+
+<div class="main-col">
+<header class="topbar">
+  <div class="top-title" id="top-title">系統入口</div>
   <div class="topbar-right">
-    <a class="badge badge-llm" href="home.html">← 回首頁</a>
     <span class="badge badge-demo">模擬資料 · 非真實人員</span>
     <span class="badge badge-llm" id="llm-mode-badge">LLM 模式：載入中</span>
   </div>
 </header>
-
-<!-- 兩層導覽：4 個大分頁、子功能收在第二層（app.js 動態渲染）。
-     畫面編號維持 Demo 分幕順序，台本與文件以編號指涉。 -->
-<nav id="nav" aria-label="主導覽"></nav>
 
 <main>
 
@@ -671,6 +675,8 @@
   職游 NaviCareer × AWS × 伊雲谷｜AI 職涯實戰營 DEMO DAY　第 4 組　題目（三）AI 醫護臨時缺班替補 Agent
   <span class="footer-note">本平台僅提供替補建議與風險提示，不重排完整月班表、不自動通知員工、不自動核准正式班表。</span>
 </footer>
+</div><!-- /main-col -->
+</div><!-- /shell -->
 
 <!-- anime.js v4（官方 UMD 打包，MIT，vendored 於 assets/ 以符合 CSP self 與離線雙擊）-->
 <script src="assets/anime.umd.min.js"></script>
