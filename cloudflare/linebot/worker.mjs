@@ -5,7 +5,7 @@
  * 解析器、決策引擎與互動流程都是平台的同一份程式碼
  * （src/llm.js、src/engine.js、src/botcore.js）——wrangler 打包時直接引入
  * 原始檔，「同一份程式碼在瀏覽器、測試頁、CI 與 LINE bot 上跑」。
- * 規則庫 H1–H9 全數生效（含勞基法四週彈性工時 H7–H9，
+ * 規則庫 H1–H10 全數生效（含四週彈性工時 H7–H9 與母性保護 H10，
  * 週期錨點 FLEX_CYCLE_ANCHOR 與平台一致）。
  *
  * 互動流程（無狀態；條件以 postback data 夾帶，不需要任何資料庫）：
@@ -180,6 +180,9 @@ async function handleEvent(ev, env) {
   if (MENU_RE.test(text.trim())) {
     return lineReplyMessages(token, ev.replyToken, [menuMessage(platformUrl)]);
   }
+  // 指令三兄弟：換班預檢／調度棋盤／負荷雷達（皆為確定性引擎，未命中回 null）
+  const extra = extraCommand(text.trim(), platformUrl);
+  if (extra) return lineReply(token, ev.replyToken, extra.text, extra.items);
   globalThis.GAP_EVENT.raisedAt = `${todayTaipei()} 08:00`;   // 「明天」以台灣今天為基準
   globalThis.LLM.mode = 'mock';                                // 恆為確定性解析
   const parsed = await globalThis.llmParseGapMessage(text);

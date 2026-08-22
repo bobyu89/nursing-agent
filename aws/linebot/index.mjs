@@ -146,6 +146,9 @@ async function handleEvent(ev) {
   if (MENU_RE.test(text.trim())) {
     return lineReplyMessages(ev.replyToken, [menuMessage(PLATFORM_URL)]);
   }
+  // 指令三兄弟：換班預檢／調度棋盤／負荷雷達（皆為確定性引擎，未命中回 null）
+  const extra = extraCommand(text.trim(), PLATFORM_URL);
+  if (extra) return lineReply(ev.replyToken, extra.text, extra.items);
 
   const parsed = await parseMessage(text);
   const ex = (parsed && parsed.extracted) || {};

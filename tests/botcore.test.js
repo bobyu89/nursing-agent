@@ -59,3 +59,60 @@ test('botcore：bot 引擎與平台引擎同一份規則同一個錨點；查無
   assert(none.text.includes('H1') && none.text.includes('H2'), '排除涉及的規則代碼要列出');
   assertEqual(none.items, null, '無候選人時不出詢問按鈕');
 });
+
+/* ── 指令三兄弟：換班預檢／調度棋盤／負荷雷達 ── */
+
+test('botcore：換班指令——日期簡寫展開、綠燈附平台深鏈、用法說明', () => {
+  assertEqual(expandDate('8/5'), '2026-08-05', 'M/D 以示範週年份展開');
+  assertEqual(expandDate('2026-08-05'), '2026-08-05', '完整日期原樣通過');
+  assertEqual(expandDate('13/40'), null, '不存在的日期回 null');
+
+  const usage = swapCommand('換班', 'https://x.example/');
+  assert(usage.text.includes('用法'), '無參數回用法說明');
+
+  const ok = swapCommand('換班 N-01 8/3 N-02 8/5', 'https://x.example/');
+  assert(ok.text.includes('✓ N-01 承接') && ok.text.includes('✓ N-02 承接'), '合法互換雙向皆綠燈');
+  assert(ok.text.includes('✅') && ok.text.includes('index.html#swap'), '綠燈附平台換班簽核深鏈');
+});
+
+test('botcore：換班指令——大夜殘影紅燈與防呆，與平台 analyzeSwap 同一份判定', () => {
+  // N-07 讓出 8/4 大夜換 N-06 的 8/9 小夜：N-07 班距 8 小時（H4）、N-06 當日雙班（H2）
+  const bad = swapCommand('換班 N-07 8/4 N-06 8/9', 'https://x.example/');
+  assert(bad.text.includes('⛔ H4') || bad.text.includes('H4：'), 'N-07 接小夜應觸發 H4');
+  assert(bad.text.includes('H2'), 'N-06 接大夜應觸發 H2');
+  assert(bad.text.includes('不可核准'), '紅燈明說不可核准');
+
+  const noShift = swapCommand('換班 N-01 8/9 N-02 8/5', 'https://x.example/');
+  assert(noShift.text.includes('沒有班次'), 'N-01 8/9 無班要擋下');
+  const badId = swapCommand('換班 X-99 8/3 N-02 8/5', 'https://x.example/');
+  assert(badId.text.includes('查無人員'), '不明代號要擋下');
+});
+
+test('botcore：調度指令——預設示範今日小夜，貼線單位不拆、無人可借誠實說', () => {
+  const out = dispatchCommand('調度', 'https://x.example/');
+  assert(out.text.includes('調度棋盤') && out.text.includes('小夜'), '預設示範今日的小夜');
+  assert(out.text.includes('守恆律'), '守恆律要講明');
+  assert(out.text.includes('🟡') && out.text.includes('N-06'), 'MED-3A 貼線（N-06 在班）');
+  assert(out.text.includes('無人可合法借調'), '示範主資料無餘裕：誠實回報');
+  assert(out.text.includes('index.html#dispatch'), '附平台調度棋盤深鏈');
+
+  const args = dispatchCommand('調度 8/9 白', 'https://x.example/');
+  assert(args.text.includes('8/9') && args.text.includes('白班'), '參數指定時點');
+  assertEqual(dispatchCommand('你好', 'https://x.example/'), null, '非指令不攔截');
+});
+
+test('botcore：負荷指令——高負荷名單與旗標理由，與平台留任雷達同一本帳', () => {
+  const out = retentionCommand('負荷', 'https://x.example/');
+  ['N-09', 'N-07', 'N-06'].forEach((id) =>
+    assert(out.text.includes(id), `${id} 應在高負荷名單（與平台 demo 一致）`));
+  assert(out.text.includes('非離職預測'), '誠實聲明：不是預測模型');
+  assert(out.text.includes('index.html#retention'), '附平台留任雷達深鏈');
+});
+
+test('botcore：extraCommand 統一入口——三指令命中其一，一般訊息回 null 交還解析流程', () => {
+  assert(!!extraCommand('換班', 'https://x.example/'), '換班命中');
+  assert(!!extraCommand('調度', 'https://x.example/'), '調度命中');
+  assert(!!extraCommand('負荷', 'https://x.example/'), '負荷命中');
+  assertEqual(extraCommand('我明天白班沒辦法上', 'https://x.example/'), null, '請假訊息不得被指令攔截');
+  assertEqual(extraCommand('儀表板', 'https://x.example/'), null, '儀表板由既有路由處理，不重複攔截');
+});

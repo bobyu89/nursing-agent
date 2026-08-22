@@ -4,8 +4,9 @@
  * Cloudflare Workers 版（cloudflare/linebot/worker.mjs）與
  * AWS Lambda 版（aws/linebot/index.mjs）共用同一份流程邏輯：
  *   解析結果 → 缺什麼條件出哪組按鈕（askNext）→ 條件齊全跑同一份
- *   evaluateGap 引擎（含勞基法四週彈性工時 H7–H9）→ 回覆替補建議
- *   → 詢問草稿（llmNotificationDraft）；「儀表板」回 Flex 戰情卡。
+ *   evaluateGap 引擎（H1–H10：含四週彈性工時與母性保護）→ 替補建議
+ *   → 詢問草稿（llmNotificationDraft）；「儀表板」回 Flex 戰情卡；
+ *   指令三兄弟：「換班」互換預檢、「調度」守恆律棋盤、「負荷」留任雷達。
  *
  * 本檔只組訊息、不碰傳輸：LINE 簽章驗證、reply API、頻率限制等
  * 平台差異留在各自的進入點。與 engine.js 同一設計：資料取自全域
@@ -83,14 +84,19 @@ function buildGap(p) {
   };
 }
 
-function runEngine(p) {
-  const engine = createEngine({
+/** 與平台完全同一份設定的引擎（含四週彈性工時錨點）——bot 所有功能共用 */
+function platformEngine() {
+  return createEngine({
     staff: STAFF, shifts: SHIFTS, shiftTypes: SHIFT_TYPES, roleLevels: ROLE_LEVELS,
-    certs: CERTS, units: UNITS, registry: RULE_REGISTRY, staffingMin: UNIT_MIN_STAFF,
-    flexCycleAnchor: FLEX_CYCLE_ANCHOR,   // 四週彈性工時（H7–H9）與平台同一個週期錨點
+    ladderLevels: LADDER_LEVELS, certs: CERTS, units: UNITS,
+    registry: RULE_REGISTRY, staffingMin: UNIT_MIN_STAFF,
+    flexCycleAnchor: FLEX_CYCLE_ANCHOR,
   });
+}
+
+function runEngine(p) {
   const gap = buildGap(p);
-  return { gap, ...engine.evaluateGap(gap) };
+  return { gap, ...platformEngine().evaluateGap(gap) };
 }
 
 function evaluateAndFormat(p, platformUrl) {
@@ -132,7 +138,7 @@ function evaluateAndFormat(p, platformUrl) {
       '正式指派請至平台完成主管確認（寫回班表＋決策留痕）：',
       platformUrl,
       '',
-      '＊建議由確定性引擎計算（含勞基法四週彈性工時 H7–H9）；機器人不做指派決定',
+      '＊建議由確定性引擎計算（H1–H10：含四週彈性工時 H7–H9 與母性保護 H10）；機器人不做指派決定',
       '＊示範資料（虛構人員）',
     ].join('\n'),
     items: top3.map((c) => ({
@@ -181,7 +187,8 @@ async function draftAndFormat(p, platformUrl) {
  * 與平台管理總覽同一份引擎即時計算：缺口方程式、帶班平衡、單點依賴、
  * 證照效期、結構性訊號＋前三項行動。輸入「儀表板」即生成。
  */
-const FLEX_C = { red: '#B0413E', amber: '#A8842C', green: '#5E7F58', ink: '#3D3A34', faint: '#8A877E', line: '#E4E1D9' };
+/* 色票與平台儀表板同步（淺色 SaaS 主題、靛藍主色） */
+const FLEX_C = { red: '#C92C21', amber: '#93600A', green: '#117A58', ink: '#16233A', faint: '#5C6B85', line: '#E4E9F1', brand: '#4060EF' };
 
 function buildDashboardFlex(platformUrl) {
   const C = FLEX_C;
@@ -229,13 +236,13 @@ function buildDashboardFlex(platformUrl) {
 
   return {
     type: 'flex',
-    altText: `班守戰情：缺口 ${gapCells.length} 班次、殘餘 ${residual}、行動 ${actions.length} 項`,
+    altText: `班守本週戰情：缺口 ${gapCells.length} 班次、殘餘 ${residual}、行動 ${actions.length} 項`,
     contents: {
       type: 'bubble',
       body: {
         type: 'box', layout: 'vertical', paddingAll: 'lg',
         contents: [
-          { type: 'text', text: '班守 ShiftGuard｜今日戰情', weight: 'bold', size: 'md', color: C.ink },
+          { type: 'text', text: '班守 ShiftGuard｜本週戰情', weight: 'bold', size: 'md', color: C.ink },
           { type: 'text', text: `${UNITS[UNIT]}・本週（示範資料）`, size: 'xs', color: C.faint, margin: 'sm' },
           { type: 'separator', margin: 'lg', color: C.line },
           { type: 'text', margin: 'lg', size: 'sm', color: C.ink, wrap: true,
@@ -255,12 +262,163 @@ function buildDashboardFlex(platformUrl) {
       footer: {
         type: 'box', layout: 'vertical', paddingAll: 'md',
         contents: [{
-          type: 'button', style: 'primary', height: 'sm', color: C.ink,
+          type: 'button', style: 'primary', height: 'sm', color: C.brand,
           action: { type: 'uri', label: '開啟完整儀表板', uri: platformUrl },
         }],
       },
     },
   };
+}
+
+/* ══ 指令三兄弟：換班預檢／調度棋盤／負荷雷達 ═══════════════
+ * LINE 的本質是「人不在電腦前」的時刻：同仁在 LINE 談好換班、
+ * 值班督導半夜接到倒人電話、主任在外開會想看誰快被壓垮。
+ * 三個指令都跑與平台完全相同的引擎，bot 只給建議不做決定。 */
+
+function deepLink(platformUrl, hash) {
+  return `${String(platformUrl || '').replace(/\/?$/, '/')}index.html#${hash}`;
+}
+
+/** M/D → YYYY-MM-DD（年份取示範週；完整日期原樣通過），無法解析回 null */
+function expandDate(t) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return isValidDateStr(t) ? t : null;
+  const m = /^(\d{1,2})\/(\d{1,2})$/.exec(t);
+  if (!m) return null;
+  const full = `${WEEK_DATES[0].slice(0, 4)}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  return isValidDateStr(full) ? full : null;
+}
+
+const SWAP_USAGE = [
+  '【換班預檢】用法：',
+  '換班 甲代號 甲的班日期 乙代號 乙的班日期',
+  '例：換班 N-01 8/3 N-02 8/5',
+  '',
+  '我會模擬互換後兩人各自重跑 H1–H10（班距、連續天數、',
+  '四週彈性工時、資格效期、母性保護…），綠燈紅燈都給依據。',
+  '＊必要資格以院內政策（ACLS）檢查；特殊資格請至平台換班簽核頁',
+].join('\n');
+
+function swapCommand(text, platformUrl) {
+  if (!/^換班/.test(text)) return null;
+  const tokens = text.slice(2).trim().split(/[\s,、⇄]+/).filter(Boolean);
+  if (tokens.length === 0) return { text: SWAP_USAGE, items: null };
+  if (tokens.length !== 4) {
+    return { text: `格式不對（需要 4 個欄位，收到 ${tokens.length} 個）。\n\n${SWAP_USAGE}`, items: null };
+  }
+  const [idA, dA0, idB, dB0] = tokens;
+  const A = idA.toUpperCase();
+  const B = idB.toUpperCase();
+  const dA = expandDate(dA0);
+  const dB = expandDate(dB0);
+  if (!dA || !dB) return { text: `日期看不懂（收到「${dA0}」「${dB0}」），請用 8/5 或 2026-08-05 格式。`, items: null };
+
+  const pick = (id, d) => SHIFTS.filter((s) => s.staffId === id && s.date === d);
+  const rowsA = pick(A, dA);
+  const rowsB = pick(B, dB);
+  if (!STAFF.some((s) => s.id === A)) return { text: `查無人員 ${A}（請用代號，如 N-01）。`, items: null };
+  if (!STAFF.some((s) => s.id === B)) return { text: `查無人員 ${B}（請用代號，如 N-01）。`, items: null };
+  if (!rowsA.length) return { text: `${A} 在 ${shortDate(dA)}（${weekdayOf(dA)}）沒有班次，無班可換。`, items: null };
+  if (!rowsB.length) return { text: `${B} 在 ${shortDate(dB)}（${weekdayOf(dB)}）沒有班次，無班可換。`, items: null };
+
+  const a = { staffId: A, date: dA, shift: rowsA[0].shift };
+  const b = { staffId: B, date: dB, shift: rowsB[0].shift };
+  const r = platformEngine().analyzeSwap(a, b, { requiredCerts: ['ACLS'] });
+  if (r.error) return { text: `無法預檢：${r.error}`, items: null };
+
+  const label = (q) => `${shortDate(q.date)}（${weekdayOf(q.date)}）${SHIFT_TYPES[q.shift].name}`;
+  const side = (take) => take.violations.length
+    ? `✗ ${take.staff.id} 承接 ${label(take.slot)}\n${take.violations.map((v) => `　⛔ ${v.code}：${v.detail}`).join('\n')}`
+    : `✓ ${take.staff.id} 承接 ${label(take.slot)}——通過全部硬性約束`;
+
+  return {
+    text: [
+      `【換班預檢】${A} ${label(a)} ⇄ ${B} ${label(b)}`, '',
+      side(r.aTake), '', side(r.bTake), '',
+      ...(r.notices.length ? [r.notices.map((n) => `・${n}`).join('\n'), ''] : []),
+      r.ok
+        ? '✅ 雙向皆通過 H1–H10。核准與寫回請至平台「換班簽核」完成（決策留痕）：\n' + deepLink(platformUrl, 'swap')
+        : '⛔ 存在硬性違規，不可核准——請改談其他班次；門檻依據見平台規則庫。',
+      '',
+      '＊預檢由確定性引擎計算；機器人不做核准決定',
+    ].join('\n'),
+    items: null,
+  };
+}
+
+const DISPATCH_RE = /^(?:調度|棋盤|借調)(?:\s+(\S+))?(?:\s+(\S+))?$/;
+const SHIFT_WORDS = { D: 'D', 白: 'D', 白班: 'D', E: 'E', 小夜: 'E', 晚班: 'E', N: 'N', 大夜: 'N', 夜班: 'N' };
+
+function dispatchCommand(text, platformUrl) {
+  const m = DISPATCH_RE.exec(text);
+  if (!m) return null;
+  const date = m[1] ? expandDate(m[1]) : GAP_EVENT.raisedAt.slice(0, 10);
+  const shift = m[2] ? SHIFT_WORDS[m[2].toUpperCase()] || SHIFT_WORDS[m[2]] : 'E';
+  if (!date || !shift) {
+    return { text: '用法：調度 [日期] [班別]\n例：調度 8/9 大夜（不帶參數＝示範今日的小夜）', items: null };
+  }
+
+  const eng = platformEngine();
+  const r = eng.dispatchAnalysis({ date, shift, toUnit: '', demand: UNIT_MIN_STAFF, requiredCerts: ['ACLS'] });
+  const MARK = { deficit: '🔴', tight: '🟡', surplus: '🟢' };
+  const boardLines = r.board.map((b) => `${MARK[b.status]} ${UNITS[b.unit] || b.unit}　${b.scheduled}／需 ${b.need}` +
+    `${b.status === 'surplus' ? `（+${b.scheduled - b.need}）` : b.status === 'deficit' ? `（缺 ${b.need - b.scheduled}）` : ''}` +
+    `｜${b.onDuty.join('、') || '無人在班'}`);
+
+  const deficits = r.board.filter((b) => b.status === 'deficit').slice(0, 2);
+  const findLines = deficits.flatMap((defUnit) => {
+    const dr = eng.dispatchAnalysis({ date, shift, toUnit: defUnit.unit, demand: UNIT_MIN_STAFF, requiredCerts: ['ACLS'] });
+    if (!dr.candidates.length) {
+      return [`→ ${UNITS[defUnit.unit] || defUnit.unit}：無人可合法借調（守恆律——不拆貼線單位），請走替補流程或任務重分配。`];
+    }
+    return [`→ 可借調至${UNITS[defUnit.unit] || defUnit.unit}：` + dr.candidates.slice(0, 3).map((c) =>
+      `${c.staff.id}（${UNITS[c.fromUnit] || c.fromUnit}${c.flags.length ? '，⚠' : ''}）`).join('、')];
+  });
+
+  return {
+    text: [
+      `【調度棋盤】${shortDate(date)}（${weekdayOf(date)}）${SHIFT_TYPES[shift].name}`,
+      '守恆律：借調不能讓支援單位自己變成缺口。', '',
+      ...boardLines, '',
+      ...(findLines.length ? [...findLines, ''] : []),
+      '換個時點：輸入「調度 8/9 白」「調度 8/9 大夜」',
+      '完整分析與值班演示情境：' + deepLink(platformUrl, 'dispatch'),
+      '',
+      '＊需求口徑＝各單位最低配置（示範）；示範資料部分單位為部分名單',
+    ].join('\n'),
+    items: null,
+  };
+}
+
+const RETENTION_RE = /^(?:負荷|留任|雷達)$/;
+
+function retentionCommand(text, platformUrl) {
+  if (!RETENTION_RE.test(text)) return null;
+  const led = platformEngine().workloadLedger(WEEK_DATES);
+  const flagged = led.staff.filter((x) => x.flags.length > 0);
+  const lines = flagged.length
+    ? flagged.map((x) => `⚠ ${x.staff.id}（${UNITS[x.staff.unit] || x.staff.unit}）\n` +
+      x.flags.map((f) => `　・${f.text}`).join('\n'))
+    : ['以目前班表與門檻，沒有人落入高負荷名單。'];
+  const uneven = led.units.filter((u) => u.staffCount > 0 && u.nightMax - u.nightMin >= 3);
+
+  return {
+    text: [
+      '【負荷雷達】本週（非離職預測——是確定性的負荷會計）', '',
+      ...lines, '',
+      ...(uneven.length ? [uneven.map((u) => `・${UNITS[u.unit] || u.unit} 夜班分佈不均（最多 ${u.nightMax}／最少 ${u.nightMin}）`).join('\n'), ''] : []),
+      '完整五維帳與單位比較：' + deepLink(platformUrl, 'retention'),
+      '',
+      '＊旗標門檻與平台規則庫連動；解讀與關懷面談由主管進行',
+    ].join('\n'),
+    items: null,
+  };
+}
+
+/** 三個指令的統一入口：命中回訊息物件，未命中回 null（宿主一行接入） */
+function extraCommand(text, platformUrl) {
+  return swapCommand(text, platformUrl)
+    || dispatchCommand(text, platformUrl)
+    || retentionCommand(text, platformUrl);
 }
 
 const DASHBOARD_RE = /^(儀表板|戰情|狀態|缺口|dashboard)$/i;
@@ -273,6 +431,9 @@ function menuMessage(platformUrl) {
     text: '請選擇功能（也可以直接把請假訊息傳給我）：',
     quickReply: { items: [
       { type: 'action', action: { type: 'message', label: '📊 戰情儀表板', text: '儀表板' } },
+      { type: 'action', action: { type: 'message', label: '🔁 換班預檢', text: '換班' } },
+      { type: 'action', action: { type: 'message', label: '🧭 調度棋盤', text: '調度' } },
+      { type: 'action', action: { type: 'message', label: '📈 負荷雷達', text: '負荷' } },
       { type: 'action', action: { type: 'message', label: '📝 通報範例', text: '護理長不好意思，我明天白班發燒沒辦法上，很抱歉' } },
       { type: 'action', action: { type: 'uri', label: '🌐 開啟平台', uri: platformUrl } },
       { type: 'action', action: { type: 'uri', label: 'ℹ️ 功能介紹', uri: platformUrl.replace(/\/?$/, '/') + 'home.html' } },
@@ -283,14 +444,20 @@ function menuMessage(platformUrl) {
 const welcomeText = (platformUrl) => [
   '【班守 ShiftGuard】值班通報機器人',
   '',
-  '兩種用法：',
+  '五種用法：',
   '① 通報缺班：直接傳請假訊息，例如',
   '　「護理長不好意思，我明天白班發燒沒辦法上」',
   '　我會解析並用按鈕補條件，給你合規替補建議。',
-  '② 看戰情：輸入「儀表板」，立刻回覆本週缺口、',
+  '② 換班預檢：「換班 N-01 8/3 N-02 8/5」——',
+  '　互換後兩人各自重跑 H1–H10，綠燈紅燈都給依據。',
+  '③ 調度棋盤：「調度 8/9 大夜」——全院缺口／貼線／',
+  '　餘裕一眼看，借調建議附守恆律檢查。',
+  '④ 看戰情：輸入「儀表板」，回覆本週缺口、',
   '　帶班平衡、單點依賴與需要行動的事項。',
+  '⑤ 負荷雷達：輸入「負荷」，看誰一直在扛。',
   '',
   '隨時輸入「選單」叫出功能快速按鈕。',
+  '規則 H1–H10（含四週彈性工時與母性保護），與平台同一份引擎。',
   '提醒：請以人員代號通報；訊息中請勿包含任何病人資訊。',
   `平台入口：${platformUrl}`,
 ].join('\n');
@@ -301,5 +468,6 @@ if (typeof module !== 'undefined' && module.exports) {
     FIELD_TW, encodeParams, decodeParams, askNext, buildGap, runEngine,
     evaluateAndFormat, draftAndFormat, buildDashboardFlex,
     DASHBOARD_RE, MENU_RE, menuMessage, welcomeText,
+    swapCommand, dispatchCommand, retentionCommand, extraCommand, expandDate,
   };
 }
