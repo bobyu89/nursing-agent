@@ -8,7 +8,7 @@ PLATFORM_URL = "https://bobyu89.github.io/nursing-agent/"
 # LIFF（選配）：在 LINE Developers 建立 LINE Login channel → LIFF 分頁新增 app
 # （Endpoint URL 填上方 PLATFORM_URL + index.html、Size 選 Full），把 LIFF ID 貼進來
 # 後重新 deploy——「開啟平台／完整儀表板」按鈕即改以全高視窗在 LINE 內開啟。
-LIFF_ID = ""
+LIFF_ID = "2011209447-AlMMDUMl"
 
 # 機密（不放這裡，部署後用指令設定）：
 #   npx wrangler secret put LINE_CHANNEL_SECRET
