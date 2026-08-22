@@ -353,6 +353,7 @@ function refreshAfterScheduleChange() {
   renderToday();       // 今日戰情的在班與缺口同理
   renderRetention();   // 負荷帳同理——夜班／假日／連續全都來自班表
   renderRatio();       // 達標檢核的已排人數同樣取自班表
+  renderDispatchLive();// 調度棋盤的在班與需求同理（含護病比口徑切換）
   renderOverview();
   renderCapability();
   renderWarnings();
@@ -374,6 +375,7 @@ const NAV_GROUPS = [
   { key: 'gap', label: '替班系統', screens: [
     ['intake', '通報解析', '1'], ['candidates', '替補候選', '2'],
     ['confirm', '主管確認', '3'], ['multi', '多筆與韌性', '7'],
+    ['dispatch', '調度棋盤', '督'],
   ] },
   { key: 'ov', label: '總覽', screens: [
     ['today', '今日戰情', '今'], ['overview', '人力缺口', '◎'], ['capability', '能力與出勤', '★'],
@@ -694,6 +696,118 @@ function renderCapability() {
  * 主敘事以名單完整的示範單位（內科 3A）呈現；部分名單與無資料單位
  * 誠實標示，不讓殘缺資料撐出假數字。班表寫回後即時重算。
  */
+/* ══ 畫面 督：調度棋盤 ═══════════════════════════════════
+ * 值班督導的守恆律：借調不能讓支援單位自己變成缺口。
+ * 全院棋盤跑目前班表（需求口徑隨護病比頁切換）；
+ * 演示情境用獨立資料集（同任務重分配模式），不碰主班表。 */
+
+function dispatchBoardHtml(board) {
+  const STYLE = {
+    deficit: { border: 'var(--danger)', color: 'var(--danger)', label: (b) => `▲ 缺 ${b.need - b.scheduled} 人` },
+    tight: { border: 'var(--warn)', color: 'var(--warn)', label: () => '貼線——借出即破線' },
+    surplus: { border: 'var(--ok)', color: 'var(--ok)', label: (b) => `餘裕 +${b.scheduled - b.need}` },
+  };
+  return `<div class="qp-board" style="grid-template-columns:repeat(3,1fr)">${board.map((b) => {
+    const st = STYLE[b.status];
+    return `
+    <div class="qp-col" style="border-color:${st.border}">
+      <div class="qp-col-head"><b>${esc(UNITS[b.unit] || b.unit)}</b>
+        <span class="qp-time" style="margin-left:auto">${b.scheduled}／需 ${b.need}</span></div>
+      ${b.onDuty.length
+    ? `<div class="qp-people">${b.onDuty.map((id) => `<span class="chip today-chip">${esc(id)}</span>`).join('')}</div>`
+    : '<div class="qp-col-empty">無人在班</div>'}
+      <div class="today-gap" style="color:${st.color}">${st.label(b)}${b.status === 'deficit'
+    ? ` <button class="btn btn-sm dispatch-find" data-unit="${esc(b.unit)}">找可借調的人</button>` : ''}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function dispatchResultHtml(r, ctxLabel) {
+  const candHtml = r.candidates.length ? r.candidates.map((c, i) => `
+    <div class="excl" style="border-left:3px solid var(--ok)">
+      <div><div class="excl-id">${i + 1}. ${esc(c.staff.id)}</div><div class="excl-role">${esc(UNITS[c.fromUnit] || c.fromUnit)}</div></div>
+      <div>
+        <div class="excl-reason"><span class="rule-code neutral">守恆</span>
+          <span>借出後 ${esc(UNITS[c.fromUnit] || c.fromUnit)} 仍有餘裕 +${c.donorSurplus - 1}，不產生新缺口</span></div>
+        <div class="excl-reason"><span class="rule-code neutral">資格</span>
+          <span>目標單位門檻全數通過${c.familiar ? '；熟悉目標單位' : ''}｜近 30 天被叫班／借調 ${c.standby} 次</span></div>
+        ${c.flags.map((f) => `<div class="excl-reason"><span class="rule-code">旗</span><span>${esc(f)}</span></div>`).join('')}
+      </div>
+    </div>`).join('')
+    : '<p class="fineprint" style="margin:6px 0">全院無可合法借調的人——調不動就是調不動，請回替補流程（找當日未排班者）或啟動任務重分配，切勿硬拆貼線單位。</p>';
+
+  return `
+    <div class="card-head" style="margin-top:14px"><h2>借調建議${ctxLabel ? `：${ctxLabel}` : ''}</h2>
+      <span class="tag ${r.candidates.length ? 'tag-ok' : 'tag-danger'}">${r.candidates.length ? `${r.candidates.length} 位可借` : '無人可借'}</span></div>
+    ${candHtml}
+    ${r.excluded.length ? `
+      <div class="card-head" style="margin-top:12px"><h2>不可借名單</h2>
+        <span class="tag tag-danger">${r.excluded.length} 位，逐筆註明</span></div>
+      ${r.excluded.map((x) => `
+        <div class="excl">
+          <div><div class="excl-id">${esc(x.staff.id)}</div><div class="excl-role">${esc(UNITS[x.fromUnit] || x.fromUnit)}</div></div>
+          <div>${x.violations.map((v) => `
+            <div class="excl-reason"><span class="rule-code${v.code === '守恆' ? '' : ' neutral'}">${esc(v.code)}</span><span>${esc(v.detail)}</span></div>`).join('')}</div>
+        </div>`).join('')}` : ''}`;
+}
+
+function renderDispatchLive() {
+  const el = $('#dispatch-live-board');
+  if (!el) return;
+  const date = $('#dispatch-date').value || state.todayDate;
+  const shift = $('#dispatch-shift').value || 'E';
+  const r = engine.dispatchAnalysis({ date, shift, toUnit: '', demand: UNIT_MIN_STAFF, requiredCerts: ['ACLS'] });
+  el.innerHTML = dispatchBoardHtml(r.board);
+}
+
+function handleDispatchFind(unit) {
+  const date = $('#dispatch-date').value;
+  const shift = $('#dispatch-shift').value;
+  const r = engine.dispatchAnalysis({ date, shift, toUnit: unit, demand: UNIT_MIN_STAFF, requiredCerts: ['ACLS'] });
+  $('#dispatch-live-result').innerHTML = dispatchResultHtml(r,
+    `${shortDate(date)}（${weekdayOf(date)}）${SHIFT_TYPES[shift].name} → ${UNITS[unit] || unit}`);
+  MOTION.enter($('#dispatch-live-result'), '.excl, .card-head, .fineprint');
+  logAction('跨單位借調分析',
+    `${shortDate(date)} ${SHIFT_TYPES[shift].name} @ ${UNITS[unit] || unit}：可借 ${r.candidates.length} 位、不可借 ${r.excluded.length} 位（守恆律＋目標單位資格雙重檢查）`,
+    '班守 ShiftGuard 規則引擎');
+}
+
+let dispatchScenarioEngine = null;
+
+function handleDispatchRun() {
+  const sc = DISPATCH_SCENARIO;
+  if (!dispatchScenarioEngine) {
+    dispatchScenarioEngine = createEngine({
+      staff: sc.staff, shifts: sc.shifts,
+      shiftTypes: SHIFT_TYPES, roleLevels: ROLE_LEVELS, ladderLevels: LADDER_LEVELS,
+      certs: CERTS, units: UNITS, registry: RULE_REGISTRY,
+    });
+  }
+  const r = dispatchScenarioEngine.dispatchAnalysis(sc);
+  $('#dispatch-result').innerHTML = dispatchBoardHtml(r.board).replace(/<button[^>]*dispatch-find[^>]*>.*?<\/button>/g, '')
+    + dispatchResultHtml(r, `${UNITS[sc.toUnit]}（需 ${sc.requiredCerts.map((c) => CERTS[c]).join('、')}）`);
+  MOTION.enter($('#dispatch-result'), '.qp-col, .excl, .card-head');
+  logAction('值班演示：跨單位借調分析',
+    `${sc.label}：可借 ${r.candidates.length} 位（${r.candidates.map((c) => c.staff.id).join('、') || '無'}）、` +
+    `不可借 ${r.excluded.length} 位（${r.excluded.map((x) => `${x.staff.id}:${x.violations[0].code}`).join('、')}）`,
+    '班守 ShiftGuard 規則引擎');
+}
+
+function renderDispatchScenario() {
+  const el = $('#dispatch-scenario');
+  if (!el) return;
+  const sc = DISPATCH_SCENARIO;
+  el.innerHTML = `
+    <div class="excl">
+      <div><div class="excl-id">情境</div></div>
+      <div>
+        <div class="excl-reason"><b>${esc(sc.label)}</b></div>
+        <div class="sc-evi">目標：${esc(UNITS[sc.toUnit])}（需 ${sc.requiredCerts.map((c) => esc(CERTS[c])).join('、')}、${esc(sc.requiredRole)}以上）；
+          當班 ${sc.staff.length} 人分佈於三單位；督導要在不製造新缺口的前提下找到可借的人</div>
+      </div>
+    </div>`;
+}
+
 /* ══ 畫面 比：護病比需求模型 ═════════════════════════════
  * 需求端從「每班最低 1 人」的佔位符，換成評鑑與獎勵金的語言：
  * 需求＝⌈占床÷三班護病比⌉（engine.ratioDemand，純函式）。
@@ -3105,6 +3219,25 @@ function init() {
   });
   $('#btn-swap-check').addEventListener('click', handleSwapCheck);
 
+  // 調度棋盤：日期／班別切換、缺口單位找人（委派）、演示情境
+  $('#dispatch-date').value = state.todayDate;
+  $('#dispatch-shift').innerHTML = Object.values(SHIFT_TYPES).map((t) =>
+    `<option value="${t.code}"${t.code === 'E' ? ' selected' : ''}>${t.name} ${t.start}–${t.end}</option>`).join('');
+  $('#dispatch-date').addEventListener('change', () => {
+    if (!isValidDateStr($('#dispatch-date').value)) { alert('日期格式 YYYY-MM-DD'); return; }
+    $('#dispatch-live-result').innerHTML = '';
+    renderDispatchLive();
+  });
+  $('#dispatch-shift').addEventListener('change', () => {
+    $('#dispatch-live-result').innerHTML = '';
+    renderDispatchLive();
+  });
+  $('#dispatch-live-board').addEventListener('click', (ev) => {
+    const b = ev.target.closest('.dispatch-find');
+    if (b) handleDispatchFind(b.dataset.unit);
+  });
+  $('#btn-dispatch-run').addEventListener('click', handleDispatchRun);
+
   // 護病比：層級切換、占床調整（事件委派）、套用與還原
   $('#ratio-level').addEventListener('change', (ev) => {
     state.ratioLevel = ev.target.value;
@@ -3215,6 +3348,8 @@ function init() {
   renderRetention();
   renderPolicyInputs();
   renderRatio();
+  renderDispatchLive();
+  renderDispatchScenario();
   renderStaffTable();
   renderRules();
   renderFairness();

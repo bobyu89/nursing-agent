@@ -311,6 +311,48 @@ const TASK_REALLOC_SCENARIO = {
   ],
 };
 
+/* ── 督導調度演示情境（值班夜：跨單位借調的守恆律）────────
+ * 22:40，值班督導的手機響：ICU 小夜倒一人（需 ACLS＋VENT）。
+ * 全院三單位當班——SUR-5B 有餘裕（3 在班／需 2），但其中一人無 VENT、
+ * 一人近期已被頻繁借調；MED-3A 恰好貼線（1 在班／需 1），借走即破線。
+ * 考驗調度的守恆律：借調不能讓支援單位自己變成缺口。
+ * 獨立情境資料（同 TASK_REALLOC_SCENARIO 模式），不與全域 STAFF 合併。
+ */
+const DISPATCH_SCENARIO = {
+  label: '2026-08-08（六）小夜 22:40｜ICU 通報缺 1 人',
+  date: '2026-08-08', shift: 'E', toUnit: 'ICU',
+  requiredCerts: ['ACLS', 'VENT'], requiredRole: '護理師',
+  demand: {
+    'MED-3A': { D: 2, E: 1, N: 1 },
+    'SUR-5B': { D: 3, E: 2, N: 2 },
+    'ICU':    { D: 3, E: 2, N: 2 },
+  },
+  staff: [
+    { id: 'S-01', role: '護理師', ladder: 'N2', unit: 'SUR-5B',
+      certs: { ACLS: '2027-12-31', VENT: '2027-06-30', IV: '2028-01-31' },
+      willingShifts: ['D', 'E'], familiarUnits: ['SUR-5B', 'ICU'], standbyCount30d: 1, leaves: [] },
+    { id: 'S-02', role: '護理師', ladder: 'N1', unit: 'SUR-5B',
+      certs: { ACLS: '2027-10-31', IV: '2027-08-31' },
+      willingShifts: ['E'], familiarUnits: ['SUR-5B'], standbyCount30d: 0, leaves: [] },
+    { id: 'S-03', role: '資深護理師', ladder: 'N3', unit: 'SUR-5B',
+      certs: { ACLS: '2028-03-31', VENT: '2027-09-30', IV: '2028-06-30' },
+      willingShifts: ['D', 'E', 'N'], familiarUnits: ['SUR-5B'], standbyCount30d: 5, leaves: [] },
+    { id: 'M-01', role: '護理師', ladder: 'N2', unit: 'MED-3A',
+      certs: { ACLS: '2027-11-30', VENT: '2027-05-31', IV: '2027-12-31' },
+      willingShifts: ['E'], familiarUnits: ['MED-3A', 'ICU'], standbyCount30d: 2, leaves: [] },
+    { id: 'I-01', role: '護理師', ladder: 'N2', unit: 'ICU',
+      certs: { ACLS: '2027-07-31', VENT: '2027-04-30', IV: '2028-02-28' },
+      willingShifts: ['E', 'N'], familiarUnits: ['ICU'], standbyCount30d: 3, leaves: [] },
+  ],
+  shifts: [
+    { staffId: 'S-01', date: '2026-08-08', shift: 'E', unit: 'SUR-5B' },
+    { staffId: 'S-02', date: '2026-08-08', shift: 'E', unit: 'SUR-5B' },
+    { staffId: 'S-03', date: '2026-08-08', shift: 'E', unit: 'SUR-5B' },
+    { staffId: 'M-01', date: '2026-08-08', shift: 'E', unit: 'MED-3A' },
+    { staffId: 'I-01', date: '2026-08-08', shift: 'E', unit: 'ICU' },
+  ],
+};
+
 /* ── 班表生成演示情境（第 0 層：源頭治理）─────────────────
  * 為內科病房 3A 生成「下一週」班表：每日白班 2 人、小夜 1 人、大夜 1 人，
  * 全部需 ACLS 有效（病房安全政策）。現有班表（8/03–8/09）作為邊界條件：
@@ -366,6 +408,6 @@ if (typeof module !== 'undefined' && module.exports) {
     SHIFT_TYPES, UNITS, CERTS, ROLE_LEVELS, LADDER_LEVELS, WEEK, WEEK_DATES,
     STAFF, SHIFTS, RAW_MESSAGE, GAP_EVENT, UNIT_MIN_STAFF, MULTI_GAP_SCENARIO,
     SAMPLE_MESSAGES, TASK_REALLOC_SCENARIO, GEN_SCENARIO, FLEX_CYCLE_ANCHOR,
-    HOSPITAL_LEVELS, ICU_RATIO, UNIT_CENSUS,
+    HOSPITAL_LEVELS, ICU_RATIO, UNIT_CENSUS, DISPATCH_SCENARIO,
   };
 }

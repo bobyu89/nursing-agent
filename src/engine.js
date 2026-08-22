@@ -795,6 +795,80 @@ function createEngine(db) {
   }
 
   /**
+   * 督導調度棋盤：跨單位借調分析（值班督導的守恆律）。
+   *
+   * 借調是「平移」：把已在班的人於同一班別移到缺口單位——
+   * 工時、班距、連續天數皆不變，個人面要查的是目標單位的資格門檻；
+   * 真正的關鍵是守恆律：**借出後，支援單位自己不得破線**。
+   * 用一個洞去補另一個洞，隔天早上是兩個單位一起找督導。
+   *
+   * @param {object} spec { date, shift, toUnit, demand, requiredCerts, requiredRole }
+   *   demand 形狀同 UNIT_MIN_STAFF（{unit:{D,E,N}}），可餵佔位或護病比口徑
+   * @returns {{ board, target, gapCount, candidates, excluded }}
+   *   board 各單位 { unit, need, scheduled, onDuty, status: deficit|tight|surplus }
+   */
+  function dispatchAnalysis({ date, shift, toUnit, demand, requiredCerts = [], requiredRole = '護理師' }) {
+    const roleNeed = db.roleLevels[requiredRole] !== undefined ? db.roleLevels[requiredRole] : 0;
+    const sat = getSoftParam('S1', 5);
+
+    const board = Object.keys(demand || {}).map((unit) => {
+      const rows = db.shifts.filter((s) => s.date === date && s.shift === shift && s.unit === unit);
+      const need = (demand[unit] || {})[shift] || 0;
+      const scheduled = rows.length;
+      return {
+        unit, need, scheduled,
+        onDuty: rows.map((s) => s.staffId).sort(),
+        status: scheduled < need ? 'deficit' : scheduled === need ? 'tight' : 'surplus',
+      };
+    });
+    const target = board.find((b) => b.unit === toUnit) || null;
+    const gapCount = target ? Math.max(0, target.need - target.scheduled) : 0;
+
+    const candidates = [];
+    const excluded = [];
+    board.filter((b) => b.unit !== toUnit).forEach((b) => {
+      b.onDuty.forEach((id) => {
+        const staff = db.staff.find((x) => x.id === id);
+        if (!staff) return;
+        const violations = [];
+        // 個人面：目標單位的資格門檻（H1 語義；平移不動工時，H2–H9 由原班保證）
+        if ((db.roleLevels[staff.role] !== undefined ? db.roleLevels[staff.role] : -1) < roleNeed) {
+          violations.push({ code: 'H1', detail: `職務 ${staff.role} 未達目標單位要求（${requiredRole}以上）` });
+        }
+        requiredCerts.forEach((c) => {
+          const exp = staff.certs[c];
+          if (!exp) violations.push({ code: 'H1', detail: `未持有 ${db.certs[c] || c}` });
+          else if (exp < date) violations.push({ code: 'H1', detail: `${db.certs[c] || c} 已於 ${exp} 過期` });
+        });
+        // 守恆律：借出後原單位不得破線——調度不能製造新缺口
+        if (b.scheduled - 1 < b.need) {
+          violations.push({ code: '守恆', detail: `借出後 ${db.units[b.unit] || b.unit} 剩 ${b.scheduled - 1}／需 ${b.need}，支援單位自己破線` });
+        }
+        if (violations.length) {
+          excluded.push({ staff, fromUnit: b.unit, violations });
+          return;
+        }
+        const familiar = (staff.familiarUnits || []).includes(toUnit);
+        const flags = [];
+        if (!familiar) flags.push('不熟悉目標單位，交接請留意（F3）');
+        if (staff.standbyCount30d >= sat) flags.push(`近 30 天已被叫班／借調 ${staff.standbyCount30d} 次，達公平性飽和（S1）——別總是借好講話的那個`);
+        candidates.push({
+          staff, fromUnit: b.unit,
+          donorSurplus: b.scheduled - b.need,
+          familiar, standby: staff.standbyCount30d, flags,
+        });
+      });
+    });
+    // 排序：先借餘裕最大的單位，再看目標單位熟悉度，最後公平（近期被借最少者優先）
+    candidates.sort((a, b) => b.donorSurplus - a.donorSurplus
+      || Number(b.familiar) - Number(a.familiar)
+      || a.standby - b.standby
+      || (a.staff.id < b.staff.id ? -1 : 1));
+
+    return { board, target, gapCount, candidates, excluded };
+  }
+
+  /**
    * 政策沙盤：規則變更的影響試算——「改了再看」變成「看了再改」。
    *
    * 以參數覆寫後的規則庫建立平行引擎，對同一份班表跑三種掃描，
@@ -1404,7 +1478,7 @@ function createEngine(db) {
     minRestAfterGap, shiftInterval, unitCoverage,
     assignGreedy, assignJointly, rosterWarnings, coverageGaps,
     generateSchedule, workforceGapAnalysis, capabilityAnalysis, workloadLedger,
-    simulatePolicy,
+    simulatePolicy, dispatchAnalysis,
   };
 }
 

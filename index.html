@@ -490,6 +490,45 @@
     </div>
   </section>
 
+  <!-- ══ 督. 調度棋盤 ═════════════════════════════════ -->
+  <section class="screen" id="screen-dispatch">
+    <div class="screen-head">
+      <h1>調度棋盤：跨單位借調的守恆律</h1>
+      <p class="lede">夜裡與假日，值班督導是全院唯一的調度員。缺人單位找誰借，關鍵不只是「他能不能來」——<strong>是借走之後，支援單位自己不會倒。</strong>棋盤把全院一眼攤開，每個借調建議都經過雙重檢查：目標單位資格門檻＋<strong>借出後原單位仍達標（守恆律）</strong>。用一個洞補另一個洞，隔天早上是兩個護理長一起來找你。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>全院棋盤（目前班表）</h2>
+        <span class="tag tag-neutral">需求口徑隨「護病比」頁切換</span>
+      </div>
+      <div class="qp-week" style="margin-bottom:12px">
+        <input type="text" id="dispatch-date" style="width:130px" spellcheck="false">
+        <select id="dispatch-shift" style="width:auto"></select>
+      </div>
+      <div id="dispatch-live-board"></div>
+      <div id="dispatch-live-result"></div>
+      <p class="fineprint">
+        點缺口單位的「找可借調的人」執行守恆律分析。示範資料的外科 5B 與 ICU 為部分名單，
+        平時多為無人在班——這正是誠實的答案：無餘裕可借時，請回替補流程（找當日未排班者）或啟動任務重分配。
+      </p>
+    </div>
+
+    <div class="card" style="border-color:var(--brand)">
+      <div class="card-head">
+        <h2>值班演示情境：ICU 夜間倒人</h2>
+        <span class="tag tag-brand">獨立情境資料，不影響主班表</span>
+      </div>
+      <div id="dispatch-scenario"></div>
+      <button class="btn btn-primary" id="btn-dispatch-run" data-ico="swap">執行借調分析</button>
+      <div id="dispatch-result"></div>
+      <p class="fineprint">
+        情境重點：SUR-5B 有餘裕但一人無 VENT 資格（H1 排除）、一人近期已被頻繁借調（公平旗標，誠實呈現不隱藏）；
+        MED-3A 貼線——唯一在班者借走即破線，守恆律排除。建議僅供決策參考，正式借調由督導決定並於院內系統登錄。
+      </p>
+    </div>
+  </section>
+
   <!-- ══ 8. 班表生成 ══════════════════════════════════ -->
   <section class="screen" id="screen-generate">
     <div class="screen-head">

@@ -1108,3 +1108,64 @@ test('護病比：輸出可直接作為 workforceGapAnalysis 的 demand——缺
   assertEqual(nightCell.need, 1, '大夜需 1 人');
   assertEqual(nightCell.gap, 1, '大夜缺 1 人——誠實入帳');
 });
+
+/* ── 督導調度棋盤（dispatchAnalysis：守恆律借調）── */
+
+function mkDispatchEngine() {
+  return createEngine({
+    staff: structuredClone(DISPATCH_SCENARIO.staff),
+    shifts: DISPATCH_SCENARIO.shifts.map((s) => Object.assign({}, s)),
+    shiftTypes: SHIFT_TYPES, roleLevels: ROLE_LEVELS, ladderLevels: LADDER_LEVELS,
+    certs: CERTS, units: UNITS, registry: structuredClone(RULE_REGISTRY),
+  });
+}
+
+test('調度棋盤：全院狀態——缺口／貼線／餘裕三態正確', () => {
+  const e = mkDispatchEngine();
+  const r = e.dispatchAnalysis(DISPATCH_SCENARIO);
+  const st = (u) => r.board.find((b) => b.unit === u);
+  assertEqual(st('ICU').status, 'deficit', 'ICU 1 在班／需 2 → 缺口');
+  assertEqual(st('MED-3A').status, 'tight', 'MED-3A 1／1 → 貼線');
+  assertEqual(st('SUR-5B').status, 'surplus', 'SUR-5B 3／2 → 餘裕');
+  assertEqual(r.gapCount, 1, 'ICU 缺 1 人');
+});
+
+test('調度守恆律：貼線單位的人借走即破線——一律排除且理由寫明', () => {
+  const e = mkDispatchEngine();
+  const r = e.dispatchAnalysis(DISPATCH_SCENARIO);
+  const m01 = r.excluded.find((x) => x.staff.id === 'M-01');
+  assert(!!m01, 'M-01（MED-3A 唯一在班）應被排除');
+  assert(m01.violations.some((v) => v.code === '守恆' && v.detail.includes('破線')),
+    `排除理由應為守恆律，實際：${m01.violations.map((v) => v.code).join(',')}`);
+  assert(!r.candidates.some((c) => c.staff.id === 'M-01'), 'M-01 不得出現在建議名單');
+});
+
+test('調度個人面：目標單位資格門檻——無 VENT 者不得借入 ICU', () => {
+  const e = mkDispatchEngine();
+  const r = e.dispatchAnalysis(DISPATCH_SCENARIO);
+  const s02 = r.excluded.find((x) => x.staff.id === 'S-02');
+  assert(!!s02 && s02.violations.some((v) => v.code === 'H1'),
+    'S-02 無 VENT，應以 H1 排除');
+});
+
+test('調度建議排序與公平旗標：近期被借最少者優先、飽和者亮旗但不隱藏', () => {
+  const e = mkDispatchEngine();
+  const r = e.dispatchAnalysis(DISPATCH_SCENARIO);
+  assertEqual(r.candidates.map((c) => c.staff.id), ['S-01', 'S-03'],
+    '兩位合格：S-01（近 30 天 1 次）應排在 S-03（5 次）之前');
+  const s03 = r.candidates.find((c) => c.staff.id === 'S-03');
+  assert(s03.flags.some((f) => f.includes('公平性飽和')),
+    'S-03 已達 S1 飽和，應亮公平旗標——誠實呈現而非隱藏');
+});
+
+test('調度棋盤：以示範主資料實跑不崩潰，無餘裕時誠實回空建議', () => {
+  const e = mkEngine(STAFF, SHIFTS.slice(), { flexCycleAnchor: FLEX_CYCLE_ANCHOR });
+  const r = e.dispatchAnalysis({
+    date: '2026-08-08', shift: 'E', toUnit: 'ICU',
+    demand: UNIT_MIN_STAFF, requiredCerts: ['ACLS'],
+  });
+  assert(Array.isArray(r.board) && r.board.length === 3, '三單位棋盤');
+  // 8/08 小夜全院只有 N-06（MED-3A 1／1 貼線）→ 借走即破線，誠實零建議
+  assertEqual(r.candidates.length, 0, '無餘裕單位時建議名單為空');
+  assert(r.excluded.every((x) => x.violations.length > 0), '每筆排除都有理由');
+});
