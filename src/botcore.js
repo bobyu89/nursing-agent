@@ -188,7 +188,37 @@ async function draftAndFormat(p, platformUrl) {
  * 證照效期、結構性訊號＋前三項行動。輸入「儀表板」即生成。
  */
 /* 色票與平台儀表板同步（淺色 SaaS 主題、靛藍主色） */
-const FLEX_C = { red: '#C92C21', amber: '#93600A', green: '#117A58', ink: '#16233A', faint: '#5C6B85', line: '#E4E9F1', brand: '#4060EF' };
+const FLEX_C = { red: '#C92C21', amber: '#93600A', green: '#117A58', ink: '#16233A', faint: '#5C6B85', line: '#E4E9F1', brand: '#4060EF', track: '#EEF2F7' };
+
+/**
+ * Flex 長條圖列：LINE 沒有圖表元件，但巢狀 box 的寬度百分比＋背景色
+ * 就是貨真價實的長條——純 JSON、零依賴、資料不經任何第三方繪圖服務。
+ */
+function flexBar(label, right, pct, color) {
+  const C = FLEX_C;
+  const width = Math.max(2, Math.min(100, Math.round(pct)));   // 0 也畫 2%，讓「幾乎沒有」看得見
+  return {
+    type: 'box', layout: 'vertical', margin: 'md',
+    contents: [
+      {
+        type: 'box', layout: 'horizontal',
+        contents: [
+          { type: 'text', text: label, size: 'xs', color: C.ink, flex: 5 },
+          { type: 'text', text: right, size: 'xs', color: C.faint, align: 'end', flex: 3 },
+        ],
+      },
+      {
+        type: 'box', layout: 'vertical', margin: 'xs', height: '8px',
+        backgroundColor: C.track, cornerRadius: '4px',
+        contents: [{
+          type: 'box', layout: 'vertical', width: `${width}%`, height: '8px',
+          backgroundColor: color, cornerRadius: '4px',
+          contents: [{ type: 'filler' }],
+        }],
+      },
+    ],
+  };
+}
 
 function buildDashboardFlex(platformUrl) {
   const C = FLEX_C;
@@ -227,6 +257,25 @@ function buildDashboardFlex(platformUrl) {
       { type: 'text', text: value, size: 'sm', weight: 'bold', color, align: 'end', flex: 3 },
     ],
   });
+  /* 圖表資料：三班補足率＋公平分佈（皆為引擎輸出，長條只是把數字畫出來） */
+  const fillBars = ['D', 'E', 'N'].map((code) => {
+    const cs = cells.filter((c) => c.shift === code);
+    const needN = cs.reduce((n, c) => n + c.need, 0);
+    const schedN = cs.reduce((n, c) => n + Math.min(c.scheduled, c.need), 0);
+    const pct = needN ? (schedN / needN) * 100 : 0;
+    const color = pct >= 100 ? C.green : (pct >= 70 ? C.amber : C.red);
+    return flexBar(SHIFT_TYPES[code].name, `${schedN}／${needN} 格`, pct, color);
+  });
+  const s1 = RULE_REGISTRY.soft.find((r) => r.code === 'S1');
+  const sat = (s1 && s1.param ? s1.param.value : 5);
+  const topStandby = [...STAFF]
+    .sort((a, b) => b.standbyCount30d - a.standbyCount30d || (a.id < b.id ? -1 : 1)).slice(0, 6);
+  const maxStandby = Math.max(sat, topStandby.length ? topStandby[0].standbyCount30d : 1);
+  const fairBars = topStandby.map((s) => {
+    const color = s.standbyCount30d >= sat ? C.red : (s.standbyCount30d === sat - 1 ? C.amber : C.brand);
+    return flexBar(s.id, `${s.standbyCount30d} 次`, (s.standbyCount30d / maxStandby) * 100, color);
+  });
+
   const actions = [];
   balance.filter((b) => b.ok < b.staffed).forEach((b) =>
     actions.push(`${SHIFT_TYPES[b.code].name}資深覆蓋 ${b.ok}/${b.staffed} 天 → 輪入 N3↑`));
@@ -247,6 +296,11 @@ function buildDashboardFlex(platformUrl) {
           { type: 'separator', margin: 'lg', color: C.line },
           { type: 'text', margin: 'lg', size: 'sm', color: C.ink, wrap: true,
             text: `缺口方程式：需 ${need} − 排 ${sched} ＝ 缺 ${gapCells.length} → 可吸收 ${fills.length} ＝ 殘餘 ${residual}` },
+          { type: 'text', text: '三班排班補足率（本週）', weight: 'bold', size: 'sm', color: C.ink, margin: 'xl' },
+          ...fillBars,
+          { type: 'text', text: `近 30 天代班分佈（S1 飽和線 ${sat} 次）`, weight: 'bold', size: 'sm', color: C.ink, margin: 'xl' },
+          ...fairBars,
+          { type: 'separator', margin: 'lg', color: C.line },
           kpiRow('殘餘缺口', `${residual} 班次`, residual ? C.red : C.green),
           kpiRow(`帶班平衡（最弱：${SHIFT_TYPES[worst.code].name}）`, `${worst.ok}/${worst.staffed} 天`, worst.ok < worst.staffed ? C.red : C.green),
           kpiRow('資格單點依賴', `${sp.length} 項`, sp.length ? C.red : C.green),

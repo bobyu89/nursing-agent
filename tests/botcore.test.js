@@ -116,3 +116,19 @@ test('botcore：extraCommand 統一入口——三指令命中其一，一般訊
   assertEqual(extraCommand('我明天白班沒辦法上', 'https://x.example/'), null, '請假訊息不得被指令攔截');
   assertEqual(extraCommand('儀表板', 'https://x.example/'), null, '儀表板由既有路由處理，不重複攔截');
 });
+
+test('botcore：儀表板 Flex 圖表——純 JSON 長條（零外部繪圖服務、資料不出門）', () => {
+  const flex = buildDashboardFlex('https://x.example/');
+  const str = JSON.stringify(flex);
+  assert(str.includes('三班排班補足率'), '補足率圖表段落存在');
+  assert(str.includes('近 30 天代班分佈'), '公平分佈圖表段落存在');
+  assert(str.includes('S1 飽和線 5'), '飽和線標示與規則庫 S1 連動');
+  const bars = (str.match(/"width":"\d+%"/g) || []).length;
+  assert(bars >= 9, `至少 9 根長條（三班 3＋公平 6），實際 ${bars}`);
+  assert(str.includes('"filler"'), '長條內層以 filler 撐開（LINE Flex 規格）');
+  assert(!str.toLowerCase().includes('quickchart') && !str.includes('"type":"image"'),
+    '不使用外部繪圖服務、不夾帶圖片——人事數字不經任何第三方');
+  const bytes = new TextEncoder().encode(str).length;
+  assert(bytes < 50000, `Flex JSON 需 < 50KB（LINE 上限），實際 ${bytes} bytes`);
+  assert(str.includes('N-01'), '公平分佈應含代班最多的 N-01（4 次，飽和線前一格）');
+});
