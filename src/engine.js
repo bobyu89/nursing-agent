@@ -692,6 +692,108 @@ function createEngine(db) {
    *
    * @param {object} spec { dates, unit, seniorLevel = 3, expiringDays = 90 }
    */
+  /**
+   * 留任雷達：負荷與公平的部門帳。
+   *
+   * 明確聲明：這不是離職預測模型（那需要歷史結果資料與驗證，
+   * demo 做不到也不假裝做到）。這裡做的是確定性的「負荷會計」：
+   * 夜班誰最多、假日誰在扛、誰連上最久、誰一直被叫來代班——
+   * 全部從班表算出來、逐條給依據；解讀與關懷面談由主管進行。
+   *
+   * 旗標門檻與規則庫連動（S1 代班飽和、S2 週工時軟上限、H5 連續上限），
+   * 夜班／假日旗標另要求「單位內最高」——扛得多不多，要跟同單位比。
+   *
+   * @param {string[]} dates 統計視窗（連續日期；夜/假/工時/跨單位以視窗計，
+   *   最長連續上班取全班表，避免跨視窗邊界的連續區段被低估）
+   * @returns {{ dates, thresholds, staff: Array, units: Array }}
+   */
+  function workloadLedger(dates) {
+    const sat = getSoftParam('S1', 5);
+    const softCap = getSoftParam('S2', 48);
+    const maxDays = getHardParam('H5', 6);
+    const weeks = Math.max(dates.length / 7, 1 / 7);
+    const nightBar = Math.ceil(3 * weeks);      // 每週 3 班夜為高夜班負荷的視窗換算
+    const weekendBar = Math.ceil(2 * weeks);    // 每週 2 班假日為高假日負荷的視窗換算
+    const isWeekend = (d) => ['六', '日'].includes(weekdayOf(d));
+
+    const rows = db.staff.map((staff) => {
+      const inWin = shiftsOf(staff.id).filter((s) => dates.includes(s.date));
+      const uniqueDates = [...new Set(shiftsOf(staff.id).map((s) => s.date))].sort();
+      let run = uniqueDates.length ? 1 : 0;
+      let maxRun = run;
+      for (let i = 1; i < uniqueDates.length; i++) {
+        run = uniqueDates[i] === addDays(uniqueDates[i - 1], 1) ? run + 1 : 1;
+        if (run > maxRun) maxRun = run;
+      }
+      return {
+        staff,
+        nights: inWin.filter((s) => s.shift === 'N').length,
+        weekends: inWin.filter((s) => isWeekend(s.date)).length,
+        others: 0,   // 補齊於下方（視窗內非夜非假日班數，供圖表組成用）
+        hours: inWin.reduce((sum, s) => sum + db.shiftTypes[s.shift].hours, 0),
+        crossUnit: inWin.filter((s) => s.unit !== staff.unit).length,
+        shiftCount: inWin.length,
+        maxRun,
+        standby: staff.standbyCount30d,
+        flags: [],
+      };
+    });
+    rows.forEach((r) => {
+      const inWin = shiftsOf(r.staff.id).filter((s) => dates.includes(s.date));
+      // 圖表組成三段互斥（夜班／假日非夜／其他），加總＝視窗班數；
+      // weekends 指標本身仍計全部假日班（含假日夜班），供旗標判定
+      r.wkNonNight = inWin.filter((s) => isWeekend(s.date) && s.shift !== 'N').length;
+      r.others = inWin.filter((s) => s.shift !== 'N' && !isWeekend(s.date)).length;
+    });
+
+    // 單位內最高才亮夜班／假日旗——負荷是相對於同單位夥伴的
+    const unitMax = {};
+    rows.forEach((r) => {
+      const u = r.staff.unit;
+      unitMax[u] = unitMax[u] || { nights: 0, weekends: 0 };
+      unitMax[u].nights = Math.max(unitMax[u].nights, r.nights);
+      unitMax[u].weekends = Math.max(unitMax[u].weekends, r.weekends);
+    });
+    rows.forEach((r) => {
+      const um = unitMax[r.staff.unit];
+      if (r.nights >= nightBar && r.nights === um.nights) {
+        r.flags.push({ code: '夜班', text: `視窗內夜班 ${r.nights} 班，單位最高（門檻 ${nightBar}）` });
+      }
+      if (r.weekends >= weekendBar && r.weekends === um.weekends) {
+        r.flags.push({ code: '假日', text: `視窗內假日班 ${r.weekends} 班，單位最高（門檻 ${weekendBar}）` });
+      }
+      if (r.maxRun >= maxDays) {
+        r.flags.push({ code: '連續', text: `最長連續上班 ${r.maxRun} 天，已達 H5 上限 ${maxDays} 天` });
+      } else if (r.maxRun === maxDays - 1) {
+        r.flags.push({ code: '連續', text: `最長連續上班 ${r.maxRun} 天，距 H5 上限僅一天` });
+      }
+      if (r.standby >= sat) {
+        r.flags.push({ code: '代班', text: `近 30 天代班 ${r.standby} 次，已達公平性飽和（S1＝${sat}）` });
+      }
+      if (r.hours >= softCap * (dates.length / 7)) {
+        r.flags.push({ code: '工時', text: `視窗內工時 ${r.hours} 小時，達週 ${softCap} 小時軟上限之視窗換算` });
+      }
+    });
+    rows.sort((a, b) => b.flags.length - a.flags.length || b.hours - a.hours
+      || (a.staff.id < b.staff.id ? -1 : 1));
+
+    const units = Object.keys(db.units).map((u) => {
+      const us = rows.filter((r) => r.staff.unit === u);
+      if (!us.length) return { unit: u, staffCount: 0 };
+      const nightVals = us.map((r) => r.nights);
+      return {
+        unit: u,
+        staffCount: us.length,
+        flagged: us.filter((r) => r.flags.length > 0).length,
+        nightMax: Math.max(...nightVals),
+        nightMin: Math.min(...nightVals),
+        avgHours: round1(us.reduce((sum, r) => sum + r.hours, 0) / us.length),
+      };
+    });
+
+    return { dates, thresholds: { sat, softCap, maxDays, nightBar, weekendBar }, staff: rows, units };
+  }
+
   function capabilityAnalysis({ dates, unit, seniorLevel = 3, expiringDays = 90 }) {
     const ladder = db.ladderLevels || {};
     const lvOf = (s) => (s.ladder && ladder[s.ladder] ? ladder[s.ladder].level : 0);
@@ -1217,7 +1319,7 @@ function createEngine(db) {
     weeklyHours, shiftMix, isOnLeave, consecutiveDaysWithGap,
     minRestAfterGap, shiftInterval, unitCoverage,
     assignGreedy, assignJointly, rosterWarnings, coverageGaps,
-    generateSchedule, workforceGapAnalysis, capabilityAnalysis,
+    generateSchedule, workforceGapAnalysis, capabilityAnalysis, workloadLedger,
   };
 }
 

@@ -113,6 +113,63 @@
     <div id="capability-body"></div>
   </section>
 
+  <!-- ══ 留. 留任雷達 ═════════════════════════════════ -->
+  <section class="screen" id="screen-retention">
+    <div class="screen-head">
+      <h1>留任雷達：負荷與公平的部門帳</h1>
+      <p class="lede">離職單上寫的是「家庭因素」，真話藏在班表裡：<strong>夜班誰最多、假日誰在扛、誰連上最久、誰一直被叫來代班。</strong>這一頁把帳算清楚、攤出來，讓主任在她遞辭呈之前就看見她。<strong>這不是離職預測——是確定性的負荷會計</strong>，解讀與關懷面談由主管進行。</p>
+    </div>
+
+    <div class="card" style="border-color:var(--warn)">
+      <div class="card-head">
+        <h2>高負荷名單</h2>
+        <span class="tag tag-warn" id="ret-flag-count">計算中</span>
+      </div>
+      <div id="ret-flagged"></div>
+      <p class="fineprint">
+        旗標門檻與規則庫連動：代班＝S1 公平性飽和次數、工時＝S2 週工時軟上限、連續＝H5 連續上班上限；
+        夜班與假日另要求「單位內最高」——扛得多不多，要跟同單位夥伴比。
+        到「規則庫」把 S1 從 5 調成 4 再回來看，名單會即時改變。
+      </p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <h2>視窗負荷組成</h2>
+          <span class="tag tag-neutral" id="ret-window-label"></span>
+        </div>
+        <div id="ret-chart"></div>
+        <div class="legend">
+          <span><i class="dot" style="background:var(--danger)"></i>夜班</span>
+          <span><i class="dot" style="background:var(--warn)"></i>假日班（非夜）</span>
+          <span><i class="dot" style="background:var(--brand)"></i>其他班</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>單位間比較</h2>
+          <span class="tag tag-neutral">公平不只在單位內，也在單位間</span>
+        </div>
+        <div class="table-scroll"><table id="ret-units"></table></div>
+        <p class="fineprint">外科 5B 與 ICU 為部分名單／無資料，數字為機制展示；完整口徑見「人力缺口總覽」。</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>全員負荷帳</h2>
+        <span class="tag tag-neutral">每一格都能對回班表</span>
+      </div>
+      <div class="table-scroll"><table id="ret-table"></table></div>
+      <p class="fineprint">
+        統計視窗為示範週（正式導入建議以近 3–6 個月滾動視窗計，並保留逐月趨勢）；
+        最長連續上班取全班表，跨視窗的連續區段不被低估。代班次數為近 30 天累計，
+        主管每核定一筆替補即 +1——這本帳與替補決策即時連動。
+      </p>
+    </div>
+  </section>
+
   <!-- ══ 1. 缺班事件建立 ══════════════════════════════ -->
   <section class="screen" id="screen-intake">
     <div class="screen-head">

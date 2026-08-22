@@ -346,6 +346,7 @@ function refreshAfterScheduleChange() {
   renderQuickPick();   // 快速通報的在班名單直接取自班表，班表變了要跟著變
   renderSwapPicker();  // 換班簽核的班次清單同理
   renderToday();       // 今日戰情的在班與缺口同理
+  renderRetention();   // 負荷帳同理——夜班／假日／連續全都來自班表
   renderOverview();
   renderCapability();
   renderWarnings();
@@ -370,6 +371,7 @@ const NAV_GROUPS = [
   ] },
   { key: 'ov', label: '總覽', screens: [
     ['today', '今日戰情', '今'], ['overview', '人力缺口', '◎'], ['capability', '能力與出勤', '★'],
+    ['retention', '留任雷達', '留'],
   ] },
   { key: 'gov', label: '治理', screens: [
     ['dashboard', '公平與留痕', '4'], ['rules', '規則庫', '6'], ['fhir', 'FHIR 介接', '9'],
@@ -685,6 +687,75 @@ function renderCapability() {
  * 主敘事以名單完整的示範單位（內科 3A）呈現；部分名單與無資料單位
  * 誠實標示，不讓殘缺資料撐出假數字。班表寫回後即時重算。
  */
+/* ══ 畫面 留：留任雷達 ═══════════════════════════════════
+ * 部主任層級的公平收官：README 的因果鏈「持續壓在同一批人身上，
+ * 最後是離職」，在這一頁變成可以稽核的帳。所有數字由
+ * engine.workloadLedger 確定性計算，這裡只負責呈現。 */
+
+function renderRetention() {
+  if (!$('#ret-flagged')) return;
+  const led = engine.workloadLedger(WEEK_DATES);
+  const flagged = led.staff.filter((r) => r.flags.length > 0);
+
+  $('#ret-flag-count').textContent = flagged.length
+    ? `${flagged.length} 位需要主管看見`
+    : '目前無人達旗標門檻';
+  $('#ret-window-label').textContent = WEEK.label;
+
+  $('#ret-flagged').innerHTML = flagged.length ? flagged.map((r) => `
+    <div class="excl" style="border-left:3px solid var(--warn)">
+      <div>
+        <div class="excl-id">${esc(r.staff.id)}</div>
+        <div class="excl-role">${esc(UNITS[r.staff.unit])}</div>
+      </div>
+      <div>
+        ${r.flags.map((f) => `
+          <div class="excl-reason"><span class="rule-code neutral">${esc(f.code)}</span><span>${esc(f.text)}</span></div>`).join('')}
+      </div>
+    </div>`).join('')
+    : '<p class="fineprint" style="margin:0">以目前班表與門檻，沒有人落入高負荷名單。</p>';
+
+  /* 負荷組成圖：夜班／假日非夜／其他，三段互斥、加總＝視窗班數 */
+  const maxShifts = Math.max(1, ...led.staff.map((r) => r.shiftCount));
+  $('#ret-chart').innerHTML = chartHBar(
+    led.staff.filter((r) => r.shiftCount > 0).map((r) => ({
+      label: r.staff.id,
+      segs: [
+        { v: r.nights, color: 'var(--danger)', title: `夜班 ${r.nights} 班` },
+        { v: r.wkNonNight, color: 'var(--warn)', title: `假日班（非夜）${r.wkNonNight} 班` },
+        { v: r.others, color: 'var(--brand)', title: `其他 ${r.others} 班` },
+      ],
+      right: `${r.hours} 小時`,
+    })), { max: maxShifts });
+
+  $('#ret-units').innerHTML = `
+    <thead><tr><th>單位</th><th class="center">名單人數</th><th class="center">夜班 最多／最少</th>
+      <th class="center">高負荷人數</th><th class="center">平均視窗工時</th></tr></thead>
+    <tbody>${led.units.map((u) => `
+      <tr>
+        <td>${esc(UNITS[u.unit])}${u.unit !== 'MED-3A' ? ' <span class="tag tag-neutral">部分名單</span>' : ''}</td>
+        ${u.staffCount === 0
+    ? '<td class="center" colspan="4" style="color:var(--ink-faint)">無人員資料，不列入統計</td>'
+    : `<td class="center">${u.staffCount}</td>
+        <td class="center">${u.nightMax}／${u.nightMin}${u.nightMax - u.nightMin >= 3 ? ' <span class="tag tag-warn">分佈不均</span>' : ''}</td>
+        <td class="center">${u.flagged ? `<b style="color:var(--warn)">${u.flagged}</b>` : '0'}</td>
+        <td class="center">${u.avgHours} 小時</td>`}
+      </tr>`).join('')}</tbody>`;
+
+  $('#ret-table').innerHTML = `
+    <thead><tr><th>代號</th><th>單位</th><th class="center">夜班</th><th class="center">假日班</th>
+      <th class="center">最長連續</th><th class="center">視窗工時</th><th class="center">代班 30 天</th>
+      <th class="center">跨單位</th><th>旗標</th></tr></thead>
+    <tbody>${led.staff.map((r) => `
+      <tr${r.flags.length ? ' style="background:var(--warn-tint)"' : ''}>
+        <td><b>${esc(r.staff.id)}</b></td><td>${esc(UNITS[r.staff.unit])}</td>
+        <td class="center">${r.nights}</td><td class="center">${r.weekends}</td>
+        <td class="center">${r.maxRun} 天</td><td class="center">${r.hours} 小時</td>
+        <td class="center">${r.standby} 次</td><td class="center">${r.crossUnit || '—'}</td>
+        <td>${r.flags.map((f) => `<span class="tag tag-warn" title="${esc(f.text)}">${esc(f.code)}</span>`).join(' ') || '—'}</td>
+      </tr>`).join('')}</tbody>`;
+}
+
 /* ══ 畫面 今：今日戰情 ═══════════════════════════════════
  * 護理長每天上工的第一眼。總覽是給督導與護理部看「這週」的帳，
  * 這一頁只回答四個問題：今天到齊了嗎、48 小時內哪裡有洞、
@@ -1668,6 +1739,7 @@ async function chooseCandidate(idx) {
     renderWarnings();
     renderRoster();
     renderQuickPick();     // 替補班次寫回後，快速通報的在班名單同步更新
+    renderRetention();     // 代班次數 +1、新班次入帳——負荷帳即時跟上
     renderOverview();      // 寫回後缺口帳即時重算
     renderCapability();    // 帶班組成同步更新
 
@@ -2458,12 +2530,14 @@ function renderRules() {
     el.addEventListener('change', () => {
       RULE_REGISTRY.soft.find((r) => r.code === el.dataset.softParam).param.value = Number(el.value);
       saveRules();
+      renderRetention();   // 留任雷達的旗標門檻與 S1／S2 連動，調整即重算
     });
   });
   $$('[data-hard]').forEach((el) => {
     el.addEventListener('change', () => {
       getHardRule(el.dataset.hard).param.value = Number(el.value);
       saveRules();
+      renderRetention();   // H5 連續上限同樣連動旗標
     });
   });
   $$('[data-hard-enable]').forEach((el) => {
@@ -2928,6 +3002,7 @@ function init() {
   renderQuickPick();
   renderSwapPicker();
   renderToday();
+  renderRetention();
   renderStaffTable();
   renderRules();
   renderFairness();

@@ -934,3 +934,76 @@ test('H10 demo 基準不變：N-03 現有班表無大夜，示範劇本與零違
   assert(e.rosterWarnings().every((w) => w.level !== 'high'),
     'demo 班表在 H10 之下仍應零違規（N-03 未排大夜）');
 });
+
+/* ── 留任雷達（workloadLedger：負荷與公平的部門帳）── */
+
+test('留任雷達：視窗內夜班／假日／工時／跨單位統計正確', () => {
+  const A = mkStaff('A', { willingShifts: ['D', 'N'] });
+  const e = mkEngine([A], [
+    d('A', '2026-08-03'),            // 一 白
+    d('A', '2026-08-05', 'N'),       // 三 夜
+    d('A', '2026-08-08', 'N'),       // 六 夜（假日＋夜班）
+    d('A', '2026-08-09', 'D', 'SUR-5B'),  // 日 白，跨單位
+  ]);
+  const r = e.workloadLedger(WEEK_DATES).staff.find((x) => x.staff.id === 'A');
+  assertEqual(r.nights, 2, '夜班 2 班');
+  assertEqual(r.weekends, 2, '假日班 2 班（含假日夜班）');
+  assertEqual(r.wkNonNight, 1, '假日非夜班 1 班');
+  assertEqual(r.others, 1, '其他（平日非夜）1 班');
+  assertEqual(r.hours, 32, '視窗工時 4×8＝32 小時');
+  assertEqual(r.crossUnit, 1, '跨單位 1 班');
+  assertEqual(r.shiftCount, r.nights + r.wkNonNight + r.others, '圖表三段互斥加總＝視窗班數');
+});
+
+test('留任雷達：最長連續上班取全班表——跨視窗邊界的連續區段不被低估', () => {
+  const A = mkStaff('A');
+  // 8/01（六）起連上 5 天，其中只有 8/03–8/05 落在視窗內
+  const shifts = ['2026-08-01', '2026-08-02', '2026-08-03', '2026-08-04', '2026-08-05']
+    .map((day) => d('A', day));
+  const e = mkEngine([A], shifts);
+  const r = e.workloadLedger(WEEK_DATES).staff.find((x) => x.staff.id === 'A');
+  assertEqual(r.maxRun, 5, '連續 5 天應完整計入，不因視窗截斷');
+  assert(r.flags.some((f) => f.code === '連續'), '距 H5 上限一天應亮連續旗標');
+});
+
+test('留任雷達：旗標與規則庫連動——S1 飽和門檻調低，代班旗標即亮', () => {
+  const A = mkStaff('A', { standbyCount30d: 4 });
+  const e1 = mkEngine([A], [d('A', '2026-08-03')]);
+  const r1 = e1.workloadLedger(WEEK_DATES).staff[0];
+  assert(!r1.flags.some((f) => f.code === '代班'), '代班 4 次未達預設飽和 5，不亮旗');
+
+  const reg = structuredClone(RULE_REGISTRY);
+  reg.soft.find((r) => r.code === 'S1').param.value = 4;
+  const e2 = mkEngine([A], [d('A', '2026-08-03')], { registry: reg });
+  const r2 = e2.workloadLedger(WEEK_DATES).staff[0];
+  assert(r2.flags.some((f) => f.code === '代班'), 'S1 調為 4 後，代班 4 次應亮旗');
+});
+
+test('留任雷達：夜班旗標要求「單位內最高」——扛得多是相對於同單位夥伴', () => {
+  const A = mkStaff('A', { willingShifts: ['N'] });
+  const B = mkStaff('B', { willingShifts: ['N'] });
+  const mkN = (id, days) => days.map((day) => d(id, day, 'N'));
+  const e = mkEngine([A, B], [
+    ...mkN('A', ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06']),
+    ...mkN('B', ['2026-08-03', '2026-08-04', '2026-08-05']),
+  ]);
+  const led = e.workloadLedger(WEEK_DATES);
+  const a = led.staff.find((x) => x.staff.id === 'A');
+  const b = led.staff.find((x) => x.staff.id === 'B');
+  assert(a.flags.some((f) => f.code === '夜班'), 'A 夜班 4 班且單位最高，應亮旗');
+  assert(!b.flags.some((f) => f.code === '夜班'), 'B 夜班 3 班達門檻但非單位最高，不亮旗');
+});
+
+test('留任雷達 demo 基準：N-09 連續旗標、N-07 夜班旗標、N-06 假日旗標如實浮現', () => {
+  const e = mkEngine(STAFF, SHIFTS.slice(), { flexCycleAnchor: FLEX_CYCLE_ANCHOR });
+  const led = e.workloadLedger(WEEK_DATES);
+  const of = (id) => led.staff.find((x) => x.staff.id === id);
+  assert(of('N-09').flags.some((f) => f.code === '連續'),
+    `N-09 連上 6 天應亮連續旗標，實際：${of('N-09').flags.map((f) => f.code).join(',') || '（無）'}`);
+  assert(of('N-07').flags.some((f) => f.code === '夜班'),
+    `N-07 夜班 4 班單位最高應亮旗，實際：${of('N-07').flags.map((f) => f.code).join(',') || '（無）'}`);
+  assert(of('N-06').flags.some((f) => f.code === '假日'),
+    `N-06 假日 2 班單位最高應亮旗，實際：${of('N-06').flags.map((f) => f.code).join(',') || '（無）'}`);
+  assert(!of('N-01').flags.some((f) => f.code === '代班'),
+    'N-01 代班 4 次未達預設飽和 5，不亮旗（規則庫調 S1 即可看到連動）');
+});
