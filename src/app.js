@@ -19,6 +19,7 @@ const state = {
   qpDay: GAP_EVENT.date,         // 快速通報目前選定的日期
   quickSel: new Map(),           // 快速通報已點選的缺班（key sid|date|shift → {staffId,date,shift,unit,certs,role}）
   swap: { a: null, b: null },    // 換班簽核：甲乙兩側點選的班次（{staffId,date,shift}）
+  todayDate: GAP_EVENT.raisedAt.slice(0, 10),   // 今日戰情的基準日（示範今日 2026-08-08）
 };
 
 /** 開場時的替補次數基準值，用來標示本次連線期間的變化 */
@@ -344,6 +345,7 @@ function refreshAfterScheduleChange() {
   renderRoster();
   renderQuickPick();   // 快速通報的在班名單直接取自班表，班表變了要跟著變
   renderSwapPicker();  // 換班簽核的班次清單同理
+  renderToday();       // 今日戰情的在班與缺口同理
   renderOverview();
   renderCapability();
   renderWarnings();
@@ -367,7 +369,7 @@ const NAV_GROUPS = [
     ['confirm', '主管確認', '3'], ['multi', '多筆與韌性', '7'],
   ] },
   { key: 'ov', label: '總覽', screens: [
-    ['overview', '人力缺口', '◎'], ['capability', '能力與出勤', '★'],
+    ['today', '今日戰情', '今'], ['overview', '人力缺口', '◎'], ['capability', '能力與出勤', '★'],
   ] },
   { key: 'gov', label: '治理', screens: [
     ['dashboard', '公平與留痕', '4'], ['rules', '規則庫', '6'], ['fhir', 'FHIR 介接', '9'],
@@ -683,6 +685,113 @@ function renderCapability() {
  * 主敘事以名單完整的示範單位（內科 3A）呈現；部分名單與無資料單位
  * 誠實標示，不讓殘缺資料撐出假數字。班表寫回後即時重算。
  */
+/* ══ 畫面 今：今日戰情 ═══════════════════════════════════
+ * 護理長每天上工的第一眼。總覽是給督導與護理部看「這週」的帳，
+ * 這一頁只回答四個問題：今天到齊了嗎、48 小時內哪裡有洞、
+ * 誰在請假、哪張證照要到期——每個洞都能就地起跳去處理。 */
+
+const DEMO_TODAY = GAP_EVENT.raisedAt.slice(0, 10);
+
+function renderToday() {
+  const el = $('#today-body');
+  if (!el) return;
+  const today = state.todayDate;
+  const next2 = [addDays(today, 1), addDays(today, 2)];
+  // 缺口判定口徑與入口／總覽一致：只算名單完整的示範單位，
+  // 部分名單單位（外科 5B、ICU）的殘缺資料不得撐出嚇人的假缺口
+  const FULL_ROSTER_UNITS = ['MED-3A'];
+  $('#today-title').textContent =
+    `${today}（${weekdayOf(today)}）${today === DEMO_TODAY ? '｜示範今日' : ''}`;
+
+  /* 今日三班在班 */
+  const cols = Object.values(SHIFT_TYPES).map((t) => {
+    const rows = SHIFTS.filter((s) => s.date === today && s.shift === t.code)
+      .slice().sort((a, b) => (a.staffId < b.staffId ? -1 : 1));
+    const short = FULL_ROSTER_UNITS.map((u) => ({
+      u, n: rows.filter((s) => s.unit === u).length, min: (UNIT_MIN_STAFF[u] || {})[t.code] || 0,
+    })).filter((x) => x.n < x.min);
+    const chips = rows.map((s) =>
+      `<span class="chip today-chip">${esc(s.staffId)}${s.isReplacement ? '<sup>替</sup>' : s.isSwap ? '<sup>換</sup>' : ''}` +
+      `<span class="qp-cnt">${esc(s.unit)}</span></span>`).join('');
+    return `<div class="qp-col${short.length ? ' today-short' : ''}">
+      <div class="qp-col-head"><b>${t.name}</b><span class="qp-time">${t.start}–${t.end}</span>
+        <span class="qp-time" style="margin-left:auto">${rows.length} 人</span></div>
+      ${chips ? `<div class="qp-people">${chips}</div>` : '<div class="qp-col-empty">無人排班</div>'}
+      ${short.map((x) => `<div class="today-gap">▲ ${esc(UNITS[x.u])}低於最低配置：${x.n}／需 ${x.min}</div>`).join('')}
+    </div>`;
+  }).join('');
+
+  /* 未來 48 小時缺口（含最低配置比對；部分名單與無資料單位誠實略過不假裝） */
+  const gaps = engine.coverageGaps(next2)
+    .filter((g) => !g.noData && FULL_ROSTER_UNITS.includes(g.unit));
+  const gapRows = gaps.map((g) => `
+    <div class="fact">
+      <span>${shortDate(g.date)}（${weekdayOf(g.date)}）${SHIFT_TYPES[g.shift].name} @ ${esc(UNITS[g.unit])}</span>
+      <span><span class="expired">${g.count}／需 ${g.min}</span>
+        <button class="btn btn-sm today-goto-roster" data-d="${g.date}">去排補</button>
+        <button class="btn btn-sm today-goto-intake" data-d="${g.date}">快速通報</button></span>
+    </div>`).join('');
+
+  /* 今日請假與異動、證照到期（7 天內）與已過期 */
+  const onLeave = STAFF.filter((s) => engine.isOnLeave(s, today))
+    .map((s) => ({ s, lv: engine.leaveOn ? engine.leaveOn(s, today) : s.leaves.find((l) => today >= l.from && today <= l.to) }));
+  const changes = SHIFTS.filter((s) => s.date === today && (s.isReplacement || s.isSwap));
+  const expSoon = [];
+  const expired = [];
+  STAFF.forEach((s) => Object.entries(s.certs).forEach(([code, exp]) => {
+    if (exp < today) expired.push({ s, code, exp });
+    else if (exp <= addDays(today, 7)) expSoon.push({ s, code, exp });
+  }));
+
+  el.innerHTML = `
+    <div class="qp-board" style="margin-bottom:14px">${cols}</div>
+
+    <div class="card-head" style="margin-top:4px"><h2>未來 48 小時</h2>
+      <span class="tag ${gaps.length ? 'tag-danger' : 'tag-ok'}">${gaps.length ? `${gaps.length} 個缺口` : '無缺口'}</span></div>
+    ${gapRows || '<p class="fineprint" style="margin:4px 0 0">明後兩天各單位皆達最低配置。</p>'}
+
+    <div class="grid-2" style="margin-top:16px">
+      <div>
+        <div class="card-head"><h2>今日請假</h2>
+          <span class="tag ${onLeave.length ? 'tag-warn' : 'tag-neutral'}">${onLeave.length} 人</span></div>
+        ${onLeave.map(({ s, lv }) => `
+          <div class="fact"><span><b>${esc(s.id)}</b>　${esc(UNITS[s.unit])}</span>
+            <span>${esc(lv ? lv.type : '請假')}（${lv ? `${shortDate(lv.from)}–${shortDate(lv.to)}` : ''}）</span></div>`).join('')
+      || '<p class="fineprint" style="margin:4px 0 0">今日無人請假。</p>'}
+        <div class="card-head" style="margin-top:14px"><h2>今日異動</h2>
+          <span class="tag tag-neutral">${changes.length} 筆</span></div>
+        ${changes.map((s) => `
+          <div class="fact"><span><b>${esc(s.staffId)}</b>　${SHIFT_TYPES[s.shift].name} @ ${esc(UNITS[s.unit])}</span>
+            <span>${s.isReplacement ? '替補上班' : '換班承接'}</span></div>`).join('')
+      || '<p class="fineprint" style="margin:4px 0 0">今日班表無替補或換班異動。</p>'}
+      </div>
+      <div>
+        <div class="card-head"><h2>證照效期警示</h2>
+          <span class="tag ${expired.length || expSoon.length ? 'tag-danger' : 'tag-ok'}">${expired.length ? `${expired.length} 張已過期` : ''}${expired.length && expSoon.length ? '、' : ''}${expSoon.length ? `${expSoon.length} 張 7 日內到期` : ''}${!expired.length && !expSoon.length ? '全數有效' : ''}</span></div>
+        ${expired.map((x) => `
+          <div class="fact"><span><b>${esc(x.s.id)}</b>　${esc(CERTS[x.code])}</span>
+            <span class="expired">已於 ${x.exp} 過期，未回訓</span></div>`).join('')}
+        ${expSoon.map((x) => `
+          <div class="fact"><span><b>${esc(x.s.id)}</b>　${esc(CERTS[x.code])}</span>
+            <span style="color:var(--warn)">將於 ${x.exp} 到期</span></div>`).join('')}
+        ${!expired.length && !expSoon.length ? '<p class="fineprint" style="margin:4px 0 0">未來 7 天內無證照到期。</p>' : ''}
+        <p class="fineprint">效期三態與 90 天到期雷達的完整清單見「能力與出勤」。</p>
+      </div>
+    </div>`;
+
+  $$('#today-body .today-goto-roster').forEach((b) => b.addEventListener('click', () => {
+    state.rosterWeekStart = weekDatesOf(b.dataset.d)[0];
+    renderRoster();
+    switchScreen('roster');
+  }));
+  $$('#today-body .today-goto-intake').forEach((b) => b.addEventListener('click', () => {
+    state.qpWeekStart = weekDatesOf(b.dataset.d)[0];
+    state.qpDay = b.dataset.d;
+    renderQuickPick();
+    switchScreen('intake');
+  }));
+}
+
 function renderOverview() {
   const r = engine.workforceGapAnalysis({ dates: WEEK_DATES, demand: UNIT_MIN_STAFF });
   const UNIT = 'MED-3A';
@@ -2737,6 +2846,17 @@ function init() {
     });
   });
   $('#btn-swap-check').addEventListener('click', handleSwapCheck);
+
+  // 今日戰情：基準日切換
+  $('#btn-today-prev').addEventListener('click', () => {
+    state.todayDate = addDays(state.todayDate, -1); renderToday();
+  });
+  $('#btn-today-next').addEventListener('click', () => {
+    state.todayDate = addDays(state.todayDate, 1); renderToday();
+  });
+  $('#btn-today-demo').addEventListener('click', () => {
+    state.todayDate = DEMO_TODAY; renderToday();
+  });
   $('#btn-recalc').addEventListener('click', handleRecalc);
   $('#btn-multi-run').addEventListener('click', handleMultiRun);
   $('#btn-realloc-run').addEventListener('click', handleReallocRun);
@@ -2805,6 +2925,7 @@ function init() {
   renderRoster();
   renderQuickPick();
   renderSwapPicker();
+  renderToday();
   renderStaffTable();
   renderRules();
   renderFairness();

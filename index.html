@@ -70,6 +70,31 @@
     </div>
   </section>
 
+  <!-- ══ 今. 今日戰情 ═════════════════════════════════ -->
+  <section class="screen" id="screen-today">
+    <div class="screen-head">
+      <h1>今日戰情</h1>
+      <p class="lede">護理長每天上工的第一眼，30 秒掃完：<strong>今天三班到齊了嗎、未來 48 小時哪裡有洞、誰在請假、哪張證照要到期。</strong>有洞就地起跳——排補或快速通報，不用翻頁找。</p>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h2 id="today-title"></h2>
+        <span>
+          <button class="btn btn-sm" id="btn-today-prev">◀ 前一天</button>
+          <button class="btn btn-sm" id="btn-today-demo">示範今日</button>
+          <button class="btn btn-sm" id="btn-today-next">後一天 ▶</button>
+        </span>
+      </div>
+      <div id="today-body"></div>
+      <p class="fineprint">
+        示範「今日」定為 2026-08-08（缺班事件通報當晚）——隔天 8/09 白班的洞會直接出現在 48 小時預視裡；
+        正式導入時以系統日期為準。在班名單、缺口與異動皆以目前班表即時計算，班表一變這頁跟著變。
+        缺口判定僅涵蓋名單完整的示範單位（內科 3A），口徑與入口／總覽一致；
+        外科 5B 與 ICU 為部分名單，其機制展示見「人力缺口總覽」。
+      </p>
+    </div>
+  </section>
+
   <!-- ══ ◎ 人力缺口總覽（管理首頁）═══════════════════ -->
   <section class="screen" id="screen-overview">
     <div class="screen-head">

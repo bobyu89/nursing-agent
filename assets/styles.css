@@ -734,3 +734,9 @@ tbody tr:hover td { background: #142a3d; }
   background: var(--brand); border-color: var(--brand); color: #06222d; font-weight: 700;
 }
 #swap-a-shifts, #swap-b-shifts { min-height: 34px; }
+
+/* ══ 畫面 今：今日戰情 ═══════════════════════════════════ */
+.today-chip { cursor: default; }
+.today-chip:hover { border-color: var(--line); color: var(--ink-soft); background: var(--line-soft); }
+.qp-col.today-short { border-color: var(--danger); }
+.today-gap { margin-top: 8px; font-size: 12.5px; color: var(--danger); font-weight: 600; }
