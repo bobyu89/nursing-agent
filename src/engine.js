@@ -1073,6 +1073,85 @@ function createEngine(db) {
   }
 
   /**
+   * 換班互換預檢：模擬甲、乙兩班互換後，雙方「各自」重跑全部硬性約束。
+   * 換班是排班日常的大宗；簽核的主管賭的正是這些邊界——引擎必須把
+   * 互換後的兩個新狀態都算過一遍，一條都不能漏。
+   *
+   * a、b：{ staffId, date, shift }，必須指向現行班表中的班次。
+   * reqs：{ requiredCerts, requiredRole }，套用於兩個承接方向——
+   * 班次本身不帶資格需求，由主管依當班治療確認（與缺班流程同一原則）。
+   *
+   * 模擬方式：兩筆原班先自班表移除，再以「承接對方的班」作為假想缺班
+   * 各跑一次 checkHardConstraints。H1–H9 全為個人約束，甲的檢查不受
+   * 乙的新班影響，反之亦然，故一份模擬班表可同時檢查雙向。
+   *
+   * @returns {{ ok:boolean, error?:string, aTake?:object, bTake?:object, notices?:string[] }}
+   *   aTake ＝ 甲承接乙的班 { staff, slot, violations }；bTake 反向。
+   */
+  function analyzeSwap(a, b, reqs = {}) {
+    const findRow = (q) => db.shifts.find(
+      (s) => s.staffId === q.staffId && s.date === q.date && s.shift === q.shift);
+    const rowA = findRow(a);
+    const rowB = findRow(b);
+    if (!rowA || !rowB) return { ok: false, error: '指定的班次不在現行班表中，請重新選擇' };
+    if (a.staffId === b.staffId) return { ok: false, error: '互換需要兩位不同人員的兩個班次' };
+    const staffA = db.staff.find((s) => s.id === a.staffId);
+    const staffB = db.staff.find((s) => s.id === b.staffId);
+    if (!staffA || !staffB) return { ok: false, error: '人員代號不存在' };
+
+    const requiredCerts = reqs.requiredCerts || ['ACLS'];
+    const requiredRole = reqs.requiredRole || '護理師';
+
+    const sim = createEngine({
+      staff: db.staff,
+      shifts: db.shifts.filter((s) => s !== rowA && s !== rowB),
+      shiftTypes: db.shiftTypes, roleLevels: db.roleLevels,
+      certs: db.certs, units: db.units,
+      registry: db.registry, staffingMin: db.staffingMin,
+      flexCycleAnchor: db.flexCycleAnchor,
+    });
+    const slotOf = (row) => ({
+      date: row.date, shift: row.shift, unit: row.unit,
+      requiredCerts, requiredRole, originalStaffId: null,
+    });
+    const aTake = { staff: staffA, slot: slotOf(rowB), violations: sim.checkHardConstraints(staffA, slotOf(rowB)) };
+    const bTake = { staff: staffB, slot: slotOf(rowA), violations: sim.checkHardConstraints(staffB, slotOf(rowA)) };
+
+    const notices = [];
+    if (rowB.unit !== staffA.unit) {
+      notices.push(`${staffA.id} 承接後為跨單位支援（${db.units[rowB.unit] || rowB.unit}），交接與單位熟悉度請主管留意（F3）`);
+    }
+    if (rowA.unit !== staffB.unit) {
+      notices.push(`${staffB.id} 承接後為跨單位支援（${db.units[rowA.unit] || rowA.unit}），交接與單位熟悉度請主管留意（F3）`);
+    }
+    // 承接週工時為資訊性提示；超標與否已由 H6／H8 硬性把關
+    [[staffA, rowB], [staffB, rowA]].forEach(([st, take]) => {
+      const hours = sim.weeklyHours(st.id, take.date) + db.shiftTypes[take.shift].hours;
+      notices.push(`${st.id} 承接週（${shortDate(weekDatesOf(take.date)[0])} 起）工時將為 ${hours} 小時`);
+    });
+
+    return { ok: aTake.violations.length === 0 && bTake.violations.length === 0, aTake, bTake, notices };
+  }
+
+  /**
+   * 核准互換寫回：兩筆班次交換承接人，日期、班別、單位皆不動。
+   * 僅在 analyzeSwap 通過後由主管觸發——引擎不自行核准任何互換。
+   */
+  function applySwap(a, b) {
+    const findRow = (q) => db.shifts.find(
+      (s) => s.staffId === q.staffId && s.date === q.date && s.shift === q.shift);
+    const rowA = findRow(a);
+    const rowB = findRow(b);
+    if (!rowA || !rowB || rowA === rowB) return false;
+    const tmp = rowA.staffId;
+    rowA.staffId = rowB.staffId;
+    rowB.staffId = tmp;
+    rowA.isSwap = true;
+    rowB.isSwap = true;
+    return true;
+  }
+
+  /**
    * 主管確認後寫回：把替補班次寫入班表，並累計該人員的替補次數。
    * 這使得同一場 demo 連續處理多筆缺班時，公平性訊號會真實累積。
    */
@@ -1108,6 +1187,7 @@ function createEngine(db) {
 
   return {
     evaluateGap, relaxationAnalysis, applyReplacement, scheduleDelta,
+    analyzeSwap, applySwap,
     checkHardConstraints, scoreCandidate, collectFlags,
     weeklyHours, shiftMix, isOnLeave, consecutiveDaysWithGap,
     minRestAfterGap, shiftInterval, unitCoverage,

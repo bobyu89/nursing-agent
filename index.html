@@ -48,7 +48,7 @@
       <button class="portal-card" id="portal-sched">
         <div class="portal-glyph">排</div>
         <h2>排班系統</h2>
-        <p>排定與管理班表：點格編輯、Excel 貼上匯入、一鍵生成下週合規草稿。
+        <p>排定與管理班表：點格編輯、Excel 貼上匯入、換班簽核預檢、一鍵生成下週合規草稿。
            H1–H9 規則（含勞基法四週彈性工時）在班表排出來的那一刻就把關。</p>
         <div class="portal-status" id="portal-sched-status"></div>
         <div class="portal-go">進入排班系統 →</div>
@@ -260,6 +260,47 @@
     <div class="card">
       <div class="card-head"><h2>人員主檔</h2><span class="tag tag-neutral">代號化，不使用姓名</span></div>
       <div class="table-scroll"><table id="staff-table"></table></div>
+    </div>
+  </section>
+
+  <!-- ══ 換. 換班簽核 ═════════════════════════════════ -->
+  <section class="screen" id="screen-swap">
+    <div class="screen-head">
+      <h1>換班簽核預檢</h1>
+      <p class="lede">同仁談好互換來找主管簽核——最怕的是「換完才發現違法」。這裡把互換後<strong>兩人各自的 H1–H9 重新算一遍</strong>：綠燈一鍵核准寫回並留痕，紅燈逐條列明規則依據。規則替主管把關，<strong>核准與否仍由主管決定</strong>。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>互換申請</h2>
+        <span class="tag tag-neutral">選兩位人員，各點一個班次</span>
+      </div>
+      <div class="grid-2">
+        <div>
+          <div class="q-hint" style="color:var(--ink-faint)">甲方人員</div>
+          <select id="swap-a-staff"></select>
+          <div class="chips" id="swap-a-shifts" style="margin-top:10px"></div>
+        </div>
+        <div>
+          <div class="q-hint" style="color:var(--ink-faint)">乙方人員</div>
+          <select id="swap-b-staff"></select>
+          <div class="chips" id="swap-b-shifts" style="margin-top:10px"></div>
+        </div>
+      </div>
+      <div class="q-hint" style="margin:12px 0 6px;color:var(--ink-faint)">承接班次的必要資格與職務門檻（兩個承接方向皆適用；系統不臆測，由主管依當班治療確認）</div>
+      <div class="checks" id="swap-certs"></div>
+      <select id="swap-role" style="margin-top:10px;width:auto">
+        <option value="護理師" selected>護理師以上</option>
+        <option value="資深護理師">資深護理師以上</option>
+      </select>
+      <button class="btn btn-primary" id="btn-swap-check" data-ico="swap">執行互換預檢</button>
+      <div id="swap-result"></div>
+      <p class="fineprint">
+        預檢模擬互換後的班表，對<b>兩位人員各自</b>重跑全部硬性約束（班距、連續天數、週工時、
+        四週彈性工時、資格效期…）——兩張班表各自看都沒問題的互換，交叉之後可能連上七天或班距歸零，
+        這正是人眼簽核最容易漏的地方。核准寫回保存在本機瀏覽器（同班表編輯），並寫入決策留痕；
+        「還原示範班表」可復原。
+      </p>
     </div>
   </section>
 

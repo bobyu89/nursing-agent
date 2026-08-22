@@ -728,3 +728,9 @@ tbody tr:hover td { background: #142a3d; }
 .card { transition: border-color .18s ease; }
 .card:hover { border-color: #2d4459; }
 .td-edit:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; border-radius: 4px; }
+
+/* ══ 畫面 換：換班簽核 ═══════════════════════════════════ */
+.chip.active {
+  background: var(--brand); border-color: var(--brand); color: #06222d; font-weight: 700;
+}
+#swap-a-shifts, #swap-b-shifts { min-height: 34px; }

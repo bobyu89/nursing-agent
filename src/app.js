@@ -18,6 +18,7 @@ const state = {
   qpWeekStart: WEEK.start,       // 畫面 1 快速通報目前顯示的週（週一）
   qpDay: GAP_EVENT.date,         // 快速通報目前選定的日期
   quickSel: new Map(),           // 快速通報已點選的缺班（key sid|date|shift → {staffId,date,shift,unit,certs,role}）
+  swap: { a: null, b: null },    // 換班簽核：甲乙兩側點選的班次（{staffId,date,shift}）
 };
 
 /** 開場時的替補次數基準值，用來標示本次連線期間的變化 */
@@ -326,6 +327,7 @@ function loadSchedule() {
     valid.forEach((x) => SHIFTS.push({
       staffId: x.staffId, date: x.date, shift: x.shift, unit: x.unit,
       ...(x.isReplacement ? { isReplacement: true } : {}),
+      ...(x.isSwap ? { isSwap: true } : {}),
     }));
     // 竄改可視化：被剔除的筆數＝儲存中出現不合法資料，上報留痕
     return { dropped: arr.length - valid.length };
@@ -341,6 +343,7 @@ function resetSchedule() {
 function refreshAfterScheduleChange() {
   renderRoster();
   renderQuickPick();   // 快速通報的在班名單直接取自班表，班表變了要跟著變
+  renderSwapPicker();  // 換班簽核的班次清單同理
   renderOverview();
   renderCapability();
   renderWarnings();
@@ -357,7 +360,7 @@ const NAV_GROUPS = [
     ['portal', '系統入口', '⌂'],
   ] },
   { key: 'sched', label: '排班系統', screens: [
-    ['roster', '班表工作區', '5'], ['generate', '班表生成', '8'],
+    ['roster', '班表工作區', '5'], ['swap', '換班簽核', '換'], ['generate', '班表生成', '8'],
   ] },
   { key: 'gap', label: '替班系統', screens: [
     ['intake', '通報解析', '1'], ['candidates', '替補候選', '2'],
@@ -1734,7 +1737,7 @@ function renderRoster() {
       }
       const sh = SHIFTS.find((x) => x.staffId === s.id && x.date === d);
       const inner = sh
-        ? `<span class="cell cell-${sh.shift}">${sh.shift}${sh.isReplacement ? '<sup>替</sup>' : ''}</span>`
+        ? `<span class="cell cell-${sh.shift}">${sh.shift}${sh.isReplacement ? '<sup>替</sup>' : sh.isSwap ? '<sup>換</sup>' : ''}</span>`
         : '<span style="color:var(--ink-faint)">·</span>';
       return `<td class="center td-edit" data-sid="${esc(s.id)}" data-d="${d}" tabindex="0" role="button"` +
         ` aria-label="${esc(s.id)} ${shortDate(d)}（${weekdayOf(d)}）目前${sh ? SHIFT_TYPES[sh.shift].name : '未排班'}，按 Enter 循環編輯"` +
@@ -2185,6 +2188,104 @@ function handleGenRun() {
     '班守 ShiftGuard 規則引擎');
 }
 
+/* ══ 畫面 換：換班簽核預檢 ══════════════════════════════
+ * 缺班替補是「失火」，換班簽核才是排班日常的大宗。主管簽核的
+ * 每一次互換都在賭：換完之後班距夠不夠、會不會連上七天、四週
+ * 總量爆了沒有。這個畫面把互換後兩人各自的 H1–H9 交給引擎重算
+ * ——規則把關，核准與否仍由主管決定。 */
+
+function renderSwapPicker() {
+  if (!$('#swap-a-staff')) return;
+  ['a', 'b'].forEach((side, i) => {
+    const sel = $(`#swap-${side}-staff`);
+    const cur = sel.value || (STAFF[i] || STAFF[0]).id;
+    sel.innerHTML = STAFF.map((s) =>
+      `<option value="${s.id}"${s.id === cur ? ' selected' : ''}>${s.id}　${s.role}　${UNITS[s.unit]}</option>`).join('');
+    renderSwapShifts(side);
+  });
+}
+
+function renderSwapShifts(side) {
+  const sid = $(`#swap-${side}-staff`).value;
+  const picked = state.swap[side];
+  // 換人或班表變動後，點選中的班次可能已失效——自動清掉，不留幽靈選擇
+  if (picked && (picked.staffId !== sid
+      || !SHIFTS.some((s) => s.staffId === sid && s.date === picked.date && s.shift === picked.shift))) {
+    state.swap[side] = null;
+  }
+  const me = STAFF.find((x) => x.id === sid) || {};
+  const rows = SHIFTS.filter((s) => s.staffId === sid)
+    .slice().sort((a, b) => (a.date + a.shift < b.date + b.shift ? -1 : 1));
+  $(`#swap-${side}-shifts`).innerHTML = rows.length ? rows.map((s) => {
+    const on = state.swap[side] && state.swap[side].date === s.date && state.swap[side].shift === s.shift;
+    return `<button class="chip${on ? ' active' : ''}" data-side="${side}" data-sid="${esc(sid)}"` +
+      ` data-d="${s.date}" data-sh="${s.shift}" aria-pressed="${!!on}">` +
+      `${shortDate(s.date)}（${weekdayOf(s.date)}）${SHIFT_TYPES[s.shift].name}` +
+      `${s.unit !== me.unit ? ` @${esc(s.unit)}` : ''}</button>`;
+  }).join('') : '<span class="qp-col-empty">此人員目前班表上沒有班次</span>';
+}
+
+const swapLabel = (q) => `${shortDate(q.date)}（${weekdayOf(q.date)}）${SHIFT_TYPES[q.shift].name}`;
+
+function handleSwapCheck() {
+  const { a, b } = state.swap;
+  const out = $('#swap-result');
+  if (!a || !b) { alert('請在甲、乙兩側各點選一個班次。'); return; }
+  const requiredCerts = $$('#swap-certs .swap-cert').filter((c) => c.checked).map((c) => c.value);
+  if (!requiredCerts.length) { alert('請至少勾選一項必要資格。'); return; }
+  const r = engine.analyzeSwap(a, b, { requiredCerts, requiredRole: $('#swap-role').value });
+  if (r.error) {
+    out.innerHTML = `<p class="fineprint" style="color:var(--danger)">${esc(r.error)}</p>`;
+    return;
+  }
+
+  const panel = (take) => `
+    <div class="card" style="border-color:${take.violations.length ? 'var(--danger)' : 'var(--ok)'};margin-top:0">
+      <div class="card-head">
+        <h2>${esc(take.staff.id)} 承接 ${swapLabel(take.slot)} @ ${esc(UNITS[take.slot.unit] || take.slot.unit)}</h2>
+        <span class="tag ${take.violations.length ? 'tag-danger' : 'tag-ok'}">${take.violations.length ? `✗ ${take.violations.length} 項違規` : '✓ 通過'}</span>
+      </div>
+      ${take.violations.map((v) => `
+        <div class="excl-reason"><span class="rule-code${v.neutral ? ' neutral' : ''}">${v.code}</span><span>${esc(v.detail)}</span></div>`).join('')
+    || '<p class="fineprint" style="margin:0">班距、連續天數、週工時、四週彈性工時、資格效期全部通過。</p>'}
+    </div>`;
+
+  out.innerHTML = `
+    <div class="grid-2" style="margin-top:14px">${panel(r.aTake)}${panel(r.bTake)}</div>
+    ${r.notices.length ? `<p class="fineprint">${r.notices.map(esc).join('；<br>')}</p>` : ''}
+    <div class="btn-row">
+      ${r.ok
+    ? '<button class="btn btn-primary" id="btn-swap-approve" style="margin-top:0">核准互換並寫回班表</button>'
+    : '<span class="tag tag-danger">存在硬性違規，不可核准——請同仁改談其他班次；門檻依據可於規則庫檢視</span>'}
+    </div>`;
+
+  logAction('換班互換預檢',
+    `${a.staffId} ${swapLabel(a)} ⇄ ${b.staffId} ${swapLabel(b)}；必要資格 ${requiredCerts.join('、')}：` +
+    (r.ok ? '雙向皆通過硬性約束'
+      : [r.aTake, r.bTake].filter((t) => t.violations.length)
+        .map((t) => `${t.staff.id} 違反 ${t.violations.map((v) => v.code).join('、')}`).join('；')),
+    '班守 ShiftGuard 規則引擎');
+
+  const approve = $('#btn-swap-approve');
+  if (approve) approve.addEventListener('click', () => {
+    // 預檢與核准之間班表可能被動過（另一視窗、匯入）——寫回前引擎再驗一次存在性
+    if (!engine.applySwap(a, b)) {
+      toast('寫回失敗：班次已變動，請重新執行預檢', 'danger');
+      return;
+    }
+    saveSchedule();
+    logAction('核准換班寫回',
+      `${a.staffId} ${swapLabel(a)} ⇄ ${b.staffId} ${swapLabel(b)}；正式調班登錄由主管於院內系統執行`);
+    toast(`已核准 ${a.staffId} ⇄ ${b.staffId} 互換，班表已更新`);
+    state.swap.a = null;
+    state.swap.b = null;
+    out.innerHTML = '<p class="fineprint" style="color:var(--ok)">✓ 互換已寫回班表並留痕；班表工作區、缺口總覽與預警已同步重算。</p>';
+    refreshAfterScheduleChange();
+    renderStaffTable();
+  });
+  MOTION.enter(out, '.card, .btn-row, .fineprint');
+}
+
 /* ══ 畫面 6：規則庫 ═════════════════════════════════════ */
 
 /**
@@ -2614,6 +2715,28 @@ function init() {
     renderQuickPick();
   });
   $('#btn-qp-run').addEventListener('click', handleQuickRun);
+
+  // 換班簽核：人員切換、班次點選（事件委派）、預檢執行
+  $('#swap-certs').innerHTML = Object.entries(CERTS).map(([k, nm]) =>
+    `<label><input type="checkbox" class="swap-cert" value="${k}"${k === 'ACLS' ? ' checked' : ''}> ${esc(nm)}</label>`).join('');
+  ['a', 'b'].forEach((side) => {
+    $(`#swap-${side}-staff`).addEventListener('change', () => {
+      $('#swap-result').innerHTML = '';
+      renderSwapShifts(side);
+    });
+    $(`#swap-${side}-shifts`).addEventListener('click', (ev) => {
+      const c = ev.target.closest('.chip');
+      if (!c) return;
+      const cur = state.swap[side];
+      state.swap[side] = (cur && cur.date === c.dataset.d && cur.shift === c.dataset.sh)
+        ? null   // 點同一顆＝取消選擇
+        : { staffId: c.dataset.sid, date: c.dataset.d, shift: c.dataset.sh };
+      $('#swap-result').innerHTML = '';
+      renderSwapShifts(side);
+      MOTION.pop($(`#swap-${side}-shifts .chip.active`));
+    });
+  });
+  $('#btn-swap-check').addEventListener('click', handleSwapCheck);
   $('#btn-recalc').addEventListener('click', handleRecalc);
   $('#btn-multi-run').addEventListener('click', handleMultiRun);
   $('#btn-realloc-run').addEventListener('click', handleReallocRun);
@@ -2681,6 +2804,7 @@ function init() {
 
   renderRoster();
   renderQuickPick();
+  renderSwapPicker();
   renderStaffTable();
   renderRules();
   renderFairness();

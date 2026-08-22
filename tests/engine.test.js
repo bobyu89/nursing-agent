@@ -725,3 +725,112 @@ test('四週彈性工時：固定週期歸屬正確，且不影響既有 demo �
     '加入 H7–H9 後 demo 劇本不得改變');
   assert(e.rosterWarnings().every((w) => w.level !== 'high'), 'demo 班表在四週彈性工時下仍應零違規');
 });
+
+/* ── 換班互換預檢（analyzeSwap／applySwap）── */
+
+test('換班預檢：合法互換——兩人單純換日，雙向零違規', () => {
+  const A = mkStaff('A');
+  const B = mkStaff('B');
+  const e = mkEngine([A, B], [d('A', '2026-08-05'), d('B', '2026-08-07')]);
+  const r = e.analyzeSwap(
+    { staffId: 'A', date: '2026-08-05', shift: 'D' },
+    { staffId: 'B', date: '2026-08-07', shift: 'D' },
+    { requiredCerts: ['ACLS'] });
+  assert(r.ok, `合法互換應通過，實際 aTake=${(r.aTake.violations || []).map((v) => v.code)} bTake=${(r.bTake.violations || []).map((v) => v.code)}`);
+  assertEqual(r.aTake.violations, [], '甲承接乙的班應零違規');
+  assertEqual(r.bTake.violations, [], '乙承接甲的班應零違規');
+  assertEqual(r.aTake.slot.date, '2026-08-07', '甲承接的是乙的班次日期');
+});
+
+test('換班預檢：大夜殘影——甲留著 8/08 大夜、換來 8/09 白班，H4 抓出 0 小時休息', () => {
+  const A = mkStaff('A', { willingShifts: ['N'] });
+  const B = mkStaff('B');
+  const e = mkEngine([A, B], [
+    d('A', '2026-08-08', 'N'),   // 甲的大夜上到 8/09 07:00
+    d('A', '2026-08-05'),        // 甲拿去換的班
+    d('B', '2026-08-09'),        // 乙的白班 8/09 07:00 開始
+  ]);
+  const r = e.analyzeSwap(
+    { staffId: 'A', date: '2026-08-05', shift: 'D' },
+    { staffId: 'B', date: '2026-08-09', shift: 'D' },
+    { requiredCerts: ['ACLS'] });
+  assert(!r.ok, '互換後班間休息 0 小時，不應通過');
+  assert(r.aTake.violations.some((v) => v.code === 'H4'),
+    `甲應觸發 H4，實際：${r.aTake.violations.map((v) => v.code).join(',') || '（無）'}`);
+  assertEqual(r.bTake.violations, [], '乙承接 8/05 白班應零違規');
+});
+
+test('換班預檢：換完連上第 7 天——H5 擋下（用 Excel 對兩張班表根本看不出來）', () => {
+  const A = mkStaff('A');
+  const B = mkStaff('B');
+  const work6 = ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07', '2026-08-08']
+    .map((day) => d('A', day));
+  const e = mkEngine([A, B], [...work6, d('A', '2026-08-12'), d('B', '2026-08-09')]);
+  const r = e.analyzeSwap(
+    { staffId: 'A', date: '2026-08-12', shift: 'D' },   // 甲讓出的班在連續區段之外
+    { staffId: 'B', date: '2026-08-09', shift: 'D' },   // 換來的班讓 8/03–8/09 連成 7 天
+    { requiredCerts: ['ACLS'] });
+  assert(!r.ok, '換完連上 7 天不應通過');
+  assert(r.aTake.violations.some((v) => v.code === 'H5'),
+    `甲應觸發 H5，實際：${r.aTake.violations.map((v) => v.code).join(',') || '（無）'}`);
+  assertEqual(r.bTake.violations, [], '乙承接 8/12 白班應零違規');
+});
+
+test('換班預檢：同日雙班——甲當日已有另一班，H2 擋下', () => {
+  const A = mkStaff('A', { willingShifts: ['D', 'E'] });
+  const B = mkStaff('B');
+  const e = mkEngine([A, B], [d('A', '2026-08-07', 'E'), d('A', '2026-08-05'), d('B', '2026-08-07')]);
+  const r = e.analyzeSwap(
+    { staffId: 'A', date: '2026-08-05', shift: 'D' },
+    { staffId: 'B', date: '2026-08-07', shift: 'D' },
+    { requiredCerts: ['ACLS'] });
+  assert(!r.ok, '甲 8/07 已有小夜，再接同日白班不應通過');
+  assert(r.aTake.violations.some((v) => v.code === 'H2'),
+    `甲應觸發 H2，實際：${r.aTake.violations.map((v) => v.code).join(',') || '（無）'}`);
+});
+
+test('換班預檢：資格與跨單位——ICU 班要求 VENT，無資格者被 H1 擋下、跨單位列入提示', () => {
+  const A = mkStaff('A');                                        // 無 VENT
+  const B = mkStaff('B', { unit: 'ICU', certs: { ACLS: '2030-12-31', VENT: '2030-12-31' } });
+  const e = mkEngine([A, B], [d('A', '2026-08-05'), d('B', '2026-08-07', 'D', 'ICU')]);
+  const r = e.analyzeSwap(
+    { staffId: 'A', date: '2026-08-05', shift: 'D' },
+    { staffId: 'B', date: '2026-08-07', shift: 'D' },
+    { requiredCerts: ['VENT'] });
+  assert(!r.ok, '無 VENT 資格承接 ICU 班不應通過');
+  assert(r.aTake.violations.some((v) => v.code === 'H1'),
+    `甲應觸發 H1，實際：${r.aTake.violations.map((v) => v.code).join(',') || '（無）'}`);
+  assert(r.notices.some((n) => n.includes('跨單位')), '甲跨單位承接應列入提示');
+});
+
+test('換班預檢：防呆——查無班次、同一人互換都要擋下', () => {
+  const A = mkStaff('A');
+  const B = mkStaff('B');
+  const e = mkEngine([A, B], [d('A', '2026-08-05'), d('A', '2026-08-07'), d('B', '2026-08-06')]);
+  const r1 = e.analyzeSwap(
+    { staffId: 'A', date: '2026-08-05', shift: 'D' },
+    { staffId: 'B', date: '2026-08-09', shift: 'D' });   // 乙 8/09 沒有班
+  assert(!r1.ok && !!r1.error, '查無班次應回報錯誤');
+  const r2 = e.analyzeSwap(
+    { staffId: 'A', date: '2026-08-05', shift: 'D' },
+    { staffId: 'A', date: '2026-08-07', shift: 'D' });
+  assert(!r2.ok && !!r2.error, '同一人互換應回報錯誤');
+});
+
+test('applySwap 寫回：兩筆班次交換承接人，日期班別單位不動、總班次數不變', () => {
+  const A = mkStaff('A');
+  const B = mkStaff('B');
+  const shifts = [d('A', '2026-08-05'), d('B', '2026-08-07', 'E')];
+  const e = mkEngine([A, B], shifts);
+  const ok = e.applySwap(
+    { staffId: 'A', date: '2026-08-05', shift: 'D' },
+    { staffId: 'B', date: '2026-08-07', shift: 'E' });
+  assert(ok, '寫回應成功');
+  assertEqual(shifts.length, 2, '總班次數不變');
+  const s05 = shifts.find((s) => s.date === '2026-08-05');
+  const s07 = shifts.find((s) => s.date === '2026-08-07');
+  assertEqual(s05.staffId, 'B', '8/05 白班改由乙承接');
+  assertEqual(s07.staffId, 'A', '8/07 小夜改由甲承接');
+  assertEqual(s07.shift, 'E', '班別不動');
+  assert(s05.isSwap === true && s07.isSwap === true, '互換班次應帶 isSwap 標記');
+});
