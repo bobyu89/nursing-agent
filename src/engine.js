@@ -1491,11 +1491,37 @@ function reallocateTasks({ tasks, onDuty, maxExtraLoad }) {
   };
 }
 
+/**
+ * 護病比需求模型：占床 × 法定三班護病比 → 各單位各班別所需人力。
+ *
+ * 需求人數＝⌈占床數 ÷ 護病比⌉（1 位護理師最多照護 ratio 位病人，
+ * 病人數除不盡就得再加一個人——無條件進位是法規語義，不是四捨五入）。
+ * 純函式：占床與比率由呼叫端注入，輸出形狀與 UNIT_MIN_STAFF 相同
+ * （{unit: {D,E,N}}），可直接餵給 workforceGapAnalysis 的 demand。
+ *
+ * @param {object} census  { unit: { occupied } }
+ * @param {object} ratios  一般病房比率 { D, E, N }（1:X 的 X）
+ * @param {object} [overrides] 特殊單位比率覆寫，如 { ICU: { D:2,E:2,N:2 } }
+ */
+function ratioDemand(census, ratios, overrides = {}) {
+  const demand = {};
+  Object.entries(census || {}).forEach(([unit, c]) => {
+    const occ = Math.max(0, Number(c.occupied) || 0);
+    const r = overrides[unit] || ratios;
+    demand[unit] = {
+      D: occ === 0 ? 0 : Math.ceil(occ / r.D),
+      E: occ === 0 ? 0 : Math.ceil(occ / r.E),
+      N: occ === 0 ? 0 : Math.ceil(occ / r.N),
+    };
+  });
+  return demand;
+}
+
 /* 讓測試頁（tests.html）以外的環境（如 Node）也能載入 */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     createEngine, parseDate, formatDate, addDays, weekdayOf,
     shortDate, weekDatesOf, WEEKDAY_TW, isValidDateStr, reallocateTasks,
-    cycleStartOf, cycleDatesOf,
+    cycleStartOf, cycleDatesOf, ratioDemand,
   };
 }

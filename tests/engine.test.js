@@ -1064,3 +1064,47 @@ test('政策沙盤：吸收端影響——H4 拉高到 24 小時，本週缺口�
   assert(r.diff.residualAfter >= r.diff.residualBefore,
     `班距門檻拉高不可能讓殘餘變少：${r.diff.residualBefore} → ${r.diff.residualAfter}`);
 });
+
+/* ── 護病比需求模型（ratioDemand）── */
+
+test('護病比：需求＝⌈占床÷比率⌉——除不盡就得再加一個人，無條件進位是法規語義', () => {
+  const d = ratioDemand(
+    { A: { occupied: 7 }, B: { occupied: 8 } },
+    { D: 7, E: 11, N: 13 });
+  assertEqual(d.A.D, 1, '7 床 ÷ 1:7 恰好 1 人');
+  assertEqual(d.B.D, 2, '8 床 ÷ 1:7 必須 2 人——第 8 位病人不能沒有護理師');
+  assertEqual(d.A.E, 1, '7 床 ÷ 1:11 → 1 人');
+  assertEqual(d.A.N, 1, '7 床 ÷ 1:13 → 1 人');
+});
+
+test('護病比：層級差異與 ICU 覆寫——同樣占床，醫學中心要的人比區域醫院多', () => {
+  const census = { W: { occupied: 20 }, ICU: { occupied: 6 } };
+  const mc = ratioDemand(census, { D: 6, E: 9, N: 11 }, { ICU: { D: 2, E: 2, N: 2 } });
+  const rh = ratioDemand(census, { D: 7, E: 11, N: 13 }, { ICU: { D: 2, E: 2, N: 2 } });
+  assertEqual(mc.W.D, 4, '醫學中心白班 20÷6 → 4 人');
+  assertEqual(rh.W.D, 3, '區域醫院白班 20÷7 → 3 人');
+  assertEqual(mc.ICU.D, 3, 'ICU 依 1:2 覆寫：6÷2 → 3 人，不隨層級改變');
+  assertEqual(rh.ICU.N, 3, 'ICU 大夜同樣 1:2');
+});
+
+test('護病比：占床 0 需求為 0；占床異常值視為 0，不產生負需求', () => {
+  const d = ratioDemand({ A: { occupied: 0 }, B: { occupied: -5 }, C: {} }, { D: 7, E: 11, N: 13 });
+  assertEqual(d.A.D, 0, '空病房不需要排人');
+  assertEqual(d.B.D, 0, '負值視為 0');
+  assertEqual(d.C.N, 0, '缺占床欄位視為 0');
+});
+
+test('護病比：輸出可直接作為 workforceGapAnalysis 的 demand——缺口帳改說法規語言', () => {
+  const A = mkStaff('A');
+  const B = mkStaff('B');
+  const e = mkEngine([A, B], [d('A', '2026-08-03'), d('B', '2026-08-03')]);
+  const demand = ratioDemand({ 'MED-3A': { occupied: 10 } }, { D: 7, E: 11, N: 13 });
+  const r = e.workforceGapAnalysis({ dates: ['2026-08-03'], demand });
+  const dayCell = r.cells.find((c) => c.unit === 'MED-3A' && c.shift === 'D');
+  assertEqual(dayCell.need, 2, '10 床 ÷ 1:7 → 白班需 2 人');
+  assertEqual(dayCell.scheduled, 2, '已排 2 人');
+  assertEqual(dayCell.gap, 0, '白班達標');
+  const nightCell = r.cells.find((c) => c.unit === 'MED-3A' && c.shift === 'N');
+  assertEqual(nightCell.need, 1, '大夜需 1 人');
+  assertEqual(nightCell.gap, 1, '大夜缺 1 人——誠實入帳');
+});

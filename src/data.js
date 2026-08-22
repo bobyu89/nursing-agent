@@ -33,6 +33,25 @@ const UNIT_MIN_STAFF = {
   'ICU':    { D: 1, E: 1, N: 1 },
 };
 
+/* ── 三班護病比（需求模型）───────────────────────────────
+ * 台灣三班護病比自 2024 年入法並連動獎勵金；下表為公告標準之「示意」
+ * （一般病房，1 護理師：X 病人），正式導入以院方適用層級與最新公告為準。
+ * ICU 以評鑑基準 1:2 示意（icuRatio）。占床數為模擬資料。
+ */
+const HOSPITAL_LEVELS = {
+  MC: { name: '醫學中心', ratios: { D: 6, E: 9, N: 11 } },
+  RH: { name: '區域醫院', ratios: { D: 7, E: 11, N: 13 } },
+  DH: { name: '地區醫院', ratios: { D: 10, E: 13, N: 15 } },
+};
+const ICU_RATIO = { D: 2, E: 2, N: 2 };
+
+/** 各單位占床（模擬；MED-3A 的量級對齊示範班表的部分名單） */
+const UNIT_CENSUS = {
+  'MED-3A': { beds: 14, occupied: 10 },
+  'SUR-5B': { beds: 30, occupied: 24 },
+  'ICU':    { beds: 10, occupied: 6 },
+};
+
 /* ── 資格／證照定義 ─────────────────────────────────────── */
 const CERTS = {
   ACLS: '高級心臟救命術 ACLS',
@@ -347,5 +366,6 @@ if (typeof module !== 'undefined' && module.exports) {
     SHIFT_TYPES, UNITS, CERTS, ROLE_LEVELS, LADDER_LEVELS, WEEK, WEEK_DATES,
     STAFF, SHIFTS, RAW_MESSAGE, GAP_EVENT, UNIT_MIN_STAFF, MULTI_GAP_SCENARIO,
     SAMPLE_MESSAGES, TASK_REALLOC_SCENARIO, GEN_SCENARIO, FLEX_CYCLE_ANCHOR,
+    HOSPITAL_LEVELS, ICU_RATIO, UNIT_CENSUS,
   };
 }

@@ -20,7 +20,12 @@ const state = {
   quickSel: new Map(),           // 快速通報已點選的缺班（key sid|date|shift → {staffId,date,shift,unit,certs,role}）
   swap: { a: null, b: null },    // 換班簽核：甲乙兩側點選的班次（{staffId,date,shift}）
   todayDate: GAP_EVENT.raisedAt.slice(0, 10),   // 今日戰情的基準日（示範今日 2026-08-08）
+  ratioLevel: 'RH',              // 護病比適用層級（示範預設：區域醫院）
+  ratioApplied: false,           // 全平台需求口徑是否已切換為護病比（session 內）
 };
+
+/** 護病比套用前的示範佔位需求備份（還原用；UNIT_MIN_STAFF 為全平台共用參照，只能就地覆寫） */
+const MIN_STAFF_BACKUP = JSON.parse(JSON.stringify(UNIT_MIN_STAFF));
 
 /** 開場時的替補次數基準值，用來標示本次連線期間的變化 */
 const BASELINE_STANDBY = {};
@@ -347,6 +352,7 @@ function refreshAfterScheduleChange() {
   renderSwapPicker();  // 換班簽核的班次清單同理
   renderToday();       // 今日戰情的在班與缺口同理
   renderRetention();   // 負荷帳同理——夜班／假日／連續全都來自班表
+  renderRatio();       // 達標檢核的已排人數同樣取自班表
   renderOverview();
   renderCapability();
   renderWarnings();
@@ -371,7 +377,7 @@ const NAV_GROUPS = [
   ] },
   { key: 'ov', label: '總覽', screens: [
     ['today', '今日戰情', '今'], ['overview', '人力缺口', '◎'], ['capability', '能力與出勤', '★'],
-    ['retention', '留任雷達', '留'],
+    ['retention', '留任雷達', '留'], ['ratio', '護病比', '比'],
   ] },
   { key: 'gov', label: '治理', screens: [
     ['dashboard', '公平與留痕', '4'], ['rules', '規則庫', '6'],
@@ -688,6 +694,100 @@ function renderCapability() {
  * 主敘事以名單完整的示範單位（內科 3A）呈現；部分名單與無資料單位
  * 誠實標示，不讓殘缺資料撐出假數字。班表寫回後即時重算。
  */
+/* ══ 畫面 比：護病比需求模型 ═════════════════════════════
+ * 需求端從「每班最低 1 人」的佔位符，換成評鑑與獎勵金的語言：
+ * 需求＝⌈占床÷三班護病比⌉（engine.ratioDemand，純函式）。
+ * 「套用至全平台」直接就地覆寫 UNIT_MIN_STAFF——它是引擎與所有
+ * 畫面共用的同一份參照，覆寫後缺口總覽／今日戰情／政策沙盤
+ * 全部改以法規口徑計算；session 內有效，可還原。 */
+
+function ratioCurrentDemand() {
+  return ratioDemand(UNIT_CENSUS, HOSPITAL_LEVELS[state.ratioLevel].ratios, { ICU: ICU_RATIO });
+}
+
+function renderRatio() {
+  if (!$('#ratio-table')) return;
+  const lv = HOSPITAL_LEVELS[state.ratioLevel];
+  $('#ratio-level').innerHTML = Object.entries(HOSPITAL_LEVELS).map(([k, x]) =>
+    `<option value="${k}"${k === state.ratioLevel ? ' selected' : ''}>${x.name}（白 1:${x.ratios.D}／小夜 1:${x.ratios.E}／大夜 1:${x.ratios.N}）</option>`).join('');
+
+  const demand = ratioCurrentDemand();
+  $('#ratio-table').innerHTML = `
+    <thead><tr><th>單位</th><th class="center">占床（可改）</th><th class="center">適用比率</th>
+      <th class="center">白班需求</th><th class="center">小夜需求</th><th class="center">大夜需求</th></tr></thead>
+    <tbody>${Object.keys(UNIT_CENSUS).map((u) => {
+    const isIcu = u === 'ICU';
+    const r = isIcu ? ICU_RATIO : lv.ratios;
+    return `<tr>
+        <td>${esc(UNITS[u])}</td>
+        <td class="center"><input type="number" class="ratio-occ" data-unit="${u}" value="${UNIT_CENSUS[u].occupied}"
+          min="0" max="${UNIT_CENSUS[u].beds}" style="width:76px;text-align:center"> ／ ${UNIT_CENSUS[u].beds} 床</td>
+        <td class="center">${isIcu ? '評鑑基準 1:2' : `1:${r.D}／1:${r.E}／1:${r.N}`}</td>
+        <td class="center"><b>${demand[u].D}</b> 人</td>
+        <td class="center"><b>${demand[u].E}</b> 人</td>
+        <td class="center"><b>${demand[u].N}</b> 人</td>
+      </tr>`;
+  }).join('')}</tbody>`;
+
+  /* 示範週達標檢核：僅名單完整的內科 3A */
+  const need = demand['MED-3A'];
+  let pass = 0;
+  const cells = Object.values(SHIFT_TYPES).map((t) => {
+    const tds = WEEK_DATES.map((date) => {
+      const n = SHIFTS.filter((s) => s.unit === 'MED-3A' && s.date === date && s.shift === t.code).length;
+      const ok = n >= need[t.code];
+      if (ok) pass += 1;
+      return `<td class="center" style="${ok ? '' : 'color:var(--danger);font-weight:700'}">${n}／${need[t.code]}${ok ? '' : ' ✗'}</td>`;
+    }).join('');
+    return `<tr><td><span class="cell cell-${t.code}">${t.name}</span></td>${tds}</tr>`;
+  }).join('');
+  const total = WEEK_DATES.length * 3;
+  $('#ratio-check').innerHTML = `
+    <thead><tr><th>班別</th>${WEEK_DATES.map((d) => `<th class="center">${shortDate(d)}<br>（${weekdayOf(d)}）</th>`).join('')}</tr></thead>
+    <tbody>${cells}</tbody>`;
+  const tag = $('#ratio-check-tag');
+  tag.textContent = `${pass}／${total} 班次達標`;
+  tag.className = `tag ${pass === total ? 'tag-ok' : 'tag-warn'}`;
+
+  $('#ratio-applied-tag').textContent = state.ratioApplied
+    ? `目前平台需求口徑：護病比（${lv.name}）`
+    : '目前平台需求口徑：示範佔位（每班 1 人）';
+  $('#ratio-applied-tag').className = `tag ${state.ratioApplied ? 'tag-brand' : 'tag-neutral'}`;
+}
+
+function applyRatioDemand() {
+  const dm = ratioCurrentDemand();
+  Object.keys(UNIT_MIN_STAFF).forEach((u) => {
+    Object.assign(UNIT_MIN_STAFF[u], dm[u] || { D: 0, E: 0, N: 0 });
+  });
+  state.ratioApplied = true;
+  refreshAfterScheduleChange();   // 需求端變了：缺口帳、戰情、入口狀態全部重算
+  renderRatio();
+  $('#ratio-apply-note').innerHTML =
+    '<p class="fineprint" style="color:var(--ok)">✓ 已套用。到「人力缺口總覽」與「今日戰情」看缺口帳的新口徑；重新整理即還原。</p>';
+}
+
+function handleRatioApply() {
+  const lv = HOSPITAL_LEVELS[state.ratioLevel];
+  applyRatioDemand();
+  toast(`需求口徑已切換為護病比（${lv.name}）`);
+  logAction('套用護病比需求模型',
+    `層級 ${lv.name}；${Object.keys(UNIT_CENSUS).map((u) =>
+      `${u} 占床 ${UNIT_CENSUS[u].occupied} → D${UNIT_MIN_STAFF[u].D}/E${UNIT_MIN_STAFF[u].E}/N${UNIT_MIN_STAFF[u].N}`).join('、')}` +
+    '；全平台需求端改以法規口徑計算（session 內，可還原）',
+    '護理部 排班規則管理員');
+}
+
+function handleRatioRevert() {
+  Object.keys(UNIT_MIN_STAFF).forEach((u) => Object.assign(UNIT_MIN_STAFF[u], MIN_STAFF_BACKUP[u]));
+  state.ratioApplied = false;
+  refreshAfterScheduleChange();
+  renderRatio();
+  $('#ratio-apply-note').innerHTML = '';
+  toast('需求口徑已還原為示範佔位');
+  logAction('還原示範佔位需求', '全平台需求端回到每班最低 1 人之示範口徑', '護理部 排班規則管理員');
+}
+
 /* ══ 畫面 盤：政策沙盤 ═══════════════════════════════════
  * 「改了再看」變成「看了再改」。所有試算由 engine.simulatePolicy
  * 以平行引擎執行，現行規則庫與班表一個位元都不動。 */
@@ -3005,6 +3105,23 @@ function init() {
   });
   $('#btn-swap-check').addEventListener('click', handleSwapCheck);
 
+  // 護病比：層級切換、占床調整（事件委派）、套用與還原
+  $('#ratio-level').addEventListener('change', (ev) => {
+    state.ratioLevel = ev.target.value;
+    renderRatio();
+    if (state.ratioApplied) applyRatioDemand();   // 已套用時，換層級即以新比率重套
+  });
+  $('#ratio-table').addEventListener('change', (ev) => {
+    const el = ev.target.closest('.ratio-occ');
+    if (!el) return;
+    const c = UNIT_CENSUS[el.dataset.unit];
+    c.occupied = Math.min(Math.max(0, Number(el.value) || 0), c.beds);
+    renderRatio();
+    if (state.ratioApplied) applyRatioDemand();   // 占床變了，套用中的需求同步重算
+  });
+  $('#btn-ratio-apply').addEventListener('click', handleRatioApply);
+  $('#btn-ratio-revert').addEventListener('click', handleRatioRevert);
+
   // 政策沙盤：情境預設、試算執行
   $('#policy-presets').addEventListener('click', (ev) => {
     const c = ev.target.closest('.chip');
@@ -3097,6 +3214,7 @@ function init() {
   renderToday();
   renderRetention();
   renderPolicyInputs();
+  renderRatio();
   renderStaffTable();
   renderRules();
   renderFairness();
