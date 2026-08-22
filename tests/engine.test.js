@@ -1007,3 +1007,60 @@ test('留任雷達 demo 基準：N-09 連續旗標、N-07 夜班旗標、N-06 �
   assert(!of('N-01').flags.some((f) => f.code === '代班'),
     'N-01 代班 4 次未達預設飽和 5，不亮旗（規則庫調 S1 即可看到連動）');
 });
+
+/* ── 政策沙盤（simulatePolicy：規則變更影響試算）── */
+
+const POLICY_SCENARIO = { dates: WEEK_DATES, demand: UNIT_MIN_STAFF, gen: GEN_SCENARIO };
+
+test('政策沙盤：只試算不寫回——現行規則庫、警示與示範劇本完全不動', () => {
+  const e = mkEngine(STAFF, SHIFTS.slice(), { flexCycleAnchor: FLEX_CYCLE_ANCHOR });
+  const beforeWarnings = e.rosterWarnings().length;
+  const beforeParam = RULE_REGISTRY.hard.find((r) => r.code === 'H5').param.value;
+  e.simulatePolicy({ H5: 5, H4: 12 }, POLICY_SCENARIO);
+  assertEqual(RULE_REGISTRY.hard.find((r) => r.code === 'H5').param.value, beforeParam,
+    '試算後現行 H5 參數不得被改動');
+  assertEqual(e.rosterWarnings().length, beforeWarnings, '試算後現行警示數不變');
+  assertEqual(e.evaluateGap(GAP_EVENT).candidates.map((c) => c.staff.id),
+    ['N-02', 'N-08', 'N-10', 'N-01'], '試算後示範劇本不變');
+});
+
+test('政策沙盤：H5 收緊為 5 天——N-09 的連六立刻從「達門檻」變「已違規」', () => {
+  const e = mkEngine(STAFF, SHIFTS.slice(), { flexCycleAnchor: FLEX_CYCLE_ANCHOR });
+  const r = e.simulatePolicy({ H5: 5 }, POLICY_SCENARIO);
+  assertEqual(r.applied.length, 1, '僅套用一項變更');
+  assertEqual(r.diff.highBefore, 0, '現行規則下零已違規');
+  assert(r.diff.highAfter > 0, `收緊後應出現已違規，實際 ${r.diff.highAfter}`);
+  assert(r.diff.newWarnings.some((w) => w.code === 'H5' && w.staffId === 'N-09' && w.level === 'high'),
+    `新增警示應含 N-09 的 H5 已違規，實際：${r.diff.newWarnings.map((w) => `${w.code}/${w.staffId}/${w.level}`).join('、') || '（無）'}`);
+});
+
+test('政策沙盤：不明代碼與等值變更一律忽略，applied 誠實回報實際套用項', () => {
+  const e = mkEngine(STAFF, SHIFTS.slice(), { flexCycleAnchor: FLEX_CYCLE_ANCHOR });
+  const h4Now = RULE_REGISTRY.hard.find((r) => r.code === 'H4').param.value;
+  const r = e.simulatePolicy({ H99: 3, H4: h4Now, H1: 5 }, POLICY_SCENARIO);
+  assertEqual(r.applied.length, 0, '不明代碼／等值／無參數規則皆不套用');
+  assertEqual(r.diff.highAfter, r.diff.highBefore, '無變更即無差異');
+});
+
+test('政策沙盤：生成端影響——H5 收緊後，同一情境排不出的格子變多且阻擋原因含 H5', () => {
+  const A = mkStaff('A', { willingShifts: ['N'] });
+  // 5 個連續日、每日 1 席大夜、只有一個人：H5=6 可全排，H5=4 第 5 天排不出
+  const days = ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14'];
+  const e = mkEngine([A], []);
+  const sc = {
+    dates: days, demand: { 'MED-3A': { N: 1 } },
+    gen: { unit: 'MED-3A', dates: days, requirements: [{ shift: 'N', count: 1, requiredRole: '護理師', requiredCerts: ['ACLS'] }] },
+  };
+  const r = e.simulatePolicy({ H5: 4 }, sc);
+  assertEqual(r.diff.genFilledBefore, 5, '現行 H5=6：5 天全排得出');
+  assertEqual(r.diff.genFilledAfter, 4, 'H5=4：連排 4 天後第 5 天缺格');
+  assert(r.diff.genBlockersAfter.some((b) => b.code === 'H5'), '阻擋原因統計應含 H5');
+});
+
+test('政策沙盤：吸收端影響——H4 拉高到 24 小時，本週缺口的殘餘不減反增（或至少不變）', () => {
+  const e = mkEngine(STAFF, SHIFTS.slice(), { flexCycleAnchor: FLEX_CYCLE_ANCHOR });
+  const r = e.simulatePolicy({ H4: 24 }, POLICY_SCENARIO);
+  assert(Number.isFinite(r.diff.residualBefore) && Number.isFinite(r.diff.residualAfter), '殘餘數為有限數字');
+  assert(r.diff.residualAfter >= r.diff.residualBefore,
+    `班距門檻拉高不可能讓殘餘變少：${r.diff.residualBefore} → ${r.diff.residualAfter}`);
+});

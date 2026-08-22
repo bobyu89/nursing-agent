@@ -374,7 +374,8 @@ const NAV_GROUPS = [
     ['retention', '留任雷達', '留'],
   ] },
   { key: 'gov', label: '治理', screens: [
-    ['dashboard', '公平與留痕', '4'], ['rules', '規則庫', '6'], ['fhir', 'FHIR 介接', '9'],
+    ['dashboard', '公平與留痕', '4'], ['rules', '規則庫', '6'],
+    ['policy', '政策沙盤', '盤'], ['fhir', 'FHIR 介接', '9'],
   ] },
 ];
 
@@ -687,6 +688,86 @@ function renderCapability() {
  * 主敘事以名單完整的示範單位（內科 3A）呈現；部分名單與無資料單位
  * 誠實標示，不讓殘缺資料撐出假數字。班表寫回後即時重算。
  */
+/* ══ 畫面 盤：政策沙盤 ═══════════════════════════════════
+ * 「改了再看」變成「看了再改」。所有試算由 engine.simulatePolicy
+ * 以平行引擎執行，現行規則庫與班表一個位元都不動。 */
+
+function renderPolicyInputs() {
+  const box = $('#policy-inputs');
+  if (!box) return;
+  box.innerHTML = RULE_REGISTRY.hard.filter((r) => r.param).map((r) => `
+    <div class="qp-col">
+      <div class="qp-col-head"><b><span class="rule-code" style="margin-right:6px">${r.code}</span>${esc(r.name)}</b></div>
+      <label class="q-hint" style="color:var(--ink-faint);display:block;margin-bottom:6px">
+        現行 ${r.param.value} ${esc(r.param.unit)} → 試算值
+      </label>
+      <input type="number" class="policy-val" data-code="${r.code}" value="${r.param.value}" step="1">
+    </div>`).join('');
+}
+
+function handlePolicyRun() {
+  const out = $('#policy-result');
+  const changes = {};
+  $$('#policy-inputs .policy-val').forEach((el) => {
+    changes[el.dataset.code] = Number(el.value);
+  });
+  const r = engine.simulatePolicy(changes,
+    { dates: WEEK_DATES, demand: UNIT_MIN_STAFF, gen: GEN_SCENARIO });
+
+  if (r.applied.length === 0) {
+    out.innerHTML = '<p class="fineprint" style="margin-top:12px">試算值與現行相同——請先調整任一門檻。</p>';
+    return;
+  }
+
+  const d = r.diff;
+  const deltaTag = (before, after, invert) => {
+    const up = after > before;
+    const same = after === before;
+    const bad = invert ? !up && !same : up;
+    return `<span class="tag ${same ? 'tag-neutral' : bad ? 'tag-danger' : 'tag-ok'}">${before} → ${after}</span>`;
+  };
+
+  out.innerHTML = `
+    <div class="card" style="margin-top:14px;border-color:var(--brand)">
+      <div class="card-head">
+        <h2>試算結果</h2>
+        <span class="tag tag-brand">${r.applied.map((a) => `${a.code} ${a.from}→${a.to}${esc(a.unit)}`).join('、')}</span>
+      </div>
+
+      <div class="fact"><span><b>主動預警：已違規（high）</b></span><span>${deltaTag(d.highBefore, d.highAfter)}</span></div>
+      <div class="fact"><span><b>主動預警：達門檻（medium）</b></span><span>${deltaTag(d.mediumBefore, d.mediumAfter)}</span></div>
+      ${d.newWarnings.length ? `
+        <div style="margin:8px 0 4px" class="q-hint">新出現的警示（${d.newWarnings.length} 條）：</div>
+        ${d.newWarnings.map((w) => `
+          <div class="excl-reason"><span class="rule-code${w.level === 'high' ? '' : ' neutral'}">${w.code}</span>
+            <span><b>${esc(w.staffId)}</b>　${esc(w.text)}</span></div>`).join('')}` : ''}
+
+      <div class="fact" style="margin-top:10px"><span><b>本週缺口：合法吸收後的殘餘</b></span><span>${deltaTag(d.residualBefore, d.residualAfter)}</span></div>
+      ${d.residualAfter > d.residualBefore ? `
+        <div class="q-hint" style="margin:4px 0">新規則下無人可合法吸收的缺口：${d.residualCells.map((c) =>
+    `${shortDate(c.date)} ${SHIFT_TYPES[c.shift].name} @ ${esc(UNITS[c.unit] || c.unit)}`).join('、')}</div>` : ''}
+
+      <div class="fact" style="margin-top:10px"><span><b>下週班表生成：填滿格數（共 ${d.genSlotCount} 格）</b></span><span>${deltaTag(d.genFilledBefore, d.genFilledAfter, true)}</span></div>
+      ${d.genBlockersAfter.length ? `
+        <div class="q-hint" style="margin:4px 0">排不出的格子，阻擋原因分佈：${d.genBlockersAfter.map((b) =>
+    `${b.code}×${b.count}`).join('、')}</div>` : ''}
+
+      <p class="fineprint" style="margin-top:12px">
+        ${d.highAfter === d.highBefore && d.residualAfter === d.residualBefore && d.genFilledAfter === d.genFilledBefore
+    ? '這組調整在目前班表與情境下<b>沒有立即衝擊</b>——代表現有排班對此門檻仍有餘裕，是可以帶進會議的好消息。'
+    : `這組政策上路的立即代價已量化如上——請帶著數字進主管會議。`}
+        試算未寫回任何資料；要正式變更，請至「規則庫」調整（該處變更會留痕並即時重算）。
+      </p>
+    </div>`;
+
+  logAction('政策沙盤試算',
+    `${r.applied.map((a) => `${a.code} ${a.from}→${a.to}${a.unit}`).join('、')}：` +
+    `已違規 ${d.highBefore}→${d.highAfter}、達門檻 ${d.mediumBefore}→${d.mediumAfter}、` +
+    `本週殘餘缺口 ${d.residualBefore}→${d.residualAfter}、下週生成 ${d.genFilledBefore}→${d.genFilledAfter}／${d.genSlotCount}（只試算，未寫回）`,
+    '護理部 排班規則管理員');
+  MOTION.enter(out, '.fact, .excl-reason, .card-head, .fineprint');
+}
+
 /* ══ 畫面 留：留任雷達 ═══════════════════════════════════
  * 部主任層級的公平收官：README 的因果鏈「持續壓在同一批人身上，
  * 最後是離職」，在這一頁變成可以稽核的帳。所有數字由
@@ -2537,7 +2618,8 @@ function renderRules() {
     el.addEventListener('change', () => {
       getHardRule(el.dataset.hard).param.value = Number(el.value);
       saveRules();
-      renderRetention();   // H5 連續上限同樣連動旗標
+      renderRetention();      // H5 連續上限同樣連動旗標
+      renderPolicyInputs();   // 沙盤顯示的「現行值」跟著規則庫走
     });
   });
   $$('[data-hard-enable]').forEach((el) => {
@@ -2923,6 +3005,17 @@ function init() {
   });
   $('#btn-swap-check').addEventListener('click', handleSwapCheck);
 
+  // 政策沙盤：情境預設、試算執行
+  $('#policy-presets').addEventListener('click', (ev) => {
+    const c = ev.target.closest('.chip');
+    if (!c) return;
+    renderPolicyInputs();   // 先回復現行值
+    if (c.dataset.preset === 'h5') $('#policy-inputs .policy-val[data-code="H5"]').value = 5;
+    if (c.dataset.preset === 'h4') $('#policy-inputs .policy-val[data-code="H4"]').value = 12;
+    $('#policy-result').innerHTML = '';
+  });
+  $('#btn-policy-run').addEventListener('click', handlePolicyRun);
+
   // 今日戰情：基準日切換
   $('#btn-today-prev').addEventListener('click', () => {
     state.todayDate = addDays(state.todayDate, -1); renderToday();
@@ -3003,6 +3096,7 @@ function init() {
   renderSwapPicker();
   renderToday();
   renderRetention();
+  renderPolicyInputs();
   renderStaffTable();
   renderRules();
   renderFairness();

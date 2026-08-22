@@ -469,6 +469,34 @@
     <div id="gen-result"></div>
   </section>
 
+  <!-- ══ 盤. 政策沙盤 ═════════════════════════════════ -->
+  <section class="screen" id="screen-policy">
+    <div class="screen-head">
+      <h1>政策沙盤：改規則之前，先看見後果</h1>
+      <p class="lede">主任的每一條政策都是全院尺度：連續上班收緊一天、班距提高一小時——<strong>改下去之前，先知道哪些人立刻變成違規、哪些班會排不出來。</strong>沙盤以同一份引擎、同一份班表試算新舊規則的差異；<strong>只試算、不寫回</strong>，拿著數字進主管會議，正式變更仍在規則庫執行並留痕。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>政策調整（與現行值比較）</h2>
+        <span class="tag tag-neutral">六項硬性門檻皆可試</span>
+      </div>
+      <div class="chips" id="policy-presets">
+        <button class="chip" data-preset="h5">情境：連續上班收緊為 5 天</button>
+        <button class="chip" data-preset="h4">情境：班距提高為 12 小時</button>
+        <button class="chip" data-preset="reset">回復現行值</button>
+      </div>
+      <div id="policy-inputs" class="qp-board" style="grid-template-columns:repeat(3,1fr)"></div>
+      <button class="btn btn-primary" id="btn-policy-run" data-ico="layers">執行影響試算</button>
+      <div id="policy-result"></div>
+      <p class="fineprint">
+        試算範圍：<b>主動預警</b>（現有班表立刻多出的違規／達門檻）、<b>本週缺口合法吸收</b>（殘餘缺口變化）、
+        <b>下週班表生成</b>（排不出的格子與阻擋原因）——三者用的都是替補評估同一份 H1–H10 程式碼。
+        「沒有影響」也是誠實的答案：代表這條收緊在目前班表下有餘裕。
+      </p>
+    </div>
+  </section>
+
   <!-- ══ 9. FHIR 介接 ═════════════════════════════════ -->
   <section class="screen" id="screen-fhir">
     <div class="screen-head">

@@ -794,6 +794,90 @@ function createEngine(db) {
     return { dates, thresholds: { sat, softCap, maxDays, nightBar, weekendBar }, staff: rows, units };
   }
 
+  /**
+   * 政策沙盤：規則變更的影響試算——「改了再看」變成「看了再改」。
+   *
+   * 以參數覆寫後的規則庫建立平行引擎，對同一份班表跑三種掃描，
+   * 與現行規則的結果並列：
+   *   warnings  主動預警（現有班表會立刻多出的違規／達門檻）
+   *   absorb    本週缺口的合法吸收（殘餘缺口的變化）
+   *   gen       下週班表生成（排不出的格子與阻擋原因的變化）
+   *
+   * 只試算、絕不寫回：現行規則庫與班表完全不動；
+   * 政策的實際變更仍由主管在規則庫頁執行並留痕。
+   *
+   * @param {object} paramChanges 硬性規則參數覆寫，如 { H5: 5, H4: 12 }
+   *   （僅覆寫有 param 的規則；不明代碼忽略）
+   * @param {object} scenario { dates, demand, gen }——吸收模擬的日期與
+   *   最低配置、生成情境（由呼叫端注入，引擎不讀全域資料）
+   */
+  function simulatePolicy(paramChanges, scenario) {
+    const reg = structuredClone(db.registry);
+    const applied = [];
+    Object.entries(paramChanges || {}).forEach(([code, value]) => {
+      const rule = reg.hard.find((r) => r.code === code);
+      if (rule && rule.param && Number.isFinite(value) && value !== rule.param.value) {
+        applied.push({ code, name: rule.name, from: rule.param.value, to: value, unit: rule.param.unit });
+        rule.param.value = value;
+      }
+    });
+
+    const sim = createEngine({
+      staff: db.staff, shifts: db.shifts,
+      shiftTypes: db.shiftTypes, roleLevels: db.roleLevels,
+      ladderLevels: db.ladderLevels, certs: db.certs, units: db.units,
+      registry: reg, staffingMin: db.staffingMin,
+      flexCycleAnchor: db.flexCycleAnchor,
+    });
+
+    const runAll = (eng) => ({
+      warnings: eng.rosterWarnings(),
+      absorb: eng.workforceGapAnalysis({ dates: scenario.dates, demand: scenario.demand }),
+      gen: eng.generateSchedule(scenario.gen),
+    });
+    const current = runAll({ rosterWarnings, workforceGapAnalysis, generateSchedule });
+    const changed = runAll(sim);
+
+    const countBy = (ws, level) => ws.filter((w) => w.level === level).length;
+    // 新增警示以（規則代碼 × 人員 × 等級）多重集合相減辨識——
+    // 警示文字含門檻數字，門檻一改文字必變，不能拿文字當識別；
+    // 等級必須入鍵：達門檻（medium）升級為已違規（high）正是主任要看的變化
+    const keyBag = (ws) => ws.map((w) => `${w.code}|${w.staffId}|${w.level}`);
+    const curBag = keyBag(current.warnings);
+    const newWarnings = changed.warnings.filter((w) => {
+      const k = `${w.code}|${w.staffId}|${w.level}`;
+      const i = curBag.indexOf(k);
+      if (i >= 0) { curBag.splice(i, 1); return false; }
+      return true;
+    });
+
+    const blockerTally = (gen) => {
+      const by = {};
+      gen.uncovered.forEach((u) => u.blockers.forEach((b) => { by[b.code] = (by[b.code] || 0) + 1; }));
+      return Object.entries(by).map(([code, count]) => ({ code, count }))
+        .sort((a, b) => b.count - a.count);
+    };
+
+    return {
+      applied,
+      current, changed,
+      diff: {
+        highBefore: countBy(current.warnings, 'high'),
+        highAfter: countBy(changed.warnings, 'high'),
+        mediumBefore: countBy(current.warnings, 'medium'),
+        mediumAfter: countBy(changed.warnings, 'medium'),
+        newWarnings,
+        residualBefore: current.absorb.absorb.residualSeats,
+        residualAfter: changed.absorb.absorb.residualSeats,
+        residualCells: changed.absorb.absorb.residual,
+        genFilledBefore: current.gen.filled,
+        genFilledAfter: changed.gen.filled,
+        genSlotCount: current.gen.slotCount,
+        genBlockersAfter: blockerTally(changed.gen),
+      },
+    };
+  }
+
   function capabilityAnalysis({ dates, unit, seniorLevel = 3, expiringDays = 90 }) {
     const ladder = db.ladderLevels || {};
     const lvOf = (s) => (s.ladder && ladder[s.ladder] ? ladder[s.ladder].level : 0);
@@ -1320,6 +1404,7 @@ function createEngine(db) {
     minRestAfterGap, shiftInterval, unitCoverage,
     assignGreedy, assignJointly, rosterWarnings, coverageGaps,
     generateSchedule, workforceGapAnalysis, capabilityAnalysis, workloadLedger,
+    simulatePolicy,
   };
 }
 
