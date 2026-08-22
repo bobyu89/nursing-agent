@@ -12,11 +12,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500&family=Noto+Serif+TC:wght@400;600&family=Noto+Sans+TC:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      /* 班守配色：深夜病房的海軍藍（可整組微調） */
-      --background: hsl(203 62% 10%);
+      /* 班守配色：深夜病房的靛藍——與平台儀表板（淺色、靛藍主色）同色相家族 */
+      --background: hsl(228 48% 9%);
       --foreground: hsl(0 0% 100%);
-      --muted-foreground: hsl(208 18% 70%);
-      --border: hsl(206 30% 24%);
+      --muted-foreground: hsl(226 20% 73%);
+      --border: hsl(228 26% 26%);
+      --accent: hsl(228 88% 66%);
       --warn: hsl(38 55% 62%);
       --font-display: 'Instrument Serif', 'Noto Serif TC', serif;
       --font-body: 'Inter', 'Noto Sans TC', sans-serif;
@@ -145,7 +146,7 @@
     }
     .bg-scrim {   /* 讓文字在任何影格上都可讀 */
       position: absolute; inset: 0; z-index: 1; pointer-events: none;
-      background: linear-gradient(180deg, rgba(4,20,31,.35) 0%, rgba(4,20,31,.15) 45%, rgba(4,20,31,.75) 100%);
+      background: linear-gradient(180deg, rgba(8,12,28,.4) 0%, rgba(8,12,28,.18) 45%, rgba(8,12,28,.8) 100%);
     }
 
     /* ── 導覽列 ───────────────────────────────── */
@@ -191,7 +192,7 @@
     .cta-row .cta b { font-size: 18px; font-weight: 500; }
     .cta-row .cta span { font-size: 12.5px; color: var(--muted-foreground); }
     .hero .cta-sub { margin-top: 18px; font-size: 13px; color: var(--muted-foreground); }
-    .hero .cta-sub a { border-bottom: 1px solid var(--border); padding-bottom: 2px; }
+    .hero .cta-sub a { border-bottom: 1px solid var(--accent); padding-bottom: 2px; }
     .hero .cta-sub a:hover { color: var(--foreground); }
 
     /* ── 下方內容區（深色玻璃）────────────────── */
@@ -222,7 +223,7 @@
       position: relative; z-index: 10; text-align: center;
       padding: 64px 20px 56px; color: var(--muted-foreground); font-size: 12.5px; line-height: 2.2;
     }
-    .footer a { border-bottom: 1px solid var(--border); padding-bottom: 1px; }
+    .footer a { border-bottom: 1px solid var(--accent); padding-bottom: 1px; }
     .footer a:hover { color: var(--foreground); }
   </style>
 </head>
