@@ -1966,12 +1966,14 @@ function renderStaffTable() {
       ? '<span style="color:var(--ink-faint)">未表態</span>'
       : s.willingShifts.map((c) => SHIFT_TYPES[c].name).join('、');
     const leave = s.leaves.map((l) => `${esc(l.type)} ${shortDate(l.from)}–${shortDate(l.to)}`).join('；');
+    const restr = (s.restrictions || []).map((r) =>
+      `<span class="tag tag-danger" title="${esc(r.reason)}（H10，引擎硬性把關）">禁${r.shifts.map((c) => SHIFT_TYPES[c].name).join('、')} ${shortDate(r.from)}–${shortDate(r.to)}</span>`).join(' ');
     return `<tr>
       <td><b>${esc(s.id)}</b></td><td>${esc(s.role)}</td><td>${lvBadge(s.ladder)}</td><td>${esc(UNITS[s.unit])}</td>
       <td style="white-space:normal">${certs}</td>
       <td>${willing}</td>
       <td class="center">${s.standbyCount30d} 次</td>
-      <td style="white-space:normal">${leave ? `<span class="tag tag-warn">${leave}</span>` : '—'}</td>
+      <td style="white-space:normal">${[leave ? `<span class="tag tag-warn">${leave}</span>` : '', restr].filter(Boolean).join(' ') || '—'}</td>
     </tr>`;
   }).join('');
 

@@ -834,3 +834,103 @@ test('applySwap 寫回：兩筆班次交換承接人，日期班別單位不動�
   assertEqual(s07.shift, 'E', '班別不動');
   assert(s05.isSwap === true && s07.isSwap === true, '互換班次應帶 isSwap 標記');
 });
+
+/* ── H10 個人限制班別（母性保護等）── */
+
+test('H10 個人限制：妊娠者於限制期間不得排大夜，白班不受影響', () => {
+  const A = mkStaff('A', {
+    restrictions: [{ from: '2026-07-01', to: '2027-01-31', shifts: ['N'], reason: '妊娠期間（勞基法第 49 條）' }],
+    willingShifts: ['D', 'E', 'N'],
+  });
+  const e = mkEngine([A], []);
+  const night = e.checkHardConstraints(A, mkGap({ shift: 'N', requiredCerts: ['ACLS'] }));
+  assert(night.some((v) => v.code === 'H10'),
+    `限制期間排大夜應觸發 H10，實際：${night.map((v) => v.code).join(',') || '（無）'}`);
+  const day = e.checkHardConstraints(A, mkGap({ requiredCerts: ['ACLS'] }));
+  assert(!day.some((v) => v.code === 'H10'), '白班不在受限班別，不應觸發 H10');
+});
+
+test('H10 期間邊界：from／to 當日皆屬限制期間，期間外不受限', () => {
+  const A = mkStaff('A', {
+    restrictions: [{ from: '2026-08-01', to: '2026-08-31', shifts: ['N'], reason: '醫囑限制' }],
+    willingShifts: ['N'],
+  });
+  const e = mkEngine([A], []);
+  const first = e.checkHardConstraints(A, mkGap({ date: '2026-08-01', shift: 'N', requiredCerts: ['ACLS'] }));
+  const last = e.checkHardConstraints(A, mkGap({ date: '2026-08-31', shift: 'N', requiredCerts: ['ACLS'] }));
+  const after = e.checkHardConstraints(A, mkGap({ date: '2026-09-01', shift: 'N', requiredCerts: ['ACLS'] }));
+  assert(first.some((v) => v.code === 'H10'), 'from 當日應受限');
+  assert(last.some((v) => v.code === 'H10'), 'to 當日應受限');
+  assert(!after.some((v) => v.code === 'H10'), '期間結束翌日不應受限');
+});
+
+test('H10 可停用：規則庫關閉 H10 後不再排除（但法定限制實務上不得放寬）', () => {
+  const A = mkStaff('A', {
+    restrictions: [{ from: '2026-08-01', to: '2026-08-31', shifts: ['N'], reason: '醫囑限制' }],
+    willingShifts: ['N'],
+  });
+  const reg = structuredClone(RULE_REGISTRY);
+  reg.hard.find((r) => r.code === 'H10').enabled = false;
+  const e = mkEngine([A], [], { registry: reg });
+  const v = e.checkHardConstraints(A, mkGap({ date: '2026-08-15', shift: 'N', requiredCerts: ['ACLS'] }));
+  assert(!v.some((x) => x.code === 'H10'), '停用後不應觸發 H10');
+});
+
+test('H10 × 換班預檢：接手大夜落在限制期間，互換被擋下', () => {
+  const A = mkStaff('A', {
+    restrictions: [{ from: '2026-07-01', to: '2027-01-31', shifts: ['N'], reason: '妊娠期間（勞基法第 49 條）' }],
+    willingShifts: ['D', 'N'],
+  });
+  const B = mkStaff('B', { willingShifts: ['D', 'N'] });
+  const e = mkEngine([A, B], [d('A', '2026-08-05'), d('B', '2026-08-07', 'N')]);
+  const r = e.analyzeSwap(
+    { staffId: 'A', date: '2026-08-05', shift: 'D' },
+    { staffId: 'B', date: '2026-08-07', shift: 'N' },
+    { requiredCerts: ['ACLS'] });
+  assert(!r.ok, '妊娠者接手大夜不應通過');
+  assert(r.aTake.violations.some((v) => v.code === 'H10'),
+    `甲應觸發 H10，實際：${r.aTake.violations.map((v) => v.code).join(',') || '（無）'}`);
+});
+
+test('H10 × 班表生成：受限者不會被排進大夜；只剩受限者時誠實標示缺格', () => {
+  const A = mkStaff('A', {
+    restrictions: [{ from: '2026-08-01', to: '2026-08-31', shifts: ['N'], reason: '妊娠期間' }],
+    willingShifts: ['D', 'E', 'N'],
+  });
+  const B = mkStaff('B', { willingShifts: ['D', 'E', 'N'] });
+  const e = mkEngine([A, B], []);
+  const r = e.generateSchedule({
+    unit: 'MED-3A', dates: ['2026-08-10', '2026-08-11'],
+    requirements: [{ shift: 'N', count: 1, requiredRole: '護理師', requiredCerts: ['ACLS'] }],
+  });
+  assert(r.assignments.every((x) => !(x.staffId === 'A' && x.shift === 'N')),
+    '受限者不得被生成器排進大夜');
+
+  const only = mkEngine([A], []).generateSchedule({
+    unit: 'MED-3A', dates: ['2026-08-10'],
+    requirements: [{ shift: 'N', count: 1, requiredRole: '護理師', requiredCerts: ['ACLS'] }],
+  });
+  assertEqual(only.assignments.length, 0, '只剩受限者時不硬排');
+  assert(only.uncovered.length === 1 && only.uncovered[0].blockers.some((b) => b.code === 'H10'),
+    '缺格應誠實標示且阻擋原因含 H10');
+});
+
+test('H10 × 主動預警：已排定的大夜落在限制期間，rosterWarnings 以 high 揭露', () => {
+  const A = mkStaff('A', {
+    restrictions: [{ from: '2026-08-01', to: '2026-08-31', shifts: ['N'], reason: '妊娠期間（勞基法第 49 條）' }],
+    willingShifts: ['N'],
+  });
+  const e = mkEngine([A], [d('A', '2026-08-05', 'N')]);
+  const w = e.rosterWarnings();
+  assert(w.some((x) => x.code === 'H10' && x.level === 'high' && x.staffId === 'A'),
+    `已排定的受限班次應產生 H10 高級預警，實際：${w.map((x) => x.code).join(',') || '（無）'}`);
+});
+
+test('H10 demo 基準不變：N-03 現有班表無大夜，示範劇本與零違規掃描維持原樣', () => {
+  const e = mkEngine(STAFF, SHIFTS.slice(), { flexCycleAnchor: FLEX_CYCLE_ANCHOR });
+  const ev = e.evaluateGap(GAP_EVENT);
+  assertEqual(ev.candidates.map((c) => c.staff.id), ['N-02', 'N-08', 'N-10', 'N-01'],
+    '加入 H10 後 demo 劇本不得改變');
+  assert(e.rosterWarnings().every((w) => w.level !== 'high'),
+    'demo 班表在 H10 之下仍應零違規（N-03 未排大夜）');
+});

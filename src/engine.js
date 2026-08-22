@@ -172,6 +172,12 @@ function createEngine(db) {
     return staff.leaves.find((lv) => dateStr >= lv.from && dateStr <= lv.to);
   }
 
+  /** 個人限制（H10）：日期落在限制期間且班別在受限清單內時回傳該筆限制 */
+  function restrictionOn(staff, dateStr, shiftCode) {
+    return (staff.restrictions || []).find((r) =>
+      dateStr >= r.from && dateStr <= r.to && r.shifts.includes(shiftCode));
+  }
+
   /** refDate 所在自然週的已排定工時（小時） */
   function weeklyHours(staffId, refDate) {
     const week = weekDatesOf(refDate);
@@ -261,6 +267,16 @@ function createEngine(db) {
     if (getHardRule('H3').enabled && isOnLeave(staff, gap.date)) {
       const lv = leaveOn(staff, gap.date);
       violations.push({ code: 'H3', detail: `${lv.type}中（${lv.from} – ${lv.to}）` });
+    }
+
+    // H10 個人限制班別（母性保護等法定禁止與醫囑限制，登錄於人員主檔）
+    const h10 = getHardRule('H10');
+    if (h10 && h10.enabled) {
+      const restr = restrictionOn(staff, gap.date, gap.shift);
+      if (restr) {
+        violations.push({ code: 'H10',
+          detail: `個人限制：${restr.reason}（${restr.from} – ${restr.to} 不得排${restr.shifts.map((c) => db.shiftTypes[c].name).join('、')}）` });
+      }
     }
 
     // H4 班間休息（同日重複排班交給 H2，這裡只看不同日期的鄰近班次）
@@ -564,6 +580,15 @@ function createEngine(db) {
             text: `${shortDate(ss[i - 1].date)} ${db.shiftTypes[ss[i - 1].shift].name}接 ${shortDate(ss[i].date)} ${db.shiftTypes[ss[i].shift].name}，間隔僅 ${hours} 小時（法定 ${minRest}）` });
         }
       }
+
+      // H10 個人限制：已排定的班次落在限制期間（如妊娠期間排了大夜）——不是風險，是現在就違法
+      ss.forEach((s) => {
+        const restr = restrictionOn(staff, s.date, s.shift);
+        if (restr) {
+          warnings.push({ level: 'high', code: 'H10', staffId: staff.id,
+            text: `${shortDate(s.date)} 排定${db.shiftTypes[s.shift].name}，落在個人限制期間（${restr.reason}）` });
+        }
+      });
 
       // 各自然週的已排工時
       const weeks = {};
