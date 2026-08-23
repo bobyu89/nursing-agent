@@ -2870,7 +2870,8 @@ function renderRoster() {
       + (total === 0 ? '；整日未排定——可用「班表生成」從源頭排補' : '');
     return `<td class="center foot-day${total < needTotal ? ' foot-short' : ''}" title="${esc(tip)}">${total}</td>`;
   }).join('');
-  const foot = `<tfoot><tr class="roster-foot"><td colspan="2">日合計（需 ${needTotal} 人）</td>${footCells}<td class="center">—</td></tr></tfoot>`;
+  // 首格不可用 colspan：凍結欄會比表身的凍結欄寬，橫向捲動時蓋住日期欄、數字對不上
+  const foot = `<tfoot><tr class="roster-foot"><td>日合計</td><td class="td-role">需 ${needTotal} 人／日</td>${footCells}<td class="center">—</td></tr></tfoot>`;
 
   $('#roster-table').innerHTML = head + `<tbody>${body}</tbody>` + foot;
 }
