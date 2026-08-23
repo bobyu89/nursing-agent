@@ -20,6 +20,7 @@ const state = {
   quickSel: new Map(),           // 快速通報已點選的缺班（key sid|date|shift → {staffId,date,shift,unit,certs,role}）
   swap: { a: null, b: null },    // 換班簽核：甲乙兩側點選的班次（{staffId,date,shift}）
   todayDate: GAP_EVENT.raisedAt.slice(0, 10),   // 今日戰情的基準日（示範今日 2026-08-08）
+  ovWeekStart: WEEK.start,       // ◎ 總覽的分析週（篩選連動：換週＝KPI／圖表／行動全部重算）
   ratioLevel: 'RH',              // 護病比適用層級（示範預設：區域醫院）
   ratioApplied: false,           // 全平台需求口徑是否已切換為護病比（session 內）
 };
@@ -736,6 +737,38 @@ function initPortal() {
  * max 為共同尺度；marker 可在指定值畫垂直虛線（如飽和門檻）。
  * 顏色用 CSS 變數字串，inline SVG 直接繼承主題。
  */
+/** 表格點欄排序（互動式儀表板慣例）：點表頭切換升降冪，▲▼ 視覺回饋；
+ *  數字欄以數值比較（自動抽出第一個數字），文字欄以字典序。 */
+function makeSortable(tbl) {
+  const ths = tbl.querySelectorAll('thead th');
+  ths.forEach((th, col) => {
+    th.classList.add('th-sort');
+    th.title = '點擊排序';
+    th.addEventListener('click', () => {
+      const dir = th.dataset.dir === 'asc' ? 'desc' : 'asc';
+      ths.forEach((x) => { delete x.dataset.dir; x.querySelector('.sort-ind') && x.querySelector('.sort-ind').remove(); });
+      th.dataset.dir = dir;
+      th.insertAdjacentHTML('beforeend', `<span class="sort-ind">${dir === 'asc' ? '▲' : '▼'}</span>`);
+      const tb = tbl.querySelector('tbody');
+      const rows = Array.from(tb.rows);
+      const val = (tr) => (tr.cells[col] ? tr.cells[col].textContent.trim() : '');
+      const num = (t) => { const m = /-?\d+(?:\.\d+)?/.exec(t); return m ? parseFloat(m[0]) : null; };
+      const numeric = rows.every((tr) => num(val(tr)) !== null) && rows.length > 0;
+      rows.sort((a, b) => {
+        const x = val(a); const y = val(b);
+        const c = numeric ? num(x) - num(y) : x.localeCompare(y, 'zh-Hant');
+        return dir === 'asc' ? c : -c;
+      });
+      rows.forEach((tr) => tb.appendChild(tr));
+    });
+  });
+}
+
+/** ◎ 總覽的分析週日期（週一起算七天） */
+function ovDates() {
+  return Array.from({ length: 7 }, (_, i) => addDays(state.ovWeekStart, i));
+}
+
 /** 儀表板 meta 列：受眾第一眼要知道「這是哪裡、哪段時間、資料多新」 */
 function dashMeta(rangeText, extra) {
   return `<div class="dash-meta">
@@ -1400,6 +1433,7 @@ function renderRetention() {
         <td class="center">${r.standby} 次</td><td class="center">${r.crossUnit || '—'}</td>
         <td>${r.flags.map((f) => `<span class="tag tag-warn" title="${esc(f.text)}">${esc(f.code)}</span>`).join(' ') || '—'}</td>
       </tr>`).join('')}</tbody>`;
+  makeSortable($('#ret-table'));   // 主任掃「誰最重」：任一欄點擊排序
 }
 
 /* ══ 畫面 今：今日戰情 ═══════════════════════════════════
@@ -1520,7 +1554,8 @@ function renderToday() {
 }
 
 function renderOverview() {
-  const r = engine.workforceGapAnalysis({ dates: WEEK_DATES, demand: UNIT_MIN_STAFF });
+  const dates = ovDates();   // 分析週可切換（月資料撐腰）；預設＝示範週，demo 數字不變
+  const r = engine.workforceGapAnalysis({ dates, demand: UNIT_MIN_STAFF });
   const UNIT = 'MED-3A';
   const cells = r.cells.filter((c) => c.unit === UNIT);
   const gapCells = cells.filter((c) => c.gap > 0);
@@ -1532,10 +1567,10 @@ function renderOverview() {
   const gapHours = gapCells.reduce((h, c) => h + SHIFT_TYPES[c.shift].hours * c.gap, 0);
 
   /* 缺口矩陣：班別 × 日期 */
-  const matrixHead = `<thead><tr><th>班別</th>${WEEK_DATES.map((d) =>
+  const matrixHead = `<thead><tr><th>班別</th>${dates.map((d) =>
     `<th class="center">${shortDate(d)}<br>（${weekdayOf(d)}）</th>`).join('')}<th class="center">缺口天數</th></tr></thead>`;
   const matrixBody = ['D', 'E', 'N'].map((code) => {
-    const row = WEEK_DATES.map((d) => {
+    const row = dates.map((d) => {
       const cell = cells.find((c) => c.date === d && c.shift === code);
       if (!cell) return '<td class="center" style="color:var(--ink-faint)">·</td>';
       return cell.gap > 0
@@ -1565,7 +1600,7 @@ function renderOverview() {
   }));
   structuralMed.forEach((s) => ovActions.push({
     level: 'bad',
-    text: `${SHIFT_TYPES[s.shift].name}一週 ${s.days}／${WEEK_DATES.length} 天出現缺口——結構性 → 員額評估、夜班培訓、把需求放進「班表生成」從源頭排滿`,
+    text: `${SHIFT_TYPES[s.shift].name}一週 ${s.days}／${dates.length} 天出現缺口——結構性 → 員額評估、夜班培訓、把需求放進「班表生成」從源頭排滿`,
   }));
   if (flagged.length) ovActions.push({
     level: 'warn',
@@ -1589,10 +1624,13 @@ function renderOverview() {
       right: `${n} 班次`,
       segs: [{ v: n, color: 'var(--danger)', title: '缺口' }],
     };
-  }), { max: WEEK_DATES.length });
+  }), { max: dates.length });
 
   $('#overview-body').innerHTML = `
-    ${dashMeta(`資料範圍 ${shortDate(WEEK_DATES[0])}–${shortDate(WEEK_DATES[6])}（示範週）`)}
+    ${dashMeta(
+      `資料範圍 ${shortDate(dates[0])}–${shortDate(dates[6])}${state.ovWeekStart === WEEK.start ? '（示範週）' : ''}`,
+      `<span class="ov-weeknav"><button class="btn btn-sm" id="btn-ovw-prev">◀ 前一週</button><button class="btn btn-sm" id="btn-ovw-demo">示範週</button><button class="btn btn-sm" id="btn-ovw-next">後一週 ▶</button></span>`
+    )}
 
     <div class="stat-grid">
       <div class="stat-card">
@@ -1626,7 +1664,7 @@ function renderOverview() {
         <div class="stat-num ${residual.length ? 'danger' : 'ok'}">${residual.length}<span class="stat-unit">班次</span></div>
         ${ticksBar([{ n: residual.length, color: 'var(--danger)', title: '無人可合法填補' }], Math.max(gapCells.length, 1))}
         <div class="stat-sub">目標 0${residual.length ? '　▲ 需升級處理' : '　✓'}；${structuralMed.length
-          ? `⚠ 結構性：${structuralMed.map((x) => `${SHIFT_TYPES[x.shift].name} ${x.days}/${WEEK_DATES.length} 天`).join('、')}`
+          ? `⚠ 結構性：${structuralMed.map((x) => `${SHIFT_TYPES[x.shift].name} ${x.days}/${dates.length} 天`).join('、')}`
           : '無結構性訊號'}</div>
       </div>
     </div>
@@ -1660,15 +1698,15 @@ function renderOverview() {
       <div class="card">
         <div class="card-head">
           <h2>一週人力覆蓋${(() => {
-            const short2 = WEEK_DATES.filter((d) => cells.filter((c) => c.date === d).some((c) => c.scheduled < c.need)).length;
+            const short2 = dates.filter((d) => cells.filter((c) => c.date === d).some((c) => c.scheduled < c.need)).length;
             return short2 ? `——${short2} 天未達需求` : '——每天皆達需求';
           })()}</h2>
           <span class="tag tag-neutral">已排定 vs 每日需求</span>
         </div>
-        ${chartDays(WEEK_DATES.map((d) => ({
+        ${chartDays(dates.map((d) => ({
           label: shortDate(d),
           v: cells.filter((c) => c.date === d).reduce((n2, c) => n2 + Math.min(c.scheduled, c.need), 0),
-        })), { need: cells.filter((c) => c.date === WEEK_DATES[0]).reduce((n2, c) => n2 + c.need, 0) })}
+        })), { need: cells.filter((c) => c.date === dates[0]).reduce((n2, c) => n2 + c.need, 0) })}
         <p class="fineprint">紅柱＝當日未達需求；虛線＝每日需求班次。點柱可看明細（滑鼠停留）。</p>
       </div>
       <div class="card">
@@ -1680,7 +1718,7 @@ function renderOverview() {
           ${(() => {
             const worst = ['D', 'E', 'N'].map((code) => ({ code, n: gapCells.filter((c) => c.shift === code).length }))
               .sort((a, b) => b.n - a.n)[0];
-            return worst.n ? `<span class="tag tag-danger">${SHIFT_TYPES[worst.code].name} ${worst.n}/${WEEK_DATES.length} 天</span>` : '<span class="tag tag-ok">本週零缺口</span>';
+            return worst.n ? `<span class="tag tag-danger">${SHIFT_TYPES[worst.code].name} ${worst.n}/${dates.length} 天</span>` : '<span class="tag tag-ok">本週零缺口</span>';
           })()}
         </div>
         ${gapChart}
@@ -1746,6 +1784,9 @@ function renderOverview() {
       </div>
     </details>`;
 
+  on('#btn-ovw-prev', 'click', () => { state.ovWeekStart = addDays(state.ovWeekStart, -7); renderOverview(); });
+  on('#btn-ovw-next', 'click', () => { state.ovWeekStart = addDays(state.ovWeekStart, 7); renderOverview(); });
+  on('#btn-ovw-demo', 'click', () => { state.ovWeekStart = WEEK.start; renderOverview(); });
   on('#btn-ov-intake', 'click', () => switchScreen('intake'));
   on('#btn-ov-multi', 'click', () => switchScreen('multi'));
   on('#btn-ov-generate', 'click', () => switchScreen('generate'));

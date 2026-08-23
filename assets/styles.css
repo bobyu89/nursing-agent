@@ -741,6 +741,12 @@ tbody tr:hover td { background: var(--hover); }
   margin: 0 0 14px;
 }
 .dash-src { font-size: 12px; color: var(--ink-faint); margin-left: auto; }
+.ov-weeknav { display: flex; gap: 6px; }
+.ov-weeknav .btn { margin-top: 0; }
+/* 可排序表頭：hover 提示＋排序方向指示 */
+.th-sort { cursor: pointer; user-select: none; white-space: nowrap; }
+.th-sort:hover { color: var(--brand-dark); }
+.sort-ind { font-size: 10px; margin-left: 4px; color: var(--brand-dark); }
 .cd-need { font-size: 11.5px; font-weight: 700; fill: var(--warn); }
 
 /* ── 動效偏好：使用者要求減少動態時全部關閉 ──────────── */
