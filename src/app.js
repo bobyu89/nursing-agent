@@ -51,6 +51,14 @@ const engine = createEngine({
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
+/** 容錯版事件綁定：元素不存在就略過並在 console 警告，不讓單一缺席元素炸掉整個初始化
+ *  （典型情境：部署後瀏覽器快取到「舊 HTML＋新 JS」的混用版本） */
+function on(sel, ev, fn) {
+  const el = typeof sel === 'string' ? $(sel) : sel;
+  if (el) el.addEventListener(ev, fn);
+  else console.warn(`[wire] 找不到 ${sel}，略過綁定（可能是新舊版本混用，請 Ctrl+F5）`);
+}
+
 /* ══ 動畫層（anime.js v4，assets/anime.umd.min.js）══════════
  * 動畫是妝點不是依賴：檔案沒載到（極端離線環境）或使用者設定
  * prefers-reduced-motion 時，整層靜默成 no-op，功能與版面完全不受影響。
@@ -491,8 +499,8 @@ function renderPortalStatus() {
 }
 
 function initPortal() {
-  $('#portal-sched').addEventListener('click', () => switchScreen('roster'));
-  $('#portal-gap').addEventListener('click', () => switchScreen('intake'));
+  on('#portal-sched', 'click', () => switchScreen('roster'));
+  on('#portal-gap', 'click', () => switchScreen('intake'));
   $$('.portal-mini').forEach((b) => b.addEventListener('click', () => switchScreen(b.dataset.goto)));
 }
 
@@ -1360,9 +1368,9 @@ function renderOverview() {
       </div>
     </details>`;
 
-  $('#btn-ov-intake').addEventListener('click', () => switchScreen('intake'));
-  $('#btn-ov-multi').addEventListener('click', () => switchScreen('multi'));
-  $('#btn-ov-generate').addEventListener('click', () => switchScreen('generate'));
+  on('#btn-ov-intake', 'click', () => switchScreen('intake'));
+  on('#btn-ov-multi', 'click', () => switchScreen('multi'));
+  on('#btn-ov-generate', 'click', () => switchScreen('generate'));
 }
 
 /* ══ 畫面 1：缺班事件建立 ═══════════════════════════════ */
@@ -2079,14 +2087,14 @@ async function chooseCandidate(idx) {
   chkItems.forEach((c) => c.addEventListener('change', updateChecklistGate));
   updateChecklistGate();
 
-  $('#btn-copy').addEventListener('click', () => {
+  on('#btn-copy', 'click', () => {
     copyToClipboard(draft).then((ok) => {
       $('#btn-copy').textContent = ok ? '已複製 ✓' : '複製失敗，請手動選取草稿內容';
       toast(ok ? '通知草稿已複製，發送與否由主管決定' : '複製失敗，請手動選取草稿內容', ok ? 'ok' : 'danger');
       if (ok) logAction('複製通知草稿', '主管手動複製，系統未發送');
     });
   });
-  $('#btn-confirm').addEventListener('click', () => {
+  on('#btn-confirm', 'click', () => {
     if (state.confirmed) return;
     // 防呆第二道（第一道是按鈕鎖定）：未勾齊不得結案
     const remaining = chkItems.filter((c) => !c.checked).length;
@@ -3271,7 +3279,7 @@ function handleFhirImport() {
     ${r.shifts.length ? `<div class="btn-row"><button class="btn btn-primary" id="btn-fhir-apply" style="margin-top:0">套用 ${r.shifts.length} 班次到班表（取代涵蓋的人員×日期）</button></div>` : ''}`;
   if (r.shifts.length) {
     fhirPendingImport = r.shifts;
-    $('#btn-fhir-apply').addEventListener('click', applyFhirImport);
+    on('#btn-fhir-apply', 'click', applyFhirImport);
   }
   logAction('FHIR Bundle 解析', `Slot ${r.counts.slots} 筆：通過 ${r.counts.imported}、拒絕 ${r.counts.rejected}${r.errors.length ? `（首項原因：${r.errors[0]}）` : ''}`);
 }
@@ -3296,7 +3304,7 @@ function applyFhirImport() {
 function initFhir() {
   const pre = $('#fhir-preview');
 
-  $('#btn-fhir-download').addEventListener('click', () => {
+  on('#btn-fhir-download', 'click', () => {
     const bundle = fhirExportBundle(fhirDb(), { timestamp: new Date().toISOString() });
     const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/fhir+json' });
     const a = document.createElement('a');
@@ -3308,7 +3316,7 @@ function initFhir() {
     toast('FHIR Bundle 已下載（collection）');
   });
 
-  $('#btn-fhir-preview').addEventListener('click', () => {
+  on('#btn-fhir-preview', 'click', () => {
     if (!pre.hidden) {
       pre.hidden = true;
       $('#btn-fhir-preview').textContent = '預覽 JSON';
@@ -3320,7 +3328,7 @@ function initFhir() {
     $('#btn-fhir-preview').textContent = '收合預覽';
   });
 
-  $('#btn-fhir-copy').addEventListener('click', () => {
+  on('#btn-fhir-copy', 'click', () => {
     const bundle = fhirExportBundle(fhirDb(), { timestamp: new Date().toISOString() });
     copyToClipboard(JSON.stringify(bundle, null, 2)).then((ok) => {
       $('#btn-fhir-copy').textContent = ok ? '已複製 ✓' : '複製失敗';
@@ -3329,8 +3337,8 @@ function initFhir() {
     });
   });
 
-  $('#btn-fhir-push').addEventListener('click', handleFhirPush);
-  $('#btn-fhir-import').addEventListener('click', handleFhirImport);
+  on('#btn-fhir-push', 'click', handleFhirPush);
+  on('#btn-fhir-import', 'click', handleFhirImport);
 }
 
 /* ══ 啟動 ═══════════════════════════════════════════════ */
@@ -3348,16 +3356,32 @@ function installErrorSurface() {
       bar.className = 'error-bar';
       document.body.appendChild(bar);
     }
-    bar.textContent = `發生錯誤，請重新整理頁面：${msg}`;
+    bar.textContent = `發生錯誤：${msg}——請按 Ctrl+F5 強制重新整理（部署後常見原因：瀏覽器快取到新舊混用的版本）`;
     bar.hidden = false;
   };
   window.addEventListener('error', (e) => show(e.message));
   window.addEventListener('unhandledrejection', (e) => show(e.reason && e.reason.message ? e.reason.message : String(e.reason)));
 }
 
+/** 版本混用偵測：挑「最新版 HTML 才有」的元素當哨兵——缺任何一個代表
+ *  瀏覽器快取到舊 index.html 搭新 app.js，直接給出明確指引而不是神祕錯誤 */
+function checkHtmlVersion() {
+  const sentinels = ['#btn-month-prev', '#roster-file', '#nav-burger'];
+  const missing = sentinels.filter((s) => !$(s));
+  if (!missing.length) return true;
+  const bar = document.createElement('div');
+  bar.className = 'error-bar';
+  bar.textContent = '偵測到頁面為舊版快取（新舊版本混用）——請按 Ctrl+F5 強制重新整理即可修復。';
+  document.body.appendChild(bar);
+  console.warn('[version] HTML 缺少哨兵元素：', missing.join(', '));
+  return false;
+}
+
 function init() {
   installErrorSurface();
-  $('#llm-mode-badge').textContent = `LLM 模式：${LLM.modeLabel}`;
+  checkHtmlVersion();   // 混用時亮出明確指引；on() 綁定各自容錯，其餘功能照常初始化
+  const llmBadge = $('#llm-mode-badge');
+  if (llmBadge) llmBadge.textContent = `LLM 模式：${LLM.modeLabel}`;
   $('#raw-message').value = RAW_MESSAGE;
 
   const rulesLoad = loadRules();
@@ -3384,12 +3408,12 @@ function init() {
         '班守 ShiftGuard 防護');
     }
   }
-  $('#btn-rules-reset').addEventListener('click', () => {
+  on('#btn-rules-reset', 'click', () => {
     if (confirm('確定要清除本機保存的規則調整，回到預設值嗎？頁面將重新載入。')) resetRules();
   });
 
   // 留痕匯出：勞檢或內部稽核時，決策依據要拿得出來
-  $('#btn-export-audit').addEventListener('click', () => {
+  on('#btn-export-audit', 'click', () => {
     const payload = {
       platform: '班守 ShiftGuard（DEMO）',
       exportedAt: nowStamp(),
@@ -3417,7 +3441,7 @@ function init() {
       `${s.id}　${s.role}　${UNITS[s.unit]}</option>`).join('');
 
   // 側欄導覽：事件委派（每次切換都重繪，委派在容器上不掉監聽）
-  $('#nav').addEventListener('click', (ev) => {
+  on('#nav', 'click', (ev) => {
     const item = ev.target.closest('.side-item');
     if (item) switchScreen(item.dataset.screen);
   });
@@ -3437,7 +3461,7 @@ function init() {
     const cur = document.querySelector('.screen.active');
     if (!cur || cur.id !== `screen-${name}`) switchScreen(name);
   });
-  $('#btn-parse').addEventListener('click', handleParse);
+  on('#btn-parse', 'click', handleParse);
 
   // 範例訊息一鍵帶入並解析
   $('#sample-chips').innerHTML = SAMPLE_MESSAGES.map((m, i) =>
@@ -3448,32 +3472,32 @@ function init() {
   }));
 
   // 從 LINE 貼上訊息即自動解析（貼上內容於事件後才進入 value，延後一拍）
-  $('#raw-message').addEventListener('paste', () => setTimeout(handleParse, 0));
-  $('#btn-evaluate').addEventListener('click', handleEvaluate);
+  on('#raw-message', 'paste', () => setTimeout(handleParse, 0));
+  on('#btn-evaluate', 'click', handleEvaluate);
 
   // 快速通報：週切換、日期與人員點選、清單編輯、執行（事件委派，重繪不掉監聽）
-  $('#qp-week-prev').addEventListener('click', () => {
+  on('#qp-week-prev', 'click', () => {
     state.qpWeekStart = addDays(state.qpWeekStart, -7);
     state.qpDay = addDays(state.qpDay, -7);
     renderQuickPick();
   });
-  $('#qp-week-next').addEventListener('click', () => {
+  on('#qp-week-next', 'click', () => {
     state.qpWeekStart = addDays(state.qpWeekStart, 7);
     state.qpDay = addDays(state.qpDay, 7);
     renderQuickPick();
   });
-  $('#qp-days').addEventListener('click', (ev) => {
+  on('#qp-days', 'click', (ev) => {
     const c = ev.target.closest('.chip');
     if (!c) return;
     state.qpDay = c.dataset.day;
     renderQuickPick();
     MOTION.enter($('#qp-board'), '.qp-person');
   });
-  $('#qp-board').addEventListener('click', (ev) => {
+  on('#qp-board', 'click', (ev) => {
     const p = ev.target.closest('.qp-person');
     if (p) qpTogglePerson(p);
   });
-  $('#qp-selected').addEventListener('change', (ev) => {
+  on('#qp-selected', 'change', (ev) => {
     const rowEl = ev.target.closest('.qp-sel-row');
     if (!rowEl) return;
     const sel = state.quickSel.get(rowEl.dataset.key);
@@ -3484,14 +3508,14 @@ function init() {
     }
     if (ev.target.classList.contains('qp-role')) sel.role = ev.target.value;
   });
-  $('#qp-selected').addEventListener('click', (ev) => {
+  on('#qp-selected', 'click', (ev) => {
     const rm = ev.target.closest('.qp-remove');
     if (!rm) return;
     state.quickSel.delete(rm.closest('.qp-sel-row').dataset.key);
     $('#qp-result').innerHTML = '';
     renderQuickPick();
   });
-  $('#btn-qp-run').addEventListener('click', handleQuickRun);
+  on('#btn-qp-run', 'click', handleQuickRun);
 
   // 換班簽核：人員切換、班次點選（事件委派）、預檢執行
   $('#swap-certs').innerHTML = Object.entries(CERTS).map(([k, nm]) =>
@@ -3513,34 +3537,34 @@ function init() {
       MOTION.pop($(`#swap-${side}-shifts .chip.active`));
     });
   });
-  $('#btn-swap-check').addEventListener('click', handleSwapCheck);
+  on('#btn-swap-check', 'click', handleSwapCheck);
 
   // 調度棋盤：日期／班別切換、缺口單位找人（委派）、演示情境
   $('#dispatch-date').value = state.todayDate;
   $('#dispatch-shift').innerHTML = Object.values(SHIFT_TYPES).map((t) =>
     `<option value="${t.code}"${t.code === 'E' ? ' selected' : ''}>${t.name} ${t.start}–${t.end}</option>`).join('');
-  $('#dispatch-date').addEventListener('change', () => {
+  on('#dispatch-date', 'change', () => {
     if (!isValidDateStr($('#dispatch-date').value)) { alert('日期格式 YYYY-MM-DD'); return; }
     $('#dispatch-live-result').innerHTML = '';
     renderDispatchLive();
   });
-  $('#dispatch-shift').addEventListener('change', () => {
+  on('#dispatch-shift', 'change', () => {
     $('#dispatch-live-result').innerHTML = '';
     renderDispatchLive();
   });
-  $('#dispatch-live-board').addEventListener('click', (ev) => {
+  on('#dispatch-live-board', 'click', (ev) => {
     const b = ev.target.closest('.dispatch-find');
     if (b) handleDispatchFind(b.dataset.unit);
   });
-  $('#btn-dispatch-run').addEventListener('click', handleDispatchRun);
+  on('#btn-dispatch-run', 'click', handleDispatchRun);
 
   // 護病比：層級切換、占床調整（事件委派）、套用與還原
-  $('#ratio-level').addEventListener('change', (ev) => {
+  on('#ratio-level', 'change', (ev) => {
     state.ratioLevel = ev.target.value;
     renderRatio();
     if (state.ratioApplied) applyRatioDemand();   // 已套用時，換層級即以新比率重套
   });
-  $('#ratio-table').addEventListener('change', (ev) => {
+  on('#ratio-table', 'change', (ev) => {
     const el = ev.target.closest('.ratio-occ');
     if (!el) return;
     const c = UNIT_CENSUS[el.dataset.unit];
@@ -3548,11 +3572,11 @@ function init() {
     renderRatio();
     if (state.ratioApplied) applyRatioDemand();   // 占床變了，套用中的需求同步重算
   });
-  $('#btn-ratio-apply').addEventListener('click', handleRatioApply);
-  $('#btn-ratio-revert').addEventListener('click', handleRatioRevert);
+  on('#btn-ratio-apply', 'click', handleRatioApply);
+  on('#btn-ratio-revert', 'click', handleRatioRevert);
 
   // 政策沙盤：情境預設、試算執行
-  $('#policy-presets').addEventListener('click', (ev) => {
+  on('#policy-presets', 'click', (ev) => {
     const c = ev.target.closest('.chip');
     if (!c) return;
     renderPolicyInputs();   // 先回復現行值
@@ -3560,49 +3584,49 @@ function init() {
     if (c.dataset.preset === 'h4') $('#policy-inputs .policy-val[data-code="H4"]').value = 12;
     $('#policy-result').innerHTML = '';
   });
-  $('#btn-policy-run').addEventListener('click', handlePolicyRun);
+  on('#btn-policy-run', 'click', handlePolicyRun);
 
   // 今日戰情：基準日切換
-  $('#btn-today-prev').addEventListener('click', () => {
+  on('#btn-today-prev', 'click', () => {
     state.todayDate = addDays(state.todayDate, -1); renderToday();
   });
-  $('#btn-today-next').addEventListener('click', () => {
+  on('#btn-today-next', 'click', () => {
     state.todayDate = addDays(state.todayDate, 1); renderToday();
   });
-  $('#btn-today-demo').addEventListener('click', () => {
+  on('#btn-today-demo', 'click', () => {
     state.todayDate = DEMO_TODAY; renderToday();
   });
-  $('#btn-recalc').addEventListener('click', handleRecalc);
-  $('#btn-multi-run').addEventListener('click', handleMultiRun);
-  $('#btn-realloc-run').addEventListener('click', handleReallocRun);
-  $('#btn-gen-run').addEventListener('click', handleGenRun);
+  on('#btn-recalc', 'click', handleRecalc);
+  on('#btn-multi-run', 'click', handleMultiRun);
+  on('#btn-realloc-run', 'click', handleReallocRun);
+  on('#btn-gen-run', 'click', handleGenRun);
 
   // 排班工作區：月切換、格子編輯（事件委派，表格重繪不掉監聽）、匯入、範例檔、儲存、還原
-  $('#btn-month-prev').addEventListener('click', () => {
+  on('#btn-month-prev', 'click', () => {
     state.rosterMonth = shiftMonth(state.rosterMonth, -1); renderRoster();
   });
-  $('#btn-month-next').addEventListener('click', () => {
+  on('#btn-month-next', 'click', () => {
     state.rosterMonth = shiftMonth(state.rosterMonth, 1); renderRoster();
   });
-  $('#btn-month-demo').addEventListener('click', () => {
+  on('#btn-month-demo', 'click', () => {
     state.rosterMonth = WEEK.start.slice(0, 7); renderRoster();
   });
-  $('#btn-roster-template').addEventListener('click', downloadRosterTemplate);
-  $('#roster-file').addEventListener('change', (ev) => {
+  on('#btn-roster-template', 'click', downloadRosterTemplate);
+  on('#roster-file', 'change', (ev) => {
     handleRosterFile(ev.target.files[0]);
     ev.target.value = '';   // 同一檔重選也要能再觸發
   });
-  $('#btn-roster-save').addEventListener('click', () => {
+  on('#btn-roster-save', 'click', () => {
     saveSchedule();
     toast('已儲存到本機瀏覽器——全系統畫面即時同步');
     logAction('手動儲存班表', `共 ${SHIFTS.length} 班次（每次編輯本就自動儲存，此為主管主動確認）`);
   });
-  $('#roster-table').addEventListener('click', (ev) => {
+  on('#roster-table', 'click', (ev) => {
     const td = ev.target.closest('td.td-edit');
     if (td) cycleShiftCell(td.dataset.sid, td.dataset.d);
   });
   // 鍵盤編輯班表：Enter／空白鍵循環班別；表格重繪後把焦點放回同一格，連續編輯不中斷
-  $('#roster-table').addEventListener('keydown', (ev) => {
+  on('#roster-table', 'keydown', (ev) => {
     if (ev.key !== 'Enter' && ev.key !== ' ') return;
     const td = ev.target.closest('td.td-edit');
     if (!td) return;
@@ -3612,8 +3636,8 @@ function init() {
     const again = $(`#roster-table td[data-sid="${sid}"][data-d="${d}"]`);
     if (again) again.focus();
   });
-  $('#btn-roster-import').addEventListener('click', handleRosterImport);
-  $('#btn-roster-reset').addEventListener('click', () => {
+  on('#btn-roster-import', 'click', handleRosterImport);
+  on('#btn-roster-reset', 'click', () => {
     if (confirm('確定要清除本機保存的班表變更，回到示範資料嗎？頁面將重新載入。')) resetSchedule();
   });
 
