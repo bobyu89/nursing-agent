@@ -147,8 +147,8 @@ async function handleEvent(ev) {
   if (MENU_RE.test(text.trim())) {
     return lineReplyMessages(ev.replyToken, [menuMessage(PLATFORM_URL, LIFF_URL)]);
   }
-  // 指令三兄弟：換班預檢／調度棋盤／負荷雷達（皆為確定性引擎，未命中回 null）
-  const extra = extraCommand(text.trim(), PLATFORM_URL);
+  // 指令四兄弟：換班預檢／調度棋盤／負荷雷達／使用說明（皆為確定性回覆，未命中回 null）
+  const extra = extraCommand(text.trim(), PLATFORM_URL, LIFF_URL);
   if (extra) return lineReply(ev.replyToken, extra.text, extra.items);
 
   const parsed = await parseMessage(text);

@@ -19,7 +19,8 @@
 > 不需要任何資料庫。機器人提供「建議」，不做指派決定——
 > 正式確認與決策留痕在平台。
 >
-> **指令**：輸入「選單」→ 功能快速按鈕（儀表板／換班預檢／調度棋盤／負荷雷達／通報範例／開啟平台）；
+> **指令**：輸入「選單」→ 功能快速按鈕（儀表板／換班預檢／調度棋盤／負荷雷達／通報範例／開啟平台／使用說明）；
+> 「**使用說明**」（或 說明／教學）→ 完整教學一頁看完，附「照著打」的快速按鈕；
 > 「換班 N-01 8/3 N-02 8/5」→ 互換後兩人各自重跑 H1–H10 的預檢；
 > 「調度 8/9 大夜」→ 全院棋盤與守恆律借調建議；「負荷」→ 高負荷名單；
 > 輸入「儀表板」（或 戰情／狀態／缺口）→ 回覆 Flex 戰情卡：
@@ -56,8 +57,12 @@ cd cloudflare/linebot; npx wrangler login
 ### 2. 部署 Worker
 
 ```bash
-cd cloudflare/linebot; npx wrangler deploy
+powershell -ExecutionPolicy Bypass -File cloudflare/linebot/deploy.ps1
 ```
+
+（`deploy.ps1` 會先把檔案複製到 %TEMP% 的純 ASCII 路徑再跑 `wrangler deploy`——
+wrangler 的 esbuild 在含中文的路徑會直接失敗，見疑難排解。直接
+`cd cloudflare/linebot; npx wrangler deploy` 只在純英文路徑下可用。）
 
 輸出會給你正式網址：`https://shiftguard-linebot.<你的子網域>.workers.dev`
 （用瀏覽器開它，看到 `shiftguard linebot: alive` 就是活的。）
@@ -85,7 +90,8 @@ cd cloudflare/linebot; npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
 
 ### 4½. 底部固定按鈕（圖文選單 Rich Menu，一鍵腳本）
 
-讓聊天室下方常駐六格大按鈕（戰情儀表板／換班預檢／調度棋盤／負荷雷達／通報缺班／開啟平台）。
+讓聊天室下方常駐六格大按鈕（戰情儀表板／換班預檢／調度棋盤／負荷雷達／通報缺班／開啟平台），
+底部另有一條「使用說明」細長列——第一次用的人點它就拿到完整教學與照著打的按鈕。
 本目錄的 `richmenu.ps1` 會自動：用 Windows 內建 GDI+ 畫出與平台同視覺的 2500×1686 選單圖
 （「開啟平台」格由班守 IP「守守」坐鎮——企鵝的貝茲幾何與 `assets/logo.svg` 同一份，GDI+ 手工重繪）→
 呼叫 Rich Menu API 建立選單 → 上傳圖片 → 設為所有人的預設選單 → 清掉舊版（安全換版）。
@@ -170,6 +176,7 @@ https://bobyu89.github.io/nursing-agent/
 | Webhook Verify 失敗 | 多半是 `LINE_CHANNEL_SECRET` 還沒 `secret put`（驗章 403）；設定後重按 Verify |
 | 傳訊息沒回覆 | `LINE_CHANNEL_ACCESS_TOKEN` 貼錯 → `npx wrangler tail` 看即時 log 找 `LINE reply failed: 401` |
 | wrangler login 開不了瀏覽器 | 手動開它印出的網址完成授權 |
+| `wrangler deploy` 印完版本橫幅就以 exit 9／127 結束、無錯誤訊息 | esbuild 打包在**含中文的路徑**（如「AI職涯營」）會直接失敗；`whoami`／`secret` 等純 API 指令正常所以難察覺。用 `deploy.ps1`（自動複製到 %TEMP% 純 ASCII 路徑再部署），機密綁在雲端 Worker 本體、不會因換路徑遺失 |
 | 想看即時 log | `cd cloudflare/linebot; npx wrangler tail` |
 
 ## Demo Day 演法（30 秒）

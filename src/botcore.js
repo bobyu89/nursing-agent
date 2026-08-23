@@ -475,11 +475,55 @@ function retentionCommand(text, platformUrl) {
   };
 }
 
-/** 三個指令的統一入口：命中回訊息物件，未命中回 null（宿主一行接入） */
-function extraCommand(text, platformUrl) {
+const GUIDE_RE = /^(?:使用說明|說明|教學|指南|怎麼用|使用方式)$/;
+
+/** 使用說明：完整教學一頁看完，附「照著打」的快速按鈕（圖文選單底部說明列也指到這裡） */
+function guideCommand(text, platformUrl, liffUrl) {
+  if (!GUIDE_RE.test(text)) return null;
+  return {
+    text: [
+      '【班守 ShiftGuard】使用說明',
+      '',
+      '■ 通報缺班（最常用）',
+      '直接把請假訊息傳給我，例如：',
+      '「護理長不好意思，我明天白班發燒沒辦法上」',
+      '沒寫到的條件我會用按鈕問你——不臆測、不亂猜；',
+      '解析完成後給合規替補建議，每一位都附排序依據。',
+      '',
+      '■ 快速指令',
+      '・儀表板 —— 本週戰情卡：缺口、補足率、代班分佈',
+      '・換班 N-01 8/3 N-02 8/5 —— 互換前先預檢，',
+      '　兩人各自重跑 H1–H10，紅燈逐條附規則代碼',
+      '・調度 8/9 大夜 —— 全院缺口🔴貼線🟡餘裕🟢，',
+      '　借調建議含守恆律檢查（不讓支援單位變缺口）',
+      '・負荷 —— 高負荷名單，誰一直在扛看得見',
+      '・選單 —— 隨時叫出功能快速按鈕',
+      '',
+      '■ 小抄',
+      '日期可寫 8/9，也可寫「明天」「禮拜天」；',
+      '班別寫 白班／小夜／大夜；人員一律用代號（如 N-01）。',
+      '訊息中請勿包含任何病人資訊。',
+      '',
+      '■ 誠實原則',
+      '示範資料、非真實人員；建議必附依據；',
+      '我不代替主管決定——正式核准與決策留痕請回平台。',
+    ].join('\n'),
+    items: [
+      { type: 'action', action: { type: 'message', label: '📊 試試儀表板', text: '儀表板' } },
+      { type: 'action', action: { type: 'message', label: '🔁 試試換班預檢', text: '換班 N-01 8/3 N-02 8/5' } },
+      { type: 'action', action: { type: 'message', label: '🧭 試試調度棋盤', text: '調度 8/9 大夜' } },
+      { type: 'action', action: { type: 'message', label: '📝 通報範例', text: '護理長不好意思，我明天白班發燒沒辦法上，很抱歉' } },
+      { type: 'action', action: { type: 'uri', label: '🌐 開啟平台', uri: liffUrl || platformUrl } },
+    ],
+  };
+}
+
+/** 四個指令的統一入口：命中回訊息物件，未命中回 null（宿主一行接入） */
+function extraCommand(text, platformUrl, liffUrl) {
   return swapCommand(text, platformUrl)
     || dispatchCommand(text, platformUrl)
-    || retentionCommand(text, platformUrl);
+    || retentionCommand(text, platformUrl)
+    || guideCommand(text, platformUrl, liffUrl);
 }
 
 const DASHBOARD_RE = /^(儀表板|戰情|狀態|缺口|dashboard)$/i;
@@ -497,6 +541,7 @@ function menuMessage(platformUrl, liffUrl) {
       { type: 'action', action: { type: 'message', label: '📈 負荷雷達', text: '負荷' } },
       { type: 'action', action: { type: 'message', label: '📝 通報範例', text: '護理長不好意思，我明天白班發燒沒辦法上，很抱歉' } },
       { type: 'action', action: { type: 'uri', label: '🌐 開啟平台', uri: liffUrl || platformUrl } },
+      { type: 'action', action: { type: 'message', label: '📖 使用說明', text: '使用說明' } },
       { type: 'action', action: { type: 'uri', label: 'ℹ️ 功能介紹', uri: platformUrl.replace(/\/?$/, '/') + 'home.html' } },
     ] },
   };
@@ -517,7 +562,7 @@ const welcomeText = (platformUrl) => [
   '　帶班平衡、單點依賴與需要行動的事項。',
   '⑤ 負荷雷達：輸入「負荷」，看誰一直在扛。',
   '',
-  '隨時輸入「選單」叫出功能快速按鈕。',
+  '隨時輸入「選單」叫出快速按鈕、「使用說明」看完整教學。',
   '規則 H1–H10（含四週彈性工時與母性保護），與平台同一份引擎。',
   '提醒：請以人員代號通報；訊息中請勿包含任何病人資訊。',
   `平台入口：${platformUrl}`,
@@ -528,7 +573,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     FIELD_TW, encodeParams, decodeParams, askNext, buildGap, runEngine,
     evaluateAndFormat, draftAndFormat, buildDashboardFlex,
-    DASHBOARD_RE, MENU_RE, menuMessage, welcomeText,
-    swapCommand, dispatchCommand, retentionCommand, extraCommand, expandDate,
+    DASHBOARD_RE, MENU_RE, GUIDE_RE, menuMessage, welcomeText,
+    swapCommand, dispatchCommand, retentionCommand, guideCommand, extraCommand, expandDate,
   };
 }

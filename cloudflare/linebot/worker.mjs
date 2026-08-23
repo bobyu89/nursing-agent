@@ -182,8 +182,8 @@ async function handleEvent(ev, env) {
   if (MENU_RE.test(text.trim())) {
     return lineReplyMessages(token, ev.replyToken, [menuMessage(platformUrl, liffUrl)]);
   }
-  // 指令三兄弟：換班預檢／調度棋盤／負荷雷達（皆為確定性引擎，未命中回 null）
-  const extra = extraCommand(text.trim(), platformUrl);
+  // 指令四兄弟：換班預檢／調度棋盤／負荷雷達／使用說明（皆為確定性回覆，未命中回 null）
+  const extra = extraCommand(text.trim(), platformUrl, liffUrl);
   if (extra) return lineReply(token, ev.replyToken, extra.text, extra.items);
   globalThis.GAP_EVENT.raisedAt = `${todayTaipei()} 08:00`;   // 「明天」以台灣今天為基準
   globalThis.LLM.mode = 'mock';                                // 恆為確定性解析

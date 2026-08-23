@@ -1,8 +1,8 @@
 ﻿# richmenu.ps1 — 一鍵建立班守 LINE 圖文選單（Rich Menu）
 #
 # 做四件事：
-#   1. 用 Windows 內建 GDI+ 畫出 2500×1686 的六格選單圖（不需安裝任何軟體）
-#   2. 呼叫 LINE Rich Menu API 建立選單物件（六格動作：儀表板／換班／調度／負荷／通報範例／開啟平台）
+#   1. 用 Windows 內建 GDI+ 畫出 2500×1686 的「六格＋底部使用說明列」選單圖（不需安裝任何軟體）
+#   2. 呼叫 LINE Rich Menu API 建立選單物件（七個動作：儀表板／換班／調度／負荷／通報範例／開啟平台／使用說明）
 #   3. 上傳選單圖
 #   4. 設為所有使用者的預設選單，並清掉本腳本先前建立的舊版（安全換版：先上新、再刪舊）
 #
@@ -70,8 +70,9 @@ $cells = @(
 )
 
 $margin = 40.0; $gap = 40.0
-$cw = ($W - 2 * $margin - 2 * $gap) / 3   # 780
-$ch = ($H - 2 * $margin - $gap) / 2       # 783
+$stripH = 150.0                                       # 底部「使用說明」細長列
+$cw = ($W - 2 * $margin - 2 * $gap) / 3               # 780
+$ch = ($H - 2 * $margin - 2 * $gap - $stripH) / 2     # 688（讓出說明列空間）
 
 # 字級以手機實際顯示為準：2500px 寬的圖縮到聊天室約 370px 寬，縮比 ~6.8 倍——
 # 標題 96px ≈ 螢幕 14px、副標 46px ≈ 螢幕 7px，再小就看不清了
@@ -219,6 +220,29 @@ for ($i = 0; $i -lt 6; $i++) {
   $g.DrawString($cells[$i].sub,   $fSub,   $bFaint, ($x + 52), ($y + $ch - 140))
 }
 
+# ── 底部「使用說明」細長列：整條可點，送出「使用說明」指令 ─────────
+$stripY = $margin + 2 * ($ch + $gap)          # 1496
+$strip = New-RoundedPath $margin $stripY ($W - 2 * $margin) $stripH 36
+$g.FillPath($bTint, $strip)
+$penTint = New-Object System.Drawing.Pen([System.Drawing.ColorTranslator]::FromHtml('#C9D6F6'), 3)
+$g.DrawPath($penTint, $strip)
+
+$fStrip = New-Object System.Drawing.Font('Microsoft JhengHei', 50, [System.Drawing.FontStyle]::Bold, 'Pixel')
+$stripText = '使用說明　—　第一次用？點這裡看指令怎麼打'
+$sz = $g.MeasureString($stripText, $fStrip)
+$badgeR = 45.0
+$totalW = $badgeR * 2 + 28 + $sz.Width
+$startX = ($W - $totalW) / 2
+$badgeY = $stripY + ($stripH - $badgeR * 2) / 2
+$g.FillEllipse($bBrand, $startX, $badgeY, ($badgeR * 2), ($badgeR * 2))
+$fQ = New-Object System.Drawing.Font('Microsoft JhengHei', 44, [System.Drawing.FontStyle]::Bold, 'Pixel')
+$sfC = New-Object System.Drawing.StringFormat
+$sfC.Alignment = 'Center'; $sfC.LineAlignment = 'Center'
+$qRect = New-Object System.Drawing.RectangleF($startX, $badgeY, ($badgeR * 2), ($badgeR * 2))
+$g.DrawString('?', $fQ, (New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)), $qRect, $sfC)
+$bBrandTxt = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml('#3350DD'))
+$g.DrawString($stripText, $fStrip, $bBrandTxt, ($startX + $badgeR * 2 + 28), ($stripY + ($stripH - $sz.Height) / 2))
+
 $g.Dispose()
 $bmp.Save($IMG_PATH, [System.Drawing.Imaging.ImageFormat]::Png)
 $bmp.Dispose()
@@ -244,14 +268,16 @@ $menu = @{
   name = "$MENU_NAME-$(Get-Date -Format yyyyMMdd-HHmm)"
   chatBarText = '功能選單'
   areas = @(
-    @{ bounds = @{ x = 0;    y = 0;   width = 833; height = 843 }; action = @{ type = 'message'; text = '儀表板' } },
-    @{ bounds = @{ x = 833;  y = 0;   width = 833; height = 843 }; action = @{ type = 'message'; text = '換班' } },
-    @{ bounds = @{ x = 1666; y = 0;   width = 834; height = 843 }; action = @{ type = 'message'; text = '調度' } },
-    @{ bounds = @{ x = 0;    y = 843; width = 833; height = 843 }; action = @{ type = 'message'; text = '負荷' } },
-    @{ bounds = @{ x = 833;  y = 843; width = 833; height = 843 }; action = @{ type = 'message'; text = $sample } },
-    @{ bounds = @{ x = 1666; y = 843; width = 834; height = 843 }; action = @{ type = 'uri'; uri = $(
+    # 上下兩排六格（各分到相鄰間隙的一半），最底 1476–1686 整條是「使用說明」列
+    @{ bounds = @{ x = 0;    y = 0;    width = 833; height = 748 }; action = @{ type = 'message'; text = '儀表板' } },
+    @{ bounds = @{ x = 833;  y = 0;    width = 833; height = 748 }; action = @{ type = 'message'; text = '換班' } },
+    @{ bounds = @{ x = 1666; y = 0;    width = 834; height = 748 }; action = @{ type = 'message'; text = '調度' } },
+    @{ bounds = @{ x = 0;    y = 748;  width = 833; height = 728 }; action = @{ type = 'message'; text = '負荷' } },
+    @{ bounds = @{ x = 833;  y = 748;  width = 833; height = 728 }; action = @{ type = 'message'; text = $sample } },
+    @{ bounds = @{ x = 1666; y = 748;  width = 834; height = 728 }; action = @{ type = 'uri'; uri = $(
       # 設了 LIFF 就走 liff.line.me（LINE 內全高視窗，與 bot 按鈕一致）；否則退回一般網址
-      if ($LIFF_ID) { "https://liff.line.me/$LIFF_ID" } else { $PLATFORM_URL }) } }
+      if ($LIFF_ID) { "https://liff.line.me/$LIFF_ID" } else { $PLATFORM_URL }) } },
+    @{ bounds = @{ x = 0;    y = 1476; width = 2500; height = 210 }; action = @{ type = 'message'; text = '使用說明' } }
   )
 }
 $json = $menu | ConvertTo-Json -Depth 8

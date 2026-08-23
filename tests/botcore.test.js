@@ -147,3 +147,27 @@ test('botcore：LIFF 選配——設定時入口按鈕走 liff.line.me，未設�
   const flexPlain = JSON.stringify(buildDashboardFlex('https://x.example/'));
   assert(!flexPlain.includes('liff.line.me'), '未設定時 Flex 卡不出現 LIFF 網址');
 });
+
+test('botcore：使用說明指令——三種說法都命中，教學內容完整、按鈕照著打', () => {
+  ['使用說明', '說明', '教學'].forEach((t) => {
+    assert(!!extraCommand(t, 'https://x.example/'), `「${t}」應命中使用說明`);
+  });
+  assertEqual(extraCommand('說明一下明天的班', 'https://x.example/'), null,
+    '含「說明」的一般句子不得被攔截（錨定全字串比對）');
+  const g = guideCommand('使用說明', 'https://x.example/');
+  ['通報缺班', '換班 N-01 8/3 N-02 8/5', '調度 8/9 大夜', '負荷', '誠實原則', '病人資訊']
+    .forEach((kw) => assert(g.text.includes(kw), `教學內文應含「${kw}」`));
+  assertEqual(g.items.length, 5, '五顆快速按鈕：儀表板／換班／調度／通報範例／開啟平台');
+  const swapBtn = g.items.find((i) => i.action.label.includes('換班'));
+  assertEqual(swapBtn.action.text, '換班 N-01 8/3 N-02 8/5',
+    '「試試換班預檢」按鈕直接送出可執行的完整指令——教學不能只用講的');
+});
+
+test('botcore：使用說明 LIFF 選配——設定時「開啟平台」走 liff.line.me，未設定退回平台網址', () => {
+  const plain = guideCommand('使用說明', 'https://x.example/');
+  assertEqual(plain.items.find((i) => i.action.type === 'uri').action.uri,
+    'https://x.example/', '未設定 LIFF 維持平台網址');
+  const liff = extraCommand('使用說明', 'https://x.example/', 'https://liff.line.me/123-abc');
+  assertEqual(liff.items.find((i) => i.action.type === 'uri').action.uri,
+    'https://liff.line.me/123-abc', '經 extraCommand 傳入 liffUrl 時改走 LIFF');
+});
