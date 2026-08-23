@@ -14,7 +14,7 @@ const state = {
   audit: [],           // 決策留痕
   multiQueue: [],      // 畫面 7 帶入的缺班佇列（{gap, suggestedId}）
   suggestedId: null,   // 當前評估中，全局指派建議的人選（畫面標示用）
-  rosterWeekStart: WEEK.start,   // 畫面 5 目前顯示的週（週一）
+  rosterMonth: WEEK.start.slice(0, 7),   // 畫面 5 目前顯示的月份（'YYYY-MM'；排班以月為單位）
   qpWeekStart: WEEK.start,       // 畫面 1 快速通報目前顯示的週（週一）
   qpDay: GAP_EVENT.date,         // 快速通報目前選定的日期
   quickSel: new Map(),           // 快速通報已點選的缺班（key sid|date|shift → {staffId,date,shift,unit,certs,role}）
@@ -314,6 +314,13 @@ const SCHEDULE_STORE_KEY = 'shiftguard.schedule.v1';
 
 function saveSchedule() {
   try { localStorage.setItem(SCHEDULE_STORE_KEY, JSON.stringify(SHIFTS)); } catch (e) {}
+  // 儲存狀態指示：每一次寫入都把時間戳亮給使用者看——「有沒有存到」不用猜
+  const chip = $('#roster-saved');
+  if (chip) {
+    chip.hidden = false;
+    chip.textContent = `已自動儲存 ${nowStamp().slice(11)}`;
+    MOTION.pop(chip);
+  }
   const badge = $('#roster-modified');
   if (badge) badge.hidden = false;
 }
@@ -1183,7 +1190,7 @@ function renderToday() {
     </div>`;
 
   $$('#today-body .today-goto-roster').forEach((b) => b.addEventListener('click', () => {
-    state.rosterWeekStart = weekDatesOf(b.dataset.d)[0];
+    state.rosterMonth = b.dataset.d.slice(0, 7);   // 切到該日所在月份
     renderRoster();
     switchScreen('roster');
   }));
@@ -2253,40 +2260,49 @@ function renderAuditLog() {
 
 /* ══ 畫面 5：班表與人員 ═════════════════════════════════ */
 
+/** 目前顯示月份的所有日期（排班以月為單位；示範資料集中在 2026-08 第一週） */
 function rosterDates() {
-  return Array.from({ length: 7 }, (_, i) => addDays(state.rosterWeekStart, i));
+  const [y, m] = state.rosterMonth.split('-').map(Number);
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return Array.from({ length: days }, (_, i) =>
+    `${state.rosterMonth}-${String(i + 1).padStart(2, '0')}`);
+}
+
+function shiftMonth(ym, delta) {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
 function renderRoster() {
-  const ws = state.rosterWeekStart;
+  const ym = state.rosterMonth;
   const dates = rosterDates();
-  $('#week-label').textContent = ws === WEEK.start
-    ? WEEK.label
-    : `${shortDate(ws)}（一）– ${shortDate(dates[6])}（日）`;
+  const [y, m] = ym.split('-').map(Number);
+  $('#month-label').textContent = `${y} 年 ${m} 月${ym === WEEK.start.slice(0, 7) ? '（示範月）' : ''}`;
 
   const head = `<thead><tr><th>人員</th><th>職務</th>${
-    dates.map((d) => `<th class="center">${shortDate(d)}<br>（${weekdayOf(d)}）</th>`).join('')
-  }<th class="center">週工時</th></tr></thead>`;
-
-  const gap = state.gap || GAP_EVENT;
-  const gapFilled = state.confirmed && state.chosen;
+    dates.map((d) => {
+      const wd = weekdayOf(d);
+      const wk = (wd === '六' || wd === '日') ? ' th-weekend' : '';
+      return `<th class="center th-day${wk}">${Number(d.slice(8, 10))}<br><span class="th-wd">${wd}</span></th>`;
+    }).join('')
+  }<th class="center">月工時</th></tr></thead>`;
 
   const body = STAFF.map((s) => {
     const cells = dates.map((d) => {
       if (engine.isOnLeave(s, d)) return '<td class="center"><span class="cell cell-L">假</span></td>';
-      if (!gapFilled && gap.originalStaffId === s.id && d === gap.date
-          && !SHIFTS.some((x) => x.staffId === s.id && x.date === d)) {
-        return '<td class="center"><span class="cell cell-G">缺班</span></td>';
-      }
       const sh = SHIFTS.find((x) => x.staffId === s.id && x.date === d);
       const inner = sh
         ? `<span class="cell cell-${sh.shift}">${sh.shift}${sh.isReplacement ? '<sup>替</sup>' : sh.isSwap ? '<sup>換</sup>' : ''}</span>`
         : '<span style="color:var(--ink-faint)">·</span>';
       return `<td class="center td-edit" data-sid="${esc(s.id)}" data-d="${d}" tabindex="0" role="button"` +
         ` aria-label="${esc(s.id)} ${shortDate(d)}（${weekdayOf(d)}）目前${sh ? SHIFT_TYPES[sh.shift].name : '未排班'}，按 Enter 循環編輯"` +
-        ` title="點擊編輯：無→白→小夜→大夜→清除">${inner}</td>`;
+        ` title="${shortDate(d)}（${weekdayOf(d)}）點擊編輯：無→白→小夜→大夜→清除">${inner}</td>`;
     }).join('');
-    return `<tr><td><b>${esc(s.id)}</b></td><td>${esc(s.role)}</td>${cells}<td class="center">${engine.weeklyHours(s.id, ws)} 小時</td></tr>`;
+    const monthHours = SHIFTS
+      .filter((x) => x.staffId === s.id && x.date.startsWith(ym))
+      .reduce((a, x) => a + SHIFT_TYPES[x.shift].hours, 0);
+    return `<tr><td><b>${esc(s.id)}</b></td><td class="td-role">${esc(s.role)}</td>${cells}<td class="center"><b>${monthHours}</b> 小時</td></tr>`;
   }).join('');
 
   $('#roster-table').innerHTML = head + `<tbody>${body}</tbody>`;
@@ -2310,76 +2326,287 @@ function cycleShiftCell(staffId, date) {
   MOTION.pop($(`#roster-table td[data-sid="${staffId}"][data-d="${date}"] .cell`));
 }
 
-/**
- * 從 Excel 貼上匯入目前顯示的週。
- * 每列：人員代號 + 最多七欄班別（週一～週日）。Tab 分隔保留空欄（Excel 直貼），
- * 空白分隔時以 -／休／X 表示休假日。整列有任何錯誤即整列不套用（逐列報告）。
- */
-function handleRosterImport() {
-  const text = $('#roster-paste').value || '';
-  const dates = rosterDates();
-  const CODE = { D: 'D', E: 'E', N: 'N' };
-  const CJK = { '白': 'D', '小': 'E', '大': 'N', '夜': 'N' };
-  const REST = new Set(['', '-', '·', '—', '休', 'X', '0', 'OFF']);
+/* ── 匯入（貼上／CSV／Excel .xlsx 共用一條驗證管線）─────────────
+ * 表頭列（人員代號＋日期欄）決定每一欄對應哪一天；沒有表頭時，
+ * 欄位依序對應本月 1 日起。整列有任何錯誤即整列不套用（逐列報告）。 */
 
-  const lines = text.split(/\r?\n/).map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim() !== '');
+const IMPORT_CODE = { D: 'D', E: 'E', N: 'N' };
+const IMPORT_CJK = { '白': 'D', '小': 'E', '大': 'N', '夜': 'N' };
+const IMPORT_REST = new Set(['', '-', '·', '—', '休', '假', 'X', '0', 'OFF']);
+
+/** 表頭儲存格 → ISO 日期（支援 8/1、2026-08-01、8月1日、Excel 日期序號）；認不得回 null */
+function headerCellToISO(raw, ym) {
+  const t = String(raw == null ? '' : raw).trim();
+  if (!t) return null;
+  let m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/.exec(t);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = /^(\d{1,2})[/月](\d{1,2})日?$/.exec(t);
+  if (m) return `${ym.slice(0, 4)}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  const n = Number(t);
+  if (Number.isFinite(n) && n > 40000 && n < 70000) {   // Excel 日期序號（1899-12-30 起算）
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 86400000);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  }
+  return null;
+}
+
+/**
+ * 套用匯入列到目前顯示的月份。rows：字串二維陣列（第一欄人員代號）。
+ * 回報：套用人數／班次數、逐列錯誤、被略過的月外日期欄數。
+ */
+function applyRosterRows(rows, sourceLabel) {
+  const ym = state.rosterMonth;
+  const monthDates = rosterDates();
+  const resultEl = $('#roster-import-result');
+  if (!rows.length) {
+    resultEl.innerHTML = '<p class="fineprint" style="color:var(--danger)">沒有讀到任何資料列。</p>';
+    return;
+  }
+
+  // 表頭偵測與欄位→日期對應
+  let colDates = null;        // colDates[i] = ISO 日期或 null（略過該欄）
+  let dataRows = rows;
+  let outOfMonth = 0;
+  const first = rows[0].map((c) => String(c == null ? '' : c).trim());
+  const firstIsHeader = !STAFF.some((s) => s.id === first[0].toUpperCase())
+    && (/代號|人員|姓名/.test(first[0]) || first.filter((c) => headerCellToISO(c, ym)).length >= 3);
+  if (firstIsHeader) {
+    colDates = first.map((c, i) => {
+      if (i === 0) return null;
+      if (/職務|單位|角色|工時/.test(c)) return null;
+      const iso = headerCellToISO(c, ym);
+      if (iso && !iso.startsWith(ym)) { outOfMonth += 1; return null; }
+      return iso;
+    });
+    dataRows = rows.slice(1);
+  } else {
+    colDates = [null, ...monthDates];   // 無表頭：第 2 欄起依序對應本月 1 日起
+  }
+
   const entries = [];
   const errors = [];
   const staffIds = new Set();
+  const coveredDates = new Set(colDates.filter(Boolean));
 
-  lines.forEach((line, li) => {
-    const tokens = line.includes('\t')
-      ? line.split('\t').map((t) => t.trim())
-      : line.trim().split(/[\s,;，、]+/);
-    const id = (tokens[0] || '').toUpperCase();
+  dataRows.forEach((cellsRaw, li) => {
+    const cells = cellsRaw.map((c) => String(c == null ? '' : c).trim());
+    const id = (cells[0] || '').toUpperCase();
     const staff = STAFF.find((s) => s.id === id);
     if (!staff) {
-      // 第一列容錯：像表頭（含日期／星期字樣）就靜默略過
-      if (li === 0 && /代號|人員|星期|週|一|\d+\/\d+/.test(line)) return;
-      errors.push(`第 ${li + 1} 列：查無人員代號「${tokens[0] || '(空白)'}」`);
+      if (cells.every((c) => c === '')) return;   // 全空列靜默略過
+      errors.push(`第 ${li + 1} 列：查無人員代號「${cells[0] || '(空白)'}」`);
       return;
     }
     const rowEntries = [];
     let rowBad = false;
-    tokens.slice(1, 8).forEach((cellRaw, i) => {
-      const v = (cellRaw || '').trim().toUpperCase();
-      if (REST.has(v)) return;
-      const code = CODE[v] || CJK[v[0]];
+    cells.forEach((cellRaw, i) => {
+      const date = colDates[i];
+      if (!date) return;
+      const v = cellRaw.toUpperCase();
+      if (IMPORT_REST.has(v)) return;
+      const code = IMPORT_CODE[v] || IMPORT_CJK[v[0]];
       if (!code) {
-        errors.push(`第 ${li + 1} 列「${id}」第 ${i + 1} 天：無法辨識「${cellRaw}」`);
+        errors.push(`「${id}」${shortDate(date)}：無法辨識「${cellRaw}」`);
         rowBad = true;
         return;
       }
-      rowEntries.push({ staffId: id, date: dates[i], shift: code, unit: staff.unit });
+      if (!engine.isOnLeave(staff, date)) rowEntries.push({ staffId: id, date, shift: code, unit: staff.unit });
     });
     if (rowBad) return;   // 整列不套用——寧可少排，不套用可疑資料
     staffIds.add(id);
     entries.push(...rowEntries);
   });
 
-  const resultEl = $('#roster-import-result');
   if (staffIds.size === 0) {
     resultEl.innerHTML = `<p class="fineprint" style="color:var(--danger)">未套用任何資料。${
-      errors.length ? '問題：' + esc(errors.slice(0, 5).join('；')) : '請確認貼上內容格式。'}</p>`;
+      errors.length ? '問題：' + esc(errors.slice(0, 5).join('；')) : '請確認內容格式（首欄需為人員代號，如 N-01）。'}</p>`;
     return;
   }
 
-  // 取代列出人員在本週的既有班次
+  // 取代列出人員在「匯入涵蓋日期」上的既有班次（未涵蓋的日期不動）
   for (let i = SHIFTS.length - 1; i >= 0; i--) {
-    if (staffIds.has(SHIFTS[i].staffId) && dates.includes(SHIFTS[i].date)) SHIFTS.splice(i, 1);
+    if (staffIds.has(SHIFTS[i].staffId) && coveredDates.has(SHIFTS[i].date)) SHIFTS.splice(i, 1);
   }
   entries.forEach((e) => SHIFTS.push(e));
   saveSchedule();
   logAction('班表匯入',
-    `${shortDate(dates[0])} 週：套用 ${staffIds.size} 人、${entries.length} 班次${
-      errors.length ? `；${errors.length} 個項目因格式錯誤整列未套用` : ''}`);
+    `${sourceLabel}：${ym.replace('-', '/')} 套用 ${staffIds.size} 人、${entries.length} 班次${
+      errors.length ? `；${errors.length} 個項目因格式錯誤整列未套用` : ''}${
+      outOfMonth ? `；${outOfMonth} 個日期欄不在本月、已略過` : ''}`);
   refreshAfterScheduleChange();
 
   resultEl.innerHTML = `
-    <p class="fineprint">✓ 已套用 ${staffIds.size} 人、${entries.length} 班次（該週原班次已取代）。</p>
-    ${errors.length ? `<p class="fineprint" style="color:var(--danger)">未套用的列：${esc(errors.slice(0, 8).join('；'))}${errors.length > 8 ? `…共 ${errors.length} 項` : ''}</p>` : ''}`;
-  toast(`班表匯入完成：${staffIds.size} 人、${entries.length} 班次`,
-    errors.length ? 'warn' : 'ok');
+    <p class="fineprint">✓ 已套用 ${staffIds.size} 人、${entries.length} 班次（列出人員在涵蓋日期上的原班次已取代，並自動儲存）。</p>
+    ${outOfMonth ? `<p class="fineprint" style="color:var(--warn)">提醒：${outOfMonth} 個日期欄不屬於目前顯示的 ${ym.replace('-', '/')}，已略過——請先切到對應月份再匯入。</p>` : ''}
+    ${errors.length ? `<p class="fineprint" style="color:var(--danger)">未套用的項目：${esc(errors.slice(0, 8).join('；'))}${errors.length > 8 ? `…共 ${errors.length} 項` : ''}</p>` : ''}`;
+  toast(`班表匯入完成：${staffIds.size} 人、${entries.length} 班次`, errors.length ? 'warn' : 'ok');
+}
+
+/** 貼上匯入：Tab 分隔保留空欄（Excel 直貼）；空白分隔時以 -／休 表示休假日 */
+function handleRosterImport() {
+  const text = $('#roster-paste').value || '';
+  const rows = text.split(/\r?\n/)
+    .map((l) => l.replace(/\s+$/, ''))
+    .filter((l) => l.trim() !== '')
+    .map((line) => (line.includes('\t')
+      ? line.split('\t')
+      : line.trim().split(/[\s,;，、]+/)));
+  applyRosterRows(rows, '貼上匯入');
+}
+
+/* ── CSV／Excel 檔案匯入 ─────────────────────────────── */
+
+/** CSV 解析（支援引號欄位、逗號／分號／Tab 分隔、UTF-8 BOM） */
+function parseCsvRows(text) {
+  const src = text.replace(/^﻿/, '');
+  const delim = src.includes('\t') ? '\t' : (src.split(';').length > src.split(',').length ? ';' : ',');
+  const rows = [];
+  let row = [], cell = '', inQ = false;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inQ) {
+      if (ch === '"') { if (src[i + 1] === '"') { cell += '"'; i++; } else inQ = false; }
+      else cell += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === delim) { row.push(cell); cell = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && src[i + 1] === '\n') i++;
+      row.push(cell); cell = '';
+      if (row.some((c) => c.trim() !== '')) rows.push(row);
+      row = [];
+    } else cell += ch;
+  }
+  row.push(cell);
+  if (row.some((c) => c.trim() !== '')) rows.push(row);
+  return rows;
+}
+
+/** 迷你 .xlsx 讀取器（零依賴）：手工解 ZIP 目錄＋DecompressionStream 解壓，
+ *  讀第一張工作表；支援 sharedStrings／inlineStr／數值（含日期序號）。
+ *  只為「匯入自家範例檔」這條路設計——版面複雜的活頁簿請另存 CSV。 */
+async function parseXlsxRows(buf) {
+  const u8 = new Uint8Array(buf);
+  const dv = new DataView(buf);
+  // 由檔尾找 EOCD（End of Central Directory）
+  let eocd = -1;
+  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65558); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('不是有效的 .xlsx（找不到 ZIP 目錄）');
+  const count = dv.getUint16(eocd + 10, true);
+  let off = dv.getUint32(eocd + 16, true);
+  const files = {};
+  for (let n = 0; n < count; n++) {
+    if (dv.getUint32(off, true) !== 0x02014b50) break;
+    const method = dv.getUint16(off + 10, true);
+    const csize = dv.getUint32(off + 20, true);
+    const nameLen = dv.getUint16(off + 28, true);
+    const extraLen = dv.getUint16(off + 30, true);
+    const cmtLen = dv.getUint16(off + 32, true);
+    const lho = dv.getUint32(off + 42, true);
+    const name = new TextDecoder().decode(u8.subarray(off + 46, off + 46 + nameLen));
+    files[name] = { method, csize, lho };
+    off += 46 + nameLen + extraLen + cmtLen;
+  }
+  async function readFile(name) {
+    const f = files[name];
+    if (!f) return null;
+    const lnl = dv.getUint16(f.lho + 26, true);
+    const lel = dv.getUint16(f.lho + 28, true);
+    const start = f.lho + 30 + lnl + lel;
+    const comp = u8.subarray(start, start + f.csize);
+    if (f.method === 0) return new TextDecoder().decode(comp);
+    if (f.method !== 8) throw new Error(`不支援的壓縮方式（method ${f.method}）`);
+    if (typeof DecompressionStream === 'undefined') {
+      throw new Error('此瀏覽器不支援解壓 .xlsx，請將檔案另存為 CSV 後匯入');
+    }
+    const ds = new DecompressionStream('deflate-raw');
+    const stream = new Blob([comp]).stream().pipeThrough(ds);
+    return await new Response(stream).text();
+  }
+  const xmlUnesc = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d))).replace(/&amp;/g, '&');
+  // sharedStrings（可能不存在）
+  const shared = [];
+  const ss = await readFile('xl/sharedStrings.xml');
+  if (ss) {
+    for (const m of ss.matchAll(/<si>([\s\S]*?)<\/si>/g)) {
+      const texts = [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => xmlUnesc(t[1]));
+      shared.push(texts.join(''));
+    }
+  }
+  const sheetName = Object.keys(files).filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort()[0];
+  if (!sheetName) throw new Error('活頁簿內找不到工作表');
+  const xml = await readFile(sheetName);
+  // 逐儲存格：r="B3" 給座標，t 給型別
+  const grid = [];
+  for (const cm of xml.matchAll(/<c r="([A-Z]+)(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+    const col = cm[1].split('').reduce((a, ch) => a * 26 + (ch.charCodeAt(0) - 64), 0) - 1;
+    const rowN = Number(cm[2]) - 1;
+    const attrs = cm[3] || '';
+    const inner = cm[4] || '';
+    let val = '';
+    const tAttr = /t="([^"]+)"/.exec(attrs);
+    const vTag = /<v>([\s\S]*?)<\/v>/.exec(inner);
+    if (tAttr && tAttr[1] === 's') val = shared[Number(vTag ? vTag[1] : -1)] || '';
+    else if (tAttr && tAttr[1] === 'inlineStr') {
+      val = [...inner.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => xmlUnesc(t[1])).join('');
+    } else if (vTag) val = xmlUnesc(vTag[1]);   // 數值（日期序號交給 headerCellToISO 判讀）
+    if (!grid[rowN]) grid[rowN] = [];
+    grid[rowN][col] = val;
+  }
+  return grid.filter((r) => r && r.some((c) => String(c || '').trim() !== ''))
+    .map((r) => Array.from(r, (c) => (c == null ? '' : c)));
+}
+
+async function handleRosterFile(file) {
+  if (!file) return;
+  const resultEl = $('#roster-import-result');
+  try {
+    let rows;
+    if (/\.xlsx$/i.test(file.name)) {
+      rows = await parseXlsxRows(await file.arrayBuffer());
+    } else {
+      rows = parseCsvRows(await file.text());
+    }
+    applyRosterRows(rows, `檔案匯入（${file.name}）`);
+  } catch (err) {
+    resultEl.innerHTML = `<p class="fineprint" style="color:var(--danger)">讀取「${esc(file.name)}」失敗：${esc(String(err.message || err))}</p>`;
+    toast('檔案讀取失敗，請確認格式（.xlsx 或 .csv）', 'danger');
+  }
+}
+
+/** 範例檔內容（CSV）：表頭日期＋目前月份班表——匯出即範例，填完直接匯回 */
+function rosterTemplateCsv() {
+  const dates = rosterDates();
+  const NAME = { D: '白', E: '小', N: '大' };
+  const header = ['人員代號', '職務', ...dates.map((d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`)];
+  const lines = [header.join(',')];
+  STAFF.forEach((s) => {
+    const cells = dates.map((d) => {
+      if (engine.isOnLeave(s, d)) return '假';
+      const sh = SHIFTS.find((x) => x.staffId === s.id && x.date === d);
+      return sh ? NAME[sh.shift] : '';
+    });
+    lines.push([s.id, s.role, ...cells].join(','));
+  });
+  return lines.join('\r\n');
+}
+
+/** 下載範例檔（CSV，Excel 雙擊可開） */
+function downloadRosterTemplate() {
+  const ym = state.rosterMonth;
+  // UTF-8 BOM：讓 Excel 直接開啟不亂碼
+  const blob = new Blob(['﻿' + rosterTemplateCsv()], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `班守班表_${ym}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  logAction('下載班表範例檔', `${ym.replace('-', '/')}（含目前班表，填寫後可直接匯回）`);
+  toast('範例檔已下載——Excel 雙擊可開，填 白／小／大 或留空，存檔後拖回來匯入');
 }
 
 function renderStaffTable() {
@@ -2719,7 +2946,7 @@ function handleGenRun() {
     saveSchedule();
     logAction('套用生成班表',
       `${UNITS[sc.unit]} ${sc.label}：寫入 ${r.assignments.length} 班次（由第 0 層生成器產出，主管可逐格調整）`);
-    state.rosterWeekStart = sc.dates[0];
+    state.rosterMonth = sc.dates[0].slice(0, 7);
     refreshAfterScheduleChange();
     switchScreen('roster');
   });
@@ -3350,15 +3577,25 @@ function init() {
   $('#btn-realloc-run').addEventListener('click', handleReallocRun);
   $('#btn-gen-run').addEventListener('click', handleGenRun);
 
-  // 排班工作區：週切換、格子編輯（事件委派，表格重繪不掉監聽）、匯入、還原
-  $('#btn-week-prev').addEventListener('click', () => {
-    state.rosterWeekStart = addDays(state.rosterWeekStart, -7); renderRoster();
+  // 排班工作區：月切換、格子編輯（事件委派，表格重繪不掉監聽）、匯入、範例檔、儲存、還原
+  $('#btn-month-prev').addEventListener('click', () => {
+    state.rosterMonth = shiftMonth(state.rosterMonth, -1); renderRoster();
   });
-  $('#btn-week-next').addEventListener('click', () => {
-    state.rosterWeekStart = addDays(state.rosterWeekStart, 7); renderRoster();
+  $('#btn-month-next').addEventListener('click', () => {
+    state.rosterMonth = shiftMonth(state.rosterMonth, 1); renderRoster();
   });
-  $('#btn-week-demo').addEventListener('click', () => {
-    state.rosterWeekStart = WEEK.start; renderRoster();
+  $('#btn-month-demo').addEventListener('click', () => {
+    state.rosterMonth = WEEK.start.slice(0, 7); renderRoster();
+  });
+  $('#btn-roster-template').addEventListener('click', downloadRosterTemplate);
+  $('#roster-file').addEventListener('change', (ev) => {
+    handleRosterFile(ev.target.files[0]);
+    ev.target.value = '';   // 同一檔重選也要能再觸發
+  });
+  $('#btn-roster-save').addEventListener('click', () => {
+    saveSchedule();
+    toast('已儲存到本機瀏覽器——全系統畫面即時同步');
+    logAction('手動儲存班表', `共 ${SHIFTS.length} 班次（每次編輯本就自動儲存，此為主管主動確認）`);
   });
   $('#roster-table').addEventListener('click', (ev) => {
     const td = ev.target.closest('td.td-edit');

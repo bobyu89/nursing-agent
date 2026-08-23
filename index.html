@@ -354,47 +354,61 @@
   <section class="screen" id="screen-roster">
     <div class="screen-head">
       <h1>班表與人員</h1>
-      <p class="lede">這裡是<strong>排班工作區</strong>：點格子直接排班、從 Excel 貼上整週班表、或套用畫面 8 的生成草稿。每一次變更都留痕，缺口總覽與主動預警即時重算。</p>
+      <p class="lede">這裡是<strong>排班工作區</strong>，以<strong>月</strong>為單位：點格子直接排班、下載範例 Excel 填好匯回、或套用畫面 8 的生成草稿。<strong>每一次變更都自動儲存</strong>並留痕，全系統畫面（戰情、缺口、負荷、調度⋯）即時同步重算。</p>
     </div>
     <div class="card">
       <div class="card-head">
-        <h2>班表</h2>
+        <h2>月班表</h2>
         <span>
+          <span class="tag tag-ok" id="roster-saved" hidden>已自動儲存</span>
           <span class="tag tag-warn" id="roster-modified" hidden>已修改（非示範預設）</span>
-          <span class="tag tag-neutral" id="week-label"></span>
+          <span class="tag tag-neutral" id="month-label"></span>
         </span>
       </div>
       <div class="btn-row" style="margin-bottom:10px">
-        <button class="btn btn-sm" id="btn-week-prev">◀ 前一週</button>
-        <button class="btn btn-sm" id="btn-week-demo">示範週</button>
-        <button class="btn btn-sm" id="btn-week-next">後一週 ▶</button>
-        <button class="btn btn-sm" id="btn-roster-reset" style="margin-left:auto">還原示範班表</button>
+        <button class="btn btn-sm" id="btn-month-prev">◀ 前一月</button>
+        <button class="btn btn-sm" id="btn-month-demo">示範月</button>
+        <button class="btn btn-sm" id="btn-month-next">後一月 ▶</button>
+        <button class="btn btn-sm btn-primary" id="btn-roster-save" style="margin-left:auto;margin-top:0">💾 立即儲存</button>
+        <button class="btn btn-sm" id="btn-roster-reset">還原示範班表</button>
       </div>
-      <div class="table-scroll"><table id="roster-table"></table></div>
+      <div class="table-scroll roster-scroll"><table id="roster-table"></table></div>
       <div class="legend">
         <span><i class="dot dot-d"></i>白班 07:00–15:00</span>
         <span><i class="dot dot-e"></i>小夜 15:00–23:00</span>
         <span><i class="dot dot-n"></i>大夜 23:00–07:00（跨日）</span>
         <span><i class="dot dot-l"></i>請假</span>
-        <span><i class="dot dot-g"></i>缺班待補</span>
       </div>
       <p class="fineprint">
         <b>點任一格子</b>可循環編輯：無 → 白班 → 小夜 → 大夜 → 清除（請假格不可編輯）。
-        變更保存在本機瀏覽器並寫入決策留痕；「還原示範班表」回到出廠資料。
-        編輯不會自動重算進行中的缺班評估——條件改變請回「缺班事件」重新確認。
+        每一次變更<b>自動儲存</b>到本機瀏覽器並寫入決策留痕（右上角有儲存時間戳；「立即儲存」可隨時手動確認）；
+        「還原示範班表」回到出廠資料。編輯不會自動重算進行中的缺班評估——條件改變請回「缺班事件」重新確認。
       </p>
     </div>
 
     <div class="card">
       <div class="card-head">
-        <h2>從 Excel 貼上匯入</h2>
-        <span class="tag tag-neutral">目前顯示的那一週</span>
+        <h2>Excel 匯入／匯出</h2>
+        <span class="tag tag-neutral">目前顯示的月份</span>
       </div>
-      <textarea id="roster-paste" rows="5" spellcheck="false"
-        placeholder="從 Excel 複製後貼上，每列一人：代號 + 七欄班別（一～日）&#10;例：&#10;N-01&#9;D&#9;D&#9;&#9;E&#9;E&#9;&#9;N&#10;N-02&#9;D&#9;&#9;D&#9;D&#9;&#9;E&#9;&#10;支援：D/E/N、白/小/大、留空＝休"></textarea>
-      <button class="btn btn-primary" id="btn-roster-import" data-ico="clipboard">解析並套用到目前顯示的週</button>
+      <div class="btn-row" style="margin-bottom:10px">
+        <button class="btn" id="btn-roster-template" data-ico="download">⬇ 下載範例 Excel（含目前班表）</button>
+        <label class="btn btn-primary" style="margin-top:0" for="roster-file">⬆ 選擇檔案匯入（.xlsx／.csv）</label>
+        <input type="file" id="roster-file" accept=".xlsx,.csv,.txt" hidden>
+      </div>
+      <p class="fineprint" style="margin-top:0">
+        範例檔以 Excel 雙擊即可開啟：首列是日期、每列一位人員，格子填 <b>白／小／大</b>（或 D/E/N），
+        留空或「休」＝不排班。填好存檔（.xlsx 或 CSV 皆可）再從上方匯入——首欄代號對人、表頭日期對天，
+        填錯的列會逐列標示原因、整列不套用。
+      </p>
+      <details>
+        <summary class="fineprint" style="cursor:pointer">或直接從 Excel 複製貼上（不經檔案）</summary>
+        <textarea id="roster-paste" rows="5" spellcheck="false" style="margin-top:8px"
+          placeholder="從 Excel 連表頭一起複製後貼上：&#10;人員代號&#9;職務&#9;8/1&#9;8/2&#9;8/3&#9;…&#10;N-01&#9;資深護理師&#9;白&#9;&#9;白&#9;…&#10;支援：白/小/大、D/E/N、留空或休＝不排班；沒有表頭時自本月 1 日起逐欄對應"></textarea>
+        <button class="btn btn-primary" id="btn-roster-import" data-ico="clipboard">解析並套用貼上內容</button>
+      </details>
       <div id="roster-import-result"></div>
-      <p class="fineprint">只影響貼上內容列出的人員（該週原班次會被取代）；代號與班別代碼經白名單驗證，不合法的列會逐列標示原因、不會套用。</p>
+      <p class="fineprint">匯入只影響檔案／貼上內容列出的人員在<b>涵蓋日期</b>上的班次（其餘日期不動）；代號與班別代碼經白名單驗證，不合法的列會逐列標示原因、不會套用；套用後自動儲存並同步全系統畫面。</p>
     </div>
     <div class="card">
       <div class="card-head"><h2>人員主檔</h2><span class="tag tag-neutral">代號化，不使用姓名</span></div>

@@ -507,6 +507,22 @@ select option { background: var(--surface); color: var(--ink); }
 
 /* ── 表格 ─────────────────────────────────────────────── */
 .table-scroll { overflow-x: auto; }
+
+/* ── 月班表（畫面 5）：31 欄橫向捲動＋凍結人員欄＋週末底色 ── */
+.roster-scroll { max-height: 560px; overflow-y: auto; }
+.roster-scroll thead th { position: sticky; top: 0; background: #f7f9fd; z-index: 3; }
+.roster-scroll th:first-child, .roster-scroll td:first-child {
+  position: sticky; left: 0; z-index: 2;
+  background: var(--surface);
+  box-shadow: 1px 0 0 var(--line);
+}
+.roster-scroll thead th:first-child { z-index: 4; background: #f7f9fd; }
+.roster-scroll .th-day { min-width: 46px; padding-left: 4px; padding-right: 4px; line-height: 1.25; }
+.roster-scroll .th-wd { font-weight: 400; font-size: 11px; color: var(--ink-faint); }
+.roster-scroll .th-weekend { background: #eef1f9; }
+.roster-scroll .th-weekend .th-wd { color: var(--brand-dark); font-weight: 700; }
+.roster-scroll .td-role { white-space: nowrap; }
+.roster-scroll td.td-edit { padding-left: 3px; padding-right: 3px; }
 table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
 th { font-size: 12px; color: var(--ink-faint); font-weight: 700; background: var(--field); }
