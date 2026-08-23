@@ -460,12 +460,16 @@ select option { background: var(--surface); color: var(--ink); }
 .fact span:last-child { font-weight: 600; text-align: right; }
 
 .checklist { list-style: none; margin: 0; padding: 0; }
-.checklist li {
-  display: flex; gap: 10px; align-items: flex-start;
-  padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: 13.5px;
-}
+.checklist li { border-bottom: 1px solid var(--line-soft); font-size: 13.5px; }
 .checklist li:last-child { border-bottom: 0; }
-.checklist input { margin-top: 5px; flex: none; }
+/* 整列可點：label 當觸控面，勾選不必瞄準小方框 */
+.checklist label {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 6px; cursor: pointer; border-radius: 8px;
+}
+.checklist label:hover { background: var(--hover); }
+.checklist input { margin-top: 5px; flex: none; accent-color: var(--brand); }
+.checklist input:checked + span { color: var(--ink-faint); }
 
 .draft-box {
   background: var(--field); border: 1px solid var(--line); border-radius: 8px;

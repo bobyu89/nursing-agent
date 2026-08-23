@@ -2034,9 +2034,15 @@ async function chooseCandidate(idx) {
     </div>
 
     <div class="card">
-      <div class="card-head"><h2>人工確認事項</h2><span class="tag tag-warn">Agent 不代為執行</span></div>
-      <ul class="checklist">${summary.checklist.map((c) =>
-        `<li><input type="checkbox"> <span>${esc(c)}</span></li>`).join('')}</ul>
+      <div class="card-head"><h2>人工確認事項</h2>
+        <span>
+          <span class="tag tag-warn" id="chk-progress">已確認 0/${summary.checklist.length}</span>
+          <span class="tag tag-warn">Agent 不代為執行</span>
+        </span>
+      </div>
+      <ul class="checklist" id="confirm-checklist">${summary.checklist.map((c) =>
+        `<li><label><input type="checkbox" class="chk-item"> <span>${esc(c)}</span></label></li>`).join('')}</ul>
+      <p class="fineprint">治理關卡：三項皆為 Agent 無法代為執行的人工步驟，<b>全部勾選後才能結案留痕</b>——勾選狀態會一併寫入決策留痕。</p>
     </div>
 
     <div class="card">
@@ -2045,9 +2051,26 @@ async function chooseCandidate(idx) {
       <div class="no-send">系統不具備發送能力，也不會寫入院內正式班表。是否發送、何時發送，由主管自行決定。</div>
       <div class="btn-row">
         <button class="btn" id="btn-copy">複製草稿到剪貼簿</button>
-        <button class="btn btn-primary" id="btn-confirm" style="margin-top:0">完成主管確認並留痕</button>
+        <button class="btn btn-primary" id="btn-confirm" style="margin-top:0" disabled>完成主管確認並留痕</button>
       </div>
     </div>`;
+
+  // 治理關卡：人工確認事項全數勾選前，結案按鈕保持鎖定（進度即時顯示）
+  const chkItems = $$('#confirm-checklist .chk-item');
+  const updateChecklistGate = () => {
+    if (state.confirmed) return;   // 已結案後不再改動按鈕狀態
+    const done = chkItems.filter((c) => c.checked).length;
+    const all = done === chkItems.length;
+    const prog = $('#chk-progress');
+    prog.textContent = `已確認 ${done}/${chkItems.length}`;
+    prog.className = `tag ${all ? 'tag-ok' : 'tag-warn'}`;
+    const btn = $('#btn-confirm');
+    btn.disabled = !all;
+    btn.textContent = all ? '完成主管確認並留痕' : `完成主管確認並留痕（尚餘 ${chkItems.length - done} 項）`;
+    btn.title = all ? '' : '人工確認事項全部勾選後才能結案';
+  };
+  chkItems.forEach((c) => c.addEventListener('change', updateChecklistGate));
+  updateChecklistGate();
 
   $('#btn-copy').addEventListener('click', () => {
     copyToClipboard(draft).then((ok) => {
@@ -2058,6 +2081,12 @@ async function chooseCandidate(idx) {
   });
   $('#btn-confirm').addEventListener('click', () => {
     if (state.confirmed) return;
+    // 防呆第二道（第一道是按鈕鎖定）：未勾齊不得結案
+    const remaining = chkItems.filter((c) => !c.checked).length;
+    if (remaining > 0) {
+      toast(`還有 ${remaining} 項人工確認未勾選——全部確認後才能結案留痕`, 'danger');
+      return;
+    }
     state.confirmed = true;
     $('#btn-confirm').textContent = '已完成確認 ✓';
     $('#btn-confirm').disabled = true;
@@ -2065,7 +2094,8 @@ async function chooseCandidate(idx) {
     engine.applyReplacement(state.gap, chosen.staff.id);
     logAction('主管確認替補',
       `核定 ${chosen.staff.id} 替補 ${shortDate(state.gap.date)} ${SHIFT_TYPES[state.gap.shift].name}` +
-      `${chosen.needsApproval ? '（含需額外核准事項）' : ''}；正式調班登錄由主管於院內系統執行`);
+      `${chosen.needsApproval ? '（含需額外核准事項）' : ''}；${chkItems.length} 項人工確認事項已逐項勾選，` +
+      '正式調班登錄由主管於院內系統執行');
     toast(`已核定 ${chosen.staff.id} 替補，班表與公平性同步更新`);
     renderFairness();
     renderWarnings();
