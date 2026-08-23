@@ -1650,16 +1650,16 @@ function renderOverview() {
     )}
 
     <div class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-head">${icon('chart')}<span>排班補足率</span></div>
+      <div class="stat-card" data-drill="ov-card-week" role="button" tabindex="0" title="點擊查看：一週人力覆蓋">
+        <div class="stat-head">${icon('chart')}<span>排班補足率</span><span class="stat-more">依據 →</span></div>
         ${chartGauge(need ? (sched / need) * 100 : 0, {
           label: `已排 ${sched}／需 ${need}`,
           color: sched >= need ? 'var(--ok)' : (sched / need >= 0.7 ? 'var(--brand)' : 'var(--danger)'),
         })}
         <div class="stat-sub">目標 100%${sched >= need ? '　✓ 達標' : `　▲ 差 ${need - sched} 班次`}</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-head">${icon('target')}<span>本週缺口</span></div>
+      <div class="stat-card" data-drill="ov-drill-matrix" role="button" tabindex="0" title="點擊查看：缺口矩陣">
+        <div class="stat-head">${icon('target')}<span>本週缺口</span><span class="stat-more">依據 →</span></div>
         <div class="stat-num ${gapCells.length ? 'danger' : 'ok'}">${gapCells.length}<span class="stat-unit">班次</span></div>
         ${ticksBar([
           { n: sched, color: 'var(--brand)', title: `已排定 ${sched}` },
@@ -1667,8 +1667,8 @@ function renderOverview() {
         ], need)}
         <div class="stat-sub">目標 0${gapCells.length ? `　▲ 合計 ${gapHours} 小時人力` : '　✓ 達標'}</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-head">${icon('user-check')}<span>可合法吸收</span></div>
+      <div class="stat-card" data-drill="ov-drill-fills" role="button" tabindex="0" title="點擊查看：吸收方案逐筆">
+        <div class="stat-head">${icon('user-check')}<span>可合法吸收</span><span class="stat-more">依據 →</span></div>
         <div class="stat-num">${fills.length}<span class="stat-unit">／${gapCells.length}</span></div>
         ${ticksBar([
           { n: fills.length - flagged.length, color: 'var(--ok)', title: '無代價' },
@@ -1676,8 +1676,8 @@ function renderOverview() {
         ], Math.max(gapCells.length, 1))}
         <div class="stat-sub">目標：缺口全數可吸收${fills.length >= gapCells.length ? '　✓' : `　▲ 尚缺 ${gapCells.length - fills.length}`}${flagged.length ? `；${flagged.length} 筆有代價` : ''}</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-head">${icon('shield')}<span>殘餘缺口</span></div>
+      <div class="stat-card" data-drill="ov-drill-fills" role="button" tabindex="0" title="點擊查看：吸收方案與殘餘明細">
+        <div class="stat-head">${icon('shield')}<span>殘餘缺口</span><span class="stat-more">依據 →</span></div>
         <div class="stat-num ${residual.length ? 'danger' : 'ok'}">${residual.length}<span class="stat-unit">班次</span></div>
         ${ticksBar([{ n: residual.length, color: 'var(--danger)', title: '無人可合法填補' }], Math.max(gapCells.length, 1))}
         <div class="stat-sub">目標 0${residual.length ? '　▲ 需升級處理' : '　✓'}；${structuralMed.length
@@ -1712,7 +1712,7 @@ function renderOverview() {
     </div>
 
     <div class="grid-2">
-      <div class="card">
+      <div class="card" id="ov-card-week">
         <div class="card-head">
           <h2>一週人力覆蓋${(() => {
             const short2 = dates.filter((d) => cells.filter((c) => c.date === d).some((c) => c.scheduled < c.need)).length;
@@ -1760,7 +1760,7 @@ function renderOverview() {
       </div>
     </div>
 
-    <details class="drill">
+    <details class="drill" id="ov-drill-matrix">
       <summary>缺口矩陣：班別 × 日期（依據）</summary>
       <div class="drill-body">
         <div class="table-scroll"><table>${matrixHead}<tbody>${matrixBody}</tbody></table></div>
@@ -1768,7 +1768,7 @@ function renderOverview() {
       </div>
     </details>
 
-    <details class="drill">
+    <details class="drill" id="ov-drill-fills">
       <summary>吸收方案逐筆（含代價與殘餘）</summary>
       <div class="drill-body">
         ${fillRows || '<div class="empty-state">本週無缺口需要填補。</div>'}
@@ -3932,6 +3932,19 @@ function init() {
   // Power BI 式交叉聚焦：點總覽圖表的長條＝聚焦該班別／該日（再點一次或 ✕ 清除）。
   // 委派綁在持久容器上、只綁一次——放進 renderOverview 會隨重繪重複掛監聽。
   on('#overview-body', 'click', (ev) => {
+    // 統計卡下鑽：點卡片 → 展開並捲到它的依據（Power BI 的 drill-through 精神）
+    const drill = ev.target.closest('[data-drill]');
+    if (drill) {
+      const target = document.getElementById(drill.dataset.drill);
+      if (target) {
+        if (target.tagName === 'DETAILS') target.open = true;
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        target.classList.remove('drill-flash');
+        void target.offsetWidth;
+        target.classList.add('drill-flash');
+      }
+      return;
+    }
     const t = ev.target.closest('[data-ck]');
     if (!t) return;
     const idx = t.dataset.ck.indexOf(':');
@@ -3940,6 +3953,11 @@ function init() {
     const same = state.ovFocus && state.ovFocus.type === type && state.ovFocus.v === v;
     state.ovFocus = same ? null : { type, v };
     renderOverview();
+  });
+  on('#overview-body', 'keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    const drill = ev.target.closest('[data-drill]');
+    if (drill) { ev.preventDefault(); drill.click(); }
   });
   initPortal();
   initFhir();
