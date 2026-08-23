@@ -208,77 +208,57 @@ const STAFF = [
   },
 ];
 
-/* ── 現有班表（1 週）─────────────────────────────────────
- * 註：N-05 原排定 2026-08-09 白班，因病假取消 → 即為本次缺班事件。
- */
+/* ── 現有班表（2026-08 整月）─────────────────────────────
+ * 需求口徑全月一致：每日 白班 2／小夜 1／大夜 1（每天 4 人）。
+ * 唯五個「劇情缺格」為空——這正是各畫面的演示素材，不是排班漏洞：
+ *   8/03 小夜・大夜、8/06 大夜（結構性大夜缺口 3 天）、
+ *   8/09 白班（N-05 病假＋N-11 特休＝缺班事件本體）、8/09 大夜。
+ *
+ * 示範週 8/03–8/09 為手排劇本（所有被測試與台本釘住的證據都在這一週）：
+ *   N-09 連上 8/03–8/08 六天（H5／F1／連續旗標）；N-07 大夜全包（夜班旗標、
+ *   8/08 大夜殘影擋 8/09 白班的 H4 劇本）；N-06 假日兩班（假日旗標）＋
+ *   8/09 小夜（加演第二筆的原班）；N-10 8/07–8/08 白班（8/08 VENT 王在班）；
+ *   8/04 白班有 N3 帶班（N-04）；N-01 8/03・8/06 白班（換班紅綠燈劇本）。
+ * 其餘（8/01–8/02、8/10–8/30）由第 0 層生成器（generateSchedule，
+ * H1–H10 同一份程式碼）離線產出，整月零「已違規」。
+ * 手工微調：8/10 白班避開 N-01／N-03／N-10（加演第二筆的候選若接
+ * 8/09 小夜，8/10 白班會撞 H4 的 11 小時班距）。
+ * 重新產生：node tools/gen-uniform-month.cjs b emit（守護檢查內建）。
+ * 註：N-05 原排定 2026-08-09 白班，因病假取消 → 即為本次缺班事件。 */
 const SHIFTS = [
-  // N-01
+  // ── 示範週 8/03–8/09（手排劇本）──
   { staffId: 'N-01', date: '2026-08-03', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-01', date: '2026-08-04', shift: 'D', unit: 'MED-3A' },
   { staffId: 'N-01', date: '2026-08-06', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-01', date: '2026-08-07', shift: 'D', unit: 'MED-3A' },
-  // N-02
-  { staffId: 'N-02', date: '2026-08-04', shift: 'D', unit: 'MED-3A' },
   { staffId: 'N-02', date: '2026-08-05', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-02', date: '2026-08-07', shift: 'D', unit: 'MED-3A' },
-  // N-03
-  { staffId: 'N-03', date: '2026-08-03', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-03', date: '2026-08-04', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-03', date: '2026-08-06', shift: 'E', unit: 'MED-3A' },
-  { staffId: 'N-03', date: '2026-08-07', shift: 'E', unit: 'MED-3A' },
-  // N-04
+  { staffId: 'N-03', date: '2026-08-05', shift: 'E', unit: 'MED-3A' },
   { staffId: 'N-04', date: '2026-08-04', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-04', date: '2026-08-05', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-04', date: '2026-08-06', shift: 'D', unit: 'MED-3A' },
-  // N-05（8/07 起病假，後續班次已取消）
-  { staffId: 'N-05', date: '2026-08-03', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-05', date: '2026-08-04', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-05', date: '2026-08-05', shift: 'D', unit: 'MED-3A' },
-  // N-06
+  { staffId: 'N-05', date: '2026-08-06', shift: 'E', unit: 'MED-3A' },
   { staffId: 'N-06', date: '2026-08-04', shift: 'E', unit: 'MED-3A' },
-  { staffId: 'N-06', date: '2026-08-05', shift: 'E', unit: 'MED-3A' },
-  { staffId: 'N-06', date: '2026-08-07', shift: 'E', unit: 'MED-3A' },
   { staffId: 'N-06', date: '2026-08-08', shift: 'E', unit: 'MED-3A' },
   { staffId: 'N-06', date: '2026-08-09', shift: 'E', unit: 'MED-3A' },
-  // N-07
   { staffId: 'N-07', date: '2026-08-04', shift: 'N', unit: 'MED-3A' },
   { staffId: 'N-07', date: '2026-08-05', shift: 'N', unit: 'MED-3A' },
   { staffId: 'N-07', date: '2026-08-07', shift: 'N', unit: 'MED-3A' },
   { staffId: 'N-07', date: '2026-08-08', shift: 'N', unit: 'MED-3A' },
-  // N-08
   { staffId: 'N-08', date: '2026-08-03', shift: 'D', unit: 'SUR-5B' },
-  { staffId: 'N-08', date: '2026-08-04', shift: 'E', unit: 'SUR-5B' },
   { staffId: 'N-08', date: '2026-08-06', shift: 'D', unit: 'SUR-5B' },
-  // N-09（連續上班 8/03 – 8/08）
   { staffId: 'N-09', date: '2026-08-03', shift: 'D', unit: 'MED-3A' },
   { staffId: 'N-09', date: '2026-08-04', shift: 'D', unit: 'MED-3A' },
   { staffId: 'N-09', date: '2026-08-05', shift: 'D', unit: 'MED-3A' },
   { staffId: 'N-09', date: '2026-08-06', shift: 'D', unit: 'MED-3A' },
   { staffId: 'N-09', date: '2026-08-07', shift: 'D', unit: 'MED-3A' },
   { staffId: 'N-09', date: '2026-08-08', shift: 'D', unit: 'MED-3A' },
-  // N-10（連續上班 8/05 – 8/08）
-  { staffId: 'N-10', date: '2026-08-05', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-10', date: '2026-08-06', shift: 'D', unit: 'MED-3A' },
   { staffId: 'N-10', date: '2026-08-07', shift: 'D', unit: 'MED-3A' },
   { staffId: 'N-10', date: '2026-08-08', shift: 'D', unit: 'MED-3A' },
-  // N-11（8/08 起特休，後續班次已取消）
-  { staffId: 'N-11', date: '2026-08-03', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-11', date: '2026-08-04', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-11', date: '2026-08-06', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-11', date: '2026-08-07', shift: 'D', unit: 'MED-3A' },
-  /* ── 整月示範班表（8/01–8/02、8/10–8/30）──────────────
-   * 由第 0 層生成器（generateSchedule，H1–H10 同一份程式碼）離線產出：
-   * 需求 白2／小夜1／大夜1（8/1–8/2 為 1/1/1），無資格門檻故 N-04 亦有班。
-   * 整月零「已違規」；示範週 8/03–8/09 手寫劇本原封不動，
-   * 所有被測試釘住的示範數字（主線兩筆、換班三組、負荷旗標）驗證不變。
-   * 唯一手工微調：8/10 白班 N-01 → N-09（保住加演第二筆的候選名單——
-   * N-01 若接 8/9 小夜，8/10 白班會撞 H4 的 11 小時班距）。
-   * 重新產生：scratchpad gen-month.cjs（守護檢查內建）。 */
+  { staffId: 'N-11', date: '2026-08-07', shift: 'E', unit: 'MED-3A' },
+  // ── 整月生成（8/01–8/02、8/10–8/30；需求 2/1/1）──
   { staffId: 'N-04', date: '2026-08-01', shift: 'D', unit: 'MED-3A' },
+  { staffId: 'N-05', date: '2026-08-01', shift: 'D', unit: 'MED-3A' },
   { staffId: 'N-06', date: '2026-08-01', shift: 'E', unit: 'MED-3A' },
-  { staffId: 'N-05', date: '2026-08-01', shift: 'N', unit: 'MED-3A' },
-  { staffId: 'N-10', date: '2026-08-02', shift: 'D', unit: 'MED-3A' },
-  { staffId: 'N-04', date: '2026-08-02', shift: 'E', unit: 'MED-3A' },
+  { staffId: 'N-10', date: '2026-08-01', shift: 'N', unit: 'MED-3A' },
+  { staffId: 'N-04', date: '2026-08-02', shift: 'D', unit: 'MED-3A' },
+  { staffId: 'N-11', date: '2026-08-02', shift: 'D', unit: 'MED-3A' },
+  { staffId: 'N-05', date: '2026-08-02', shift: 'E', unit: 'MED-3A' },
   { staffId: 'N-06', date: '2026-08-02', shift: 'N', unit: 'MED-3A' },
   { staffId: 'N-02', date: '2026-08-10', shift: 'D', unit: 'MED-3A' },
   { staffId: 'N-09', date: '2026-08-10', shift: 'D', unit: 'MED-3A' },

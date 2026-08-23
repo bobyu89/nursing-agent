@@ -139,6 +139,19 @@ test('Demo 資料集：4 位合格候選（N-02 > N-08 > N-10 > N-01）、7 位�
   assertEqual(why['N-05'][0], '—', 'N-05 為原班人員');
 });
 
+test('Demo 班表：整月每日人力一致——每格恰達需求（白2／小夜1／大夜1），僅五個劇情缺格為空', () => {
+  const storyGaps = new Set(['2026-08-03E', '2026-08-03N', '2026-08-06N', '2026-08-09D', '2026-08-09N']);
+  const need = { D: 2, E: 1, N: 1 };
+  for (let dd = 1; dd <= 30; dd++) {
+    const date = `2026-08-${String(dd).padStart(2, '0')}`;
+    for (const shift of ['D', 'E', 'N']) {
+      const n = SHIFTS.filter((s) => s.unit === 'MED-3A' && s.date === date && s.shift === shift).length;
+      const want = storyGaps.has(date + shift) ? 0 : need[shift];
+      assertEqual(n, want, `${date} ${shift} 應恰有 ${want} 人——每日在班人數必須一致（劇情缺格除外）`);
+    }
+  }
+});
+
 /* ── 寫回與治理迴路 ── */
 
 test('applyReplacement 寫回：替補次數 +1，且同日第二筆缺班會被 H2 自動排除', () => {
@@ -172,7 +185,7 @@ test('多筆缺班：逐筆貪心把稀缺人力用掉，全局指派兩筆都�
   const e = mkEngine(STAFF, SHIFTS.slice(), { staffingMin: UNIT_MIN_STAFF });
   const greedy = e.assignGreedy(MULTI_GAP_SCENARIO);
   assertEqual(greedy[0].staffId, 'N-10',
-    '逐筆指派第一筆選當下分數較高的 N-10（69.5 > N-01 的 63.5）');
+    '逐筆指派第一筆選當下分數較高的 N-10（82 > N-01 的 76）');
   assertEqual(greedy[1].staffId, null,
     'N-10 是全院唯一具呼吸器資格者，被第一筆用掉後 ICU 缺班無人可派');
   const joint = e.assignJointly(MULTI_GAP_SCENARIO);

@@ -556,6 +556,21 @@ select option { background: var(--surface); color: var(--ink); }
 .roster-scroll .th-weekend .th-wd { color: var(--brand-dark); font-weight: 700; }
 .roster-scroll .td-role { white-space: nowrap; }
 .roster-scroll td.td-edit { padding-left: 3px; padding-right: 3px; }
+/* 換班申請佇列（護理師送單 → 護理長簽核） */
+.swapreq-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  flex-wrap: wrap; padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: 13.5px;
+}
+.swapreq-row .sr-time { display: block; font-size: 12px; color: var(--ink-faint); margin-top: 2px; }
+.swapreq-row .sr-act { display: flex; align-items: center; gap: 8px; flex: none; }
+.swapreq-row .sr-act .btn { margin-top: 0; }
+
+/* 日合計列：貼齊表底、可捲動時常駐；低於需求口徑的天以警示色標出 */
+.roster-scroll tfoot td { position: sticky; bottom: 0; background: #f7f9fd; z-index: 3; }
+.roster-scroll tfoot td:first-child { z-index: 4; background: #f7f9fd; }
+.roster-foot td { font-size: 12px; font-weight: 700; color: var(--ink-faint); border-top: 1.5px solid var(--line); }
+.roster-foot .foot-day { color: var(--ink); }
+.roster-foot .foot-short { color: var(--warn-ink, #a15c00); background: #fdf3e4; }
 table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
 th { font-size: 12px; color: var(--ink-faint); font-weight: 700; background: var(--field); }

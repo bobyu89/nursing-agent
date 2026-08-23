@@ -325,7 +325,7 @@ const SCHEDULE_STORE_KEY = 'shiftguard.schedule.v1';
 /** 示範資料版本戳記：出廠 SHIFTS 一改（如整月示範班表上線）就要跳版——
  *  本機保存的舊班表是「基於舊示範資料的編輯」，直接疊上新資料只會蓋掉新內容、
  *  讓使用者以為更新沒生效。版本不符時自動重置並留痕說明。 */
-const DEMO_DATA_REV = '2026-08-month-fill-v1';
+const DEMO_DATA_REV = '2026-08-uniform-month-v2';
 
 function saveSchedule() {
   try {
@@ -373,8 +373,35 @@ function loadSchedule() {
 
 function resetSchedule() {
   try { localStorage.removeItem(SCHEDULE_STORE_KEY); } catch (e) {}
+  try { localStorage.removeItem(SWAPREQ_STORE_KEY); } catch (e) {}   // 申請佇列一併歸零，演示狀態乾淨
   location.reload();
 }
+
+/* ══ 換班申請佇列（護理師送單 → 護理長簽核）══════════════════
+ * 護理師視角跑完預檢、雙向零違規後，可把「同仁談好的互換」送進佇列；
+ * 護理長在同一畫面「帶入預檢」（以最新班表重跑 H1–H10）後核准寫回或駁回。
+ * 佇列保存於本機 localStorage（示範語義；正式導入應為後端佇列＋通知），
+ * 寫回動作維持護理長專屬——送單不改班表，核准才改。 */
+const SWAPREQ_STORE_KEY = 'shiftguard.swapreq.v1';
+let SWAP_REQUESTS = [];
+
+function loadSwapRequests() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(SWAPREQ_STORE_KEY) || '[]');
+    if (!Array.isArray(arr)) return;
+    // localStorage 可被任意改寫：逐筆白名單驗證，不合法直接剔除
+    const slotOk = (q) => q && STAFF.some((s) => s.id === q.staffId)
+      && isValidDateStr(q.date) && !!SHIFT_TYPES[q.shift];
+    SWAP_REQUESTS = arr.filter((r) => r && typeof r.id === 'string' && slotOk(r.a) && slotOk(r.b)
+      && ['pending', 'approved', 'rejected'].includes(r.status)).slice(0, 50);
+  } catch (e) { /* 壞存檔忽略，不擋初始化 */ }
+}
+
+function saveSwapRequests() {
+  try { localStorage.setItem(SWAPREQ_STORE_KEY, JSON.stringify(SWAP_REQUESTS)); } catch (e) {}
+}
+
+const sameSlot = (x, y) => x && y && x.staffId === y.staffId && x.date === y.date && x.shift === y.shift;
 
 /** 班表變更後的統一重算：排班工作區、缺口總覽、能力儀表板、主動預警、入口狀態、FHIR 統計 */
 function refreshAfterScheduleChange() {
@@ -742,6 +769,7 @@ function switchScreen(name) {
   closeMobileNav();   // 手機上點任何導覽項或跳轉畫面時收起抽屜
   $$('.screen').forEach((s) => s.classList.toggle('active', s.id === `screen-${name}`));
   renderNav(name);
+  if (name === 'swap') renderSwapRequests();   // 佇列面板依身份重繪（護理師看狀態／護理長有簽核鍵）
   // 讓每個畫面可直接以 #hash 連結（home.html 的「排班／替班」按鈕即靠這個進場）
   try { history.replaceState(null, '', `#${name}`); } catch (e) { /* file:// 受限時略過 */ }
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2828,7 +2856,23 @@ function renderRoster() {
     return `<tr><td><b>${esc(s.id)}</b></td><td class="td-role">${esc(s.role)}</td>${cells}<td class="center"><b>${monthHours}</b> 小時</td></tr>`;
   }).join('');
 
-  $('#roster-table').innerHTML = head + `<tbody>${body}</tbody>`;
+  // 日合計列：每天在班人數對需求口徑（白2/小1/大1＝4 人）——
+  // 「每天人數是否一致」一眼可核；低於口徑的天標色，滑過看是哪個班別缺
+  const DAY_NEED = { D: 2, E: 1, N: 1 };
+  const needTotal = DAY_NEED.D + DAY_NEED.E + DAY_NEED.N;
+  const footCells = dates.map((d) => {
+    const cnt = { D: 0, E: 0, N: 0 };
+    SHIFTS.forEach((x) => { if (x.unit === ROSTER_UNIT && x.date === d && cnt[x.shift] != null) cnt[x.shift]++; });
+    const total = cnt.D + cnt.E + cnt.N;
+    const short = ['D', 'E', 'N'].filter((k) => cnt[k] < DAY_NEED[k])
+      .map((k) => `${SHIFT_TYPES[k].name}缺${DAY_NEED[k] - cnt[k]}`).join('、');
+    const tip = `白${cnt.D}／小${cnt.E}／大${cnt.N}（需 ${DAY_NEED.D}/${DAY_NEED.E}/${DAY_NEED.N}）${short ? '——' + short : ''}`
+      + (total === 0 ? '；整日未排定——可用「班表生成」從源頭排補' : '');
+    return `<td class="center foot-day${total < needTotal ? ' foot-short' : ''}" title="${esc(tip)}">${total}</td>`;
+  }).join('');
+  const foot = `<tfoot><tr class="roster-foot"><td colspan="2">日合計（需 ${needTotal} 人）</td>${footCells}<td class="center">—</td></tr></tfoot>`;
+
+  $('#roster-table').innerHTML = head + `<tbody>${body}</tbody>` + foot;
 }
 
 /** 格子循環編輯：無 → 白班 → 小夜 → 大夜 → 清除；每次變更留痕並保存 */
@@ -3495,6 +3539,73 @@ function handleGenRun() {
  * 總量爆了沒有。這個畫面把互換後兩人各自的 H1–H9 交給引擎重算
  * ——規則把關，核准與否仍由主管決定。 */
 
+/** 申請佇列面板：三種身份看同一份佇列——護理師看狀態、護理長有簽核鍵、督導唯讀 */
+function renderSwapRequests() {
+  const box = $('#swap-req-list');
+  if (!box) return;
+  if (!SWAP_REQUESTS.length) { box.innerHTML = ''; return; }
+  const pending = SWAP_REQUESTS.filter((q) => q.status === 'pending').length;
+  const TAG = { pending: ['tag-warn', '待簽核'], approved: ['tag-ok', '已核准'], rejected: ['tag-danger', '已駁回'] };
+  const isHead = CURRENT_ROLE === 'head';
+  box.innerHTML = `
+  <div class="card">
+    <div class="card-head">
+      <h2>換班申請佇列</h2>
+      <span class="tag ${pending ? 'tag-warn' : 'tag-neutral'}">${pending ? `${pending} 筆待簽核` : '無待簽核'}</span>
+    </div>
+    ${SWAP_REQUESTS.map((q) => `
+      <div class="swapreq-row">
+        <span class="sr-main"><b>${esc(q.a.staffId)}</b> ${swapLabel(q.a)} ⇄ <b>${esc(q.b.staffId)}</b> ${swapLabel(q.b)}
+          <span class="sr-time">${esc((q.at || '').slice(5, 16))} 由 ${esc(q.a.staffId)} 送出</span></span>
+        <span class="sr-act">
+          <span class="tag ${TAG[q.status][0]}">${TAG[q.status][1]}</span>${isHead && q.status === 'pending' ? `
+          <button class="btn btn-sm" data-req-load="${esc(q.id)}">帶入預檢</button>
+          <button class="btn btn-sm" data-req-reject="${esc(q.id)}">駁回</button>` : ''}
+        </span>
+      </div>`).join('')}
+    <p class="fineprint" style="margin-bottom:0">${isHead
+    ? '「帶入預檢」以<b>最新班表</b>重跑雙向 H1–H10——送單之後班表可能已變動，核准前必經預檢；核准寫回沿用下方流程並自動銷單。'
+    : CURRENT_ROLE === 'staff'
+      ? '預檢通過後可送出申請；核准寫回由護理長執行，結果會回到這份佇列。'
+      : '檢視模式——簽核動作由護理長執行。'}</p>
+  </div>`;
+  $$('#swap-req-list [data-req-load]').forEach((b) => b.addEventListener('click', () => loadSwapRequest(b.dataset.reqLoad)));
+  $$('#swap-req-list [data-req-reject]').forEach((b) => b.addEventListener('click', () => rejectSwapRequest(b.dataset.reqReject)));
+}
+
+function loadSwapRequest(id) {
+  if (CURRENT_ROLE !== 'head') { toast('簽核屬護理長權限', 'warn'); return; }
+  const q = SWAP_REQUESTS.find((x) => x.id === id);
+  if (!q) return;
+  const exists = (s) => SHIFTS.some((x) => x.staffId === s.staffId && x.date === s.date && x.shift === s.shift);
+  if (!exists(q.a) || !exists(q.b)) {
+    toast('申請中的班次已變動（編輯／匯入／換班），此單已失效——請駁回並請同仁重新申請', 'danger');
+    return;
+  }
+  $('#swap-a-staff').value = q.a.staffId;
+  $('#swap-b-staff').value = q.b.staffId;
+  state.swap.a = { staffId: q.a.staffId, date: q.a.date, shift: q.a.shift };
+  state.swap.b = { staffId: q.b.staffId, date: q.b.date, shift: q.b.shift };
+  renderSwapShifts('a');
+  renderSwapShifts('b');
+  // 資格與職務門檻還原成送單時的內容——簽核簽的是同一份條件
+  $$('#swap-certs .swap-cert').forEach((c) => { c.checked = (q.requiredCerts || []).includes(c.value); });
+  if (q.requiredRole) $('#swap-role').value = q.requiredRole;
+  handleSwapCheck();
+}
+
+function rejectSwapRequest(id) {
+  if (CURRENT_ROLE !== 'head') { toast('簽核屬護理長權限', 'warn'); return; }
+  const q = SWAP_REQUESTS.find((x) => x.id === id);
+  if (!q || q.status !== 'pending') return;
+  q.status = 'rejected';
+  q.decidedAt = nowStamp();
+  saveSwapRequests();
+  logAction('駁回換班申請', `${q.a.staffId} ${swapLabel(q.a)} ⇄ ${q.b.staffId} ${swapLabel(q.b)}；請同仁改談其他班次`);
+  toast(`已駁回 ${q.a.staffId} ⇄ ${q.b.staffId} 的換班申請`);
+  renderSwapRequests();
+}
+
 function renderSwapPicker() {
   if (!$('#swap-a-staff')) return;
   ['a', 'b'].forEach((side, i) => {
@@ -3558,7 +3669,9 @@ function handleSwapCheck() {
       ${r.ok
     ? (CURRENT_ROLE === 'head'
       ? '<button class="btn btn-primary" id="btn-swap-approve" style="margin-top:0">核准互換並寫回班表</button>'
-      : '<span class="tag tag-ok">預檢通過——正式核准由護理長執行（此視角僅供預檢）</span>')
+      : CURRENT_ROLE === 'staff'
+        ? '<button class="btn btn-primary" id="btn-swap-request" style="margin-top:0">送出申請給護理長簽核</button>'
+        : '<span class="tag tag-ok">預檢通過——正式核准由護理長執行（此視角僅供檢視）</span>')
     : '<span class="tag tag-danger">存在硬性違規，不可核准——請同仁改談其他班次；門檻依據可於規則庫檢視</span>'}
     </div>`;
 
@@ -3581,11 +3694,39 @@ function handleSwapCheck() {
     logAction('核准換班寫回',
       `${a.staffId} ${swapLabel(a)} ⇄ ${b.staffId} ${swapLabel(b)}；正式調班登錄由主管於院內系統執行`);
     toast(`已核准 ${a.staffId} ⇄ ${b.staffId} 互換，班表已更新`);
+    // 佇列銷單：這組互換若來自護理師申請，狀態改為已核准（雙向配對皆認）
+    const hit = SWAP_REQUESTS.find((q) => q.status === 'pending'
+      && ((sameSlot(q.a, a) && sameSlot(q.b, b)) || (sameSlot(q.a, b) && sameSlot(q.b, a))));
+    if (hit) { hit.status = 'approved'; hit.decidedAt = nowStamp(); saveSwapRequests(); }
     state.swap.a = null;
     state.swap.b = null;
     out.innerHTML = '<p class="fineprint" style="color:var(--ok)">✓ 互換已寫回班表並留痕；班表工作區、缺口總覽與預警已同步重算。</p>';
     refreshAfterScheduleChange();
+    renderSwapRequests();
     renderStaffTable();
+  });
+
+  // 護理師視角：預檢通過後把互換送進護理長的簽核佇列（送單不改班表）
+  const reqBtn = $('#btn-swap-request');
+  if (reqBtn) reqBtn.addEventListener('click', () => {
+    if (CURRENT_ROLE !== 'staff') return;
+    const dup = SWAP_REQUESTS.find((q) => q.status === 'pending' && sameSlot(q.a, a) && sameSlot(q.b, b));
+    if (dup) { toast('這組互換已在佇列中等待簽核', 'warn'); return; }
+    SWAP_REQUESTS.unshift({
+      id: 'SR-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      a: { staffId: a.staffId, date: a.date, shift: a.shift },
+      b: { staffId: b.staffId, date: b.date, shift: b.shift },
+      requiredCerts, requiredRole: $('#swap-role').value,
+      at: nowStamp(), status: 'pending',
+    });
+    saveSwapRequests();
+    logAction('送出換班申請',
+      `${a.staffId} ${swapLabel(a)} ⇄ ${b.staffId} ${swapLabel(b)}；預檢雙向通過，送護理長簽核`,
+      `${a.staffId}（護理師視角）`);
+    reqBtn.textContent = '已送出申請 ✓';
+    reqBtn.disabled = true;
+    toast('申請已送出——護理長會在「換班簽核」的佇列看到這一筆');
+    renderSwapRequests();
   });
   MOTION.enter(out, '.card, .btn-row, .fineprint');
 }
@@ -3890,7 +4031,7 @@ function installErrorSurface() {
 /** 版本混用偵測：挑「最新版 HTML 才有」的元素當哨兵——缺任何一個代表
  *  瀏覽器快取到舊 index.html 搭新 app.js，直接給出明確指引而不是神祕錯誤 */
 function checkHtmlVersion() {
-  const sentinels = ['#btn-month-prev', '#roster-file', '#nav-burger'];
+  const sentinels = ['#btn-month-prev', '#roster-file', '#nav-burger', '#swap-req-list'];
   const missing = sentinels.filter((s) => !$(s));
   if (!missing.length) return true;
   const bar = document.createElement('div');
@@ -3937,6 +4078,7 @@ function init() {
         '班守 ShiftGuard 防護');
     }
   }
+  loadSwapRequests();   // 換班申請佇列（護理師送單 → 護理長簽核）隨頁載入還原
   on('#btn-rules-reset', 'click', () => {
     if (confirm('確定要清除本機保存的規則調整，回到預設值嗎？頁面將重新載入。')) resetRules();
   });
