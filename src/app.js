@@ -493,6 +493,8 @@ const SCREEN_ICONS = {
  * 其餘畫面在側欄上鎖（🔒）、直接跳轉也會被擋——一步做完才開下一步。
  * 目前該點的按鈕會發光提示。可隨時跳過；完成／跳過後全部解鎖。 */
 
+const PENGUIN_SVG = '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><ellipse cx="25.5" cy="58" rx="4" ry="2.3" fill="#f2a93b"/><ellipse cx="38.5" cy="58" rx="4" ry="2.3" fill="#f2a93b"/><path d="M32 7.5 C44.5 7.5 50.5 18.5 50.5 33.5 C50.5 48.5 43.5 57.5 32 57.5 C20.5 57.5 13.5 48.5 13.5 33.5 C13.5 18.5 19.5 7.5 32 7.5 Z" fill="#4060ef"/><path d="M16.6 29.5 C13.2 34.5 13.2 45.5 17.2 50.5 C19.6 46.5 20.1 37.5 19.1 30.5 Z" fill="#3350dd"/><path d="M47.4 29.5 C50.8 34.5 50.8 45.5 46.8 50.5 C44.4 46.5 43.9 37.5 44.9 30.5 Z" fill="#3350dd"/><path d="M32 29.5 C40 29.5 44 33.5 44 39.5 C44 47.5 39.5 54 32 55.2 C24.5 54 20 47.5 20 39.5 C20 33.5 24 29.5 32 29.5 Z" fill="#fff6ea"/><circle cx="26" cy="23.5" r="3" fill="#16233a"/><circle cx="38" cy="23.5" r="3" fill="#16233a"/><circle cx="27" cy="22.5" r="1" fill="#fff"/><circle cx="39" cy="22.5" r="1" fill="#fff"/><ellipse cx="20.6" cy="27.4" rx="2.1" ry="1.3" fill="#ee94a5"/><ellipse cx="43.4" cy="27.4" rx="2.1" ry="1.3" fill="#ee94a5"/><path d="M32 26.6 L35.2 29 Q32 32.2 28.8 29 Z" fill="#f2a93b"/></svg>';
+
 const TOUR_KEY = 'shiftguard.tour.v1';
 const TOUR_STEPS = [
   { title: '第 1 步｜今日戰情', text: '護理長每天從這裡開始：今天三班到齊了嗎、未來 48 小時哪裡有洞。點側欄發光的「今日戰情」。',
@@ -524,6 +526,7 @@ const TOUR = {
   end(flag) {
     this.active = false;
     this.clearGlow();
+    this.hidePenguin();
     const card = $('#tour-card');
     if (card) card.remove();
     try { localStorage.setItem(TOUR_KEY, flag); } catch (e) {}
@@ -544,8 +547,55 @@ const TOUR = {
     }
   },
   clearGlow() { $$('.tour-glow').forEach((el) => el.classList.remove('tour-glow')); },
+  _penguinTarget: null,
+  penguinEl() {
+    let el = $('#tour-penguin');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'tour-penguin';
+      el.innerHTML = `<div class="tp-bob">${PENGUIN_SVG}</div>`;
+      el.hidden = true;
+      document.body.appendChild(el);
+    }
+    return el;
+  },
+  placePenguin(target) {
+    const p = this.penguinEl();
+    this._penguinTarget = target;
+    const r = target.getBoundingClientRect();
+    const SIZE = 62;
+    let left; let flip = false;
+    if (r.right + SIZE + 16 <= window.innerWidth) {
+      left = r.right + 10;            // 站在目標右側、面向左（指著目標）
+      flip = false;
+    } else {
+      left = Math.max(4, r.left - SIZE - 10);   // 空間不夠改站左側、面向右
+      flip = true;
+    }
+    const top = Math.min(Math.max(8, r.top + r.height / 2 - SIZE / 2), window.innerHeight - SIZE - 8);
+    p.style.left = `${Math.round(left)}px`;
+    p.style.top = `${Math.round(top)}px`;
+    p.classList.toggle('flip', flip);
+    p.hidden = false;
+  },
+  hidePenguin() {
+    const p = $('#tour-penguin');
+    if (p) p.hidden = true;
+    this._penguinTarget = null;
+  },
+  repositionPenguin() {
+    if (!this.active || !this._penguinTarget || !this._penguinTarget.isConnected) return;
+    this.placePenguin(this._penguinTarget);
+  },
   render() {
     const st = this.step();
+    if (!st.target) {
+      // 最終步：守守跳到教學卡上慶祝
+      setTimeout(() => {
+        const card = $('#tour-card');
+        if (card && this.active) this.placePenguin(card);
+      }, 60);
+    }
     let card = $('#tour-card');
     if (!card) {
       card = document.createElement('div');
@@ -554,7 +604,7 @@ const TOUR = {
     }
     const last = this.idx === TOUR_STEPS.length - 1;
     card.innerHTML = `
-      <div class="tour-head"><b>${esc(st.title)}</b><span class="tour-count">${Math.min(this.idx + 1, 6)}/6</span></div>
+      <div class="tour-head"><span class="tour-avatar">${PENGUIN_SVG}</span><b>${esc(st.title)}</b><span class="tour-count">${Math.min(this.idx + 1, 6)}/6</span></div>
       <p>${esc(st.text)}</p>
       <div class="tour-actions">
         ${last ? '<button class="btn btn-sm btn-primary" id="btn-tour-done" style="margin-top:0">完成教學</button>'
@@ -569,6 +619,10 @@ const TOUR = {
     const st = this.step();
     if (!st || !st.target || !this.active) return;
     let el = document.querySelector(st.target);
+    // 手機：目標在側欄抽屜裡而抽屜關著＝指了也看不到——自動開抽屜
+    if (el && el.closest('.sidebar') && window.innerWidth <= 960 && !document.body.classList.contains('nav-open')) {
+      openMobileNav();
+    }
     // 目標在收合的分組裡（display:none）＝發了光也看不到——自動展開該組再發
     if (el && !el.offsetParent) {
       const grp = el.closest('.side-group');
@@ -578,7 +632,8 @@ const TOUR = {
         el = document.querySelector(st.target);
       }
     }
-    if (el && el.offsetParent) { el.classList.add('tour-glow'); return; }
+    if (el && el.offsetParent) { el.classList.add('tour-glow'); this.placePenguin(el); return; }
+    this.hidePenguin();
     // 目標可能還在非同步渲染中（候選卡的 LLM 摘要要跑幾秒）——輪詢重試最多 8 秒
     const n = tries || 0;
     if (n < 20) setTimeout(() => this.applyGlow(n + 1), 400);
@@ -594,7 +649,7 @@ function maybeShowWelcome() {
   wrap.id = 'welcome-wrap';
   wrap.innerHTML = `
     <div class="welcome-card">
-      <svg viewBox="0 0 64 64" width="72" height="72" aria-hidden="true"><ellipse cx="25.5" cy="58" rx="4" ry="2.3" fill="#f2a93b"/><ellipse cx="38.5" cy="58" rx="4" ry="2.3" fill="#f2a93b"/><path d="M32 7.5 C44.5 7.5 50.5 18.5 50.5 33.5 C50.5 48.5 43.5 57.5 32 57.5 C20.5 57.5 13.5 48.5 13.5 33.5 C13.5 18.5 19.5 7.5 32 7.5 Z" fill="#4060ef"/><path d="M16.6 29.5 C13.2 34.5 13.2 45.5 17.2 50.5 C19.6 46.5 20.1 37.5 19.1 30.5 Z" fill="#3350dd"/><path d="M47.4 29.5 C50.8 34.5 50.8 45.5 46.8 50.5 C44.4 46.5 43.9 37.5 44.9 30.5 Z" fill="#3350dd"/><path d="M32 29.5 C40 29.5 44 33.5 44 39.5 C44 47.5 39.5 54 32 55.2 C24.5 54 20 47.5 20 39.5 C20 33.5 24 29.5 32 29.5 Z" fill="#fff6ea"/><circle cx="26" cy="23.5" r="3" fill="#16233a"/><circle cx="38" cy="23.5" r="3" fill="#16233a"/><circle cx="27" cy="22.5" r="1" fill="#fff"/><circle cx="39" cy="22.5" r="1" fill="#fff"/><ellipse cx="20.6" cy="27.4" rx="2.1" ry="1.3" fill="#ee94a5"/><ellipse cx="43.4" cy="27.4" rx="2.1" ry="1.3" fill="#ee94a5"/><path d="M32 26.6 L35.2 29 Q32 32.2 28.8 29 Z" fill="#f2a93b"/></svg>
+      <span class="welcome-mascot">${PENGUIN_SVG}</span>
       <h2>歡迎使用 班守 ShiftGuard</h2>
       <p>第一次來？功能有點多——讓守守用 <b>6 個步驟</b>帶你跑完一筆缺班處理，
          從通報到留痕大約三分鐘。教學中一次只開放一步，做完才解鎖下一步。</p>
@@ -3959,6 +4014,8 @@ function init() {
     const drill = ev.target.closest('[data-drill]');
     if (drill) { ev.preventDefault(); drill.click(); }
   });
+  window.addEventListener('scroll', () => TOUR.repositionPenguin(), true);
+  window.addEventListener('resize', () => TOUR.repositionPenguin());
   initPortal();
   initFhir();
   // 身份視角：還原上次選擇（網址畫面優先於身份預設首頁）

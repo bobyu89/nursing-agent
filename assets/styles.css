@@ -675,14 +675,33 @@ tbody tr:hover td { background: var(--hover); }
 /* ── 新手教學：發光提示、步驟卡、歡迎卡 ─────────────── */
 .tour-glow {
   position: relative; z-index: 45;
-  box-shadow: 0 0 0 3px var(--brand), 0 0 22px rgba(64,96,239,.5) !important;
+  box-shadow: 0 0 0 4px var(--brand), 0 0 0 9px rgba(64,96,239,.22), 0 0 30px rgba(64,96,239,.6) !important;
   border-radius: 10px;
-  animation: tour-pulse 1.5s ease-in-out infinite;
+  animation: tour-pulse 1.4s ease-in-out infinite;
 }
 @keyframes tour-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px var(--brand), 0 0 10px rgba(64,96,239,.35); }
-  50%      { box-shadow: 0 0 0 5px var(--brand), 0 0 26px rgba(64,96,239,.65); }
+  0%, 100% { box-shadow: 0 0 0 4px var(--brand), 0 0 0 8px rgba(64,96,239,.16), 0 0 14px rgba(64,96,239,.4); }
+  50%      { box-shadow: 0 0 0 6px var(--brand), 0 0 0 14px rgba(64,96,239,.26), 0 0 34px rgba(64,96,239,.75); }
 }
+
+/* 守守導覽員：跟著目標移動、蹦跳指路 */
+#tour-penguin {
+  position: fixed; z-index: 92; width: 62px; height: 62px;
+  pointer-events: none;
+  transition: left .5s cubic-bezier(.3,1.35,.4,1), top .5s cubic-bezier(.3,1.35,.4,1);
+  filter: drop-shadow(0 6px 14px rgba(16,24,40,.3));
+}
+#tour-penguin svg { width: 100%; height: 100%; display: block; }
+#tour-penguin .tp-bob { animation: tp-bob 1s ease-in-out infinite; }
+#tour-penguin.flip .tp-bob svg { transform: scaleX(-1); }
+@keyframes tp-bob {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50%      { transform: translateY(-7px) rotate(3deg); }
+}
+.tour-avatar { width: 30px; height: 30px; flex: none; display: block; }
+.tour-avatar svg { width: 100%; height: 100%; display: block; }
+.welcome-mascot { display: inline-block; width: 72px; height: 72px; }
+.welcome-mascot svg { width: 100%; height: 100%; }
 #tour-card {
   position: fixed; right: 18px; bottom: 18px; z-index: 90;
   width: min(340px, calc(100vw - 36px));
