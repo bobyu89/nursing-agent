@@ -24,6 +24,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $PLATFORM_URL = 'https://bobyu89.github.io/nursing-agent/'
+$LIFF_ID = '2011209447-AlMMDUMl'   # 與 wrangler.toml 同步；留空字串則「開啟平台」退回一般網址
 $MENU_NAME = 'shiftguard-menu'
 $IMG_PATH = Join-Path $PSScriptRoot 'richmenu.png'
 
@@ -65,7 +66,7 @@ $cells = @(
   @{ title = '調度棋盤';   sub = '守恆律借調建議';     icon = 'board' },
   @{ title = '負荷雷達';   sub = '誰一直在扛，看得見'; icon = 'gauge' },
   @{ title = '通報缺班';   sub = '一鍵帶入請假範例';   icon = 'chat'  },
-  @{ title = '開啟平台';   sub = '完整功能與決策留痕'; icon = 'globe' }
+  @{ title = '開啟平台';   sub = '守守帶路：完整功能與留痕'; icon = 'penguin' }
 )
 
 $margin = 40.0; $gap = 40.0
@@ -82,6 +83,75 @@ $bTint  = New-Object System.Drawing.SolidBrush($cTint)
 $penLine  = New-Object System.Drawing.Pen($cLine, 4)
 $penBrand = New-Object System.Drawing.Pen($cBrand, 14)
 $penBrand.StartCap = 'Round'; $penBrand.EndCap = 'Round'
+
+function Draw-Penguin([float]$cx, [float]$cy, [float]$s) {
+  # 班守 IP「守守」（輪班企鵝）：與 assets/logo.svg 同一份幾何，SVG 貝茲手工轉 GDI+
+  # (cx,cy)＝企鵝視覺中心（單位座標 32,34 的落點）；s＝縮放（1 單位 → s px）
+  # 唯一的 Q（二次貝茲）已轉三次：C1=P0+2/3(Q-P0)、C2=P2+2/3(Q-P2)
+  $ox = $cx - 32 * $s; $oy = $cy - 34 * $s
+  $bWing   = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml('#3350DD'))
+  $bBelly  = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml('#FFF6EA'))
+  $bAmber  = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml('#F2A93B'))
+  $bCheek  = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml('#EE94A5'))
+  $bShadow = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(28, 22, 35, 58))
+
+  # 地面陰影與腳先畫，身體壓在上面（腳掌自然只露出前緣）
+  $g.FillEllipse($bShadow, ($ox + 18 * $s),   ($oy + 57 * $s),   (28 * $s),  (4.8 * $s))
+  $g.FillEllipse($bAmber,  ($ox + 21.5 * $s), ($oy + 55.7 * $s), (8 * $s),   (4.6 * $s))
+  $g.FillEllipse($bAmber,  ($ox + 34.5 * $s), ($oy + 55.7 * $s), (8 * $s),   (4.6 * $s))
+
+  # 身體（蛋形，垂直漸層 #5B78F5 → #4060EF）
+  $body = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $body.AddBezier(($ox+32*$s),($oy+7.5*$s),  ($ox+44.5*$s),($oy+7.5*$s),  ($ox+50.5*$s),($oy+18.5*$s), ($ox+50.5*$s),($oy+33.5*$s))
+  $body.AddBezier(($ox+50.5*$s),($oy+33.5*$s),($ox+50.5*$s),($oy+48.5*$s),($ox+43.5*$s),($oy+57.5*$s), ($ox+32*$s),($oy+57.5*$s))
+  $body.AddBezier(($ox+32*$s),($oy+57.5*$s), ($ox+20.5*$s),($oy+57.5*$s), ($ox+13.5*$s),($oy+48.5*$s), ($ox+13.5*$s),($oy+33.5*$s))
+  $body.AddBezier(($ox+13.5*$s),($oy+33.5*$s),($ox+13.5*$s),($oy+18.5*$s),($ox+19.5*$s),($oy+7.5*$s),  ($ox+32*$s),($oy+7.5*$s))
+  $body.CloseFigure()
+  $bodyRect = New-Object System.Drawing.RectangleF(($ox + 13.5 * $s), ($oy + 7.5 * $s), (37 * $s), (50 * $s))
+  $bBody = New-Object System.Drawing.Drawing2D.LinearGradientBrush($bodyRect,
+    [System.Drawing.ColorTranslator]::FromHtml('#5B78F5'),
+    [System.Drawing.ColorTranslator]::FromHtml('#4060EF'),
+    [System.Drawing.Drawing2D.LinearGradientMode]::Vertical)
+  $g.FillPath($bBody, $body)
+
+  # 左右翅膀
+  $wl = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $wl.AddBezier(($ox+16.6*$s),($oy+29.5*$s), ($ox+13.2*$s),($oy+34.5*$s), ($ox+13.2*$s),($oy+45.5*$s), ($ox+17.2*$s),($oy+50.5*$s))
+  $wl.AddBezier(($ox+17.2*$s),($oy+50.5*$s), ($ox+19.6*$s),($oy+46.5*$s), ($ox+20.1*$s),($oy+37.5*$s), ($ox+19.1*$s),($oy+30.5*$s))
+  $wl.CloseFigure()
+  $g.FillPath($bWing, $wl)
+  $wr = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $wr.AddBezier(($ox+47.4*$s),($oy+29.5*$s), ($ox+50.8*$s),($oy+34.5*$s), ($ox+50.8*$s),($oy+45.5*$s), ($ox+46.8*$s),($oy+50.5*$s))
+  $wr.AddBezier(($ox+46.8*$s),($oy+50.5*$s), ($ox+44.4*$s),($oy+46.5*$s), ($ox+43.9*$s),($oy+37.5*$s), ($ox+44.9*$s),($oy+30.5*$s))
+  $wr.CloseFigure()
+  $g.FillPath($bWing, $wr)
+
+  # 白肚（盾形，呼應「守」）
+  $belly = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $belly.AddBezier(($ox+32*$s),($oy+29.5*$s), ($ox+40*$s),($oy+29.5*$s),  ($ox+44*$s),($oy+33.5*$s),   ($ox+44*$s),($oy+39.5*$s))
+  $belly.AddBezier(($ox+44*$s),($oy+39.5*$s), ($ox+44*$s),($oy+47.5*$s),  ($ox+39.5*$s),($oy+54*$s),   ($ox+32*$s),($oy+55.2*$s))
+  $belly.AddBezier(($ox+32*$s),($oy+55.2*$s), ($ox+24.5*$s),($oy+54*$s),  ($ox+20*$s),($oy+47.5*$s),   ($ox+20*$s),($oy+39.5*$s))
+  $belly.AddBezier(($ox+20*$s),($oy+39.5*$s), ($ox+20*$s),($oy+33.5*$s),  ($ox+24*$s),($oy+29.5*$s),   ($ox+32*$s),($oy+29.5*$s))
+  $belly.CloseFigure()
+  $g.FillPath($bBelly, $belly)
+
+  # 眼睛、高光、腮紅
+  $g.FillEllipse($bInk,   ($ox + 23 * $s),   ($oy + 20.5 * $s), (6 * $s),   (6 * $s))
+  $g.FillEllipse($bInk,   ($ox + 35 * $s),   ($oy + 20.5 * $s), (6 * $s),   (6 * $s))
+  $g.FillEllipse([System.Drawing.Brushes]::White, ($ox + 26 * $s), ($oy + 21.5 * $s), (2 * $s), (2 * $s))
+  $g.FillEllipse([System.Drawing.Brushes]::White, ($ox + 38 * $s), ($oy + 21.5 * $s), (2 * $s), (2 * $s))
+  $g.FillEllipse($bCheek, ($ox + 18.5 * $s), ($oy + 26.1 * $s), (4.2 * $s), (2.6 * $s))
+  $g.FillEllipse($bCheek, ($ox + 41.3 * $s), ($oy + 26.1 * $s), (4.2 * $s), (2.6 * $s))
+
+  # 嘴（琥珀菱形，下緣圓弧）
+  $beak = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $beak.AddLine(($ox+32*$s),($oy+26.6*$s), ($ox+35.2*$s),($oy+29*$s))
+  $beak.AddBezier(($ox+35.2*$s),($oy+29*$s), ($ox+33.07*$s),($oy+31.13*$s), ($ox+30.93*$s),($oy+31.13*$s), ($ox+28.8*$s),($oy+29*$s))
+  $beak.CloseFigure()
+  $g.FillPath($bAmber, $beak)
+
+  $bWing.Dispose(); $bBelly.Dispose(); $bAmber.Dispose(); $bCheek.Dispose(); $bShadow.Dispose(); $bBody.Dispose()
+}
 
 function Draw-Icon([string]$kind, [float]$cx, [float]$cy) {
   # 以 (cx,cy) 為中心、約 150px 見方的簡單幾何圖示（GDI+ 不畫 emoji，畫線條最乾淨）
@@ -121,6 +191,9 @@ function Draw-Icon([string]$kind, [float]$cx, [float]$cy) {
       $g.DrawEllipse($penBrand, $cx - 58, $cy - 58, 116, 116)
       $g.DrawEllipse($penBrand, $cx - 26, $cy - 58, 52, 116)
       $g.DrawLine($penBrand, $cx - 58, $cy, $cx + 58, $cy)
+    }
+    'penguin' { # 班守 IP「守守」本尊坐鎮「開啟平台」格
+      Draw-Penguin $cx $cy 3.4
     }
   }
 }
@@ -174,7 +247,9 @@ $menu = @{
     @{ bounds = @{ x = 1666; y = 0;   width = 834; height = 843 }; action = @{ type = 'message'; text = '調度' } },
     @{ bounds = @{ x = 0;    y = 843; width = 833; height = 843 }; action = @{ type = 'message'; text = '負荷' } },
     @{ bounds = @{ x = 833;  y = 843; width = 833; height = 843 }; action = @{ type = 'message'; text = $sample } },
-    @{ bounds = @{ x = 1666; y = 843; width = 834; height = 843 }; action = @{ type = 'uri'; uri = $PLATFORM_URL } }
+    @{ bounds = @{ x = 1666; y = 843; width = 834; height = 843 }; action = @{ type = 'uri'; uri = $(
+      # 設了 LIFF 就走 liff.line.me（LINE 內全高視窗，與 bot 按鈕一致）；否則退回一般網址
+      if ($LIFF_ID) { "https://liff.line.me/$LIFF_ID" } else { $PLATFORM_URL }) } }
   )
 }
 $json = $menu | ConvertTo-Json -Depth 8
