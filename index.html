@@ -9,6 +9,7 @@
         content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' file: data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'">
   <meta name="referrer" content="no-referrer">
   <title>班守 ShiftGuard｜醫護排班治理平台</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
   <!-- 字型與 Landing Page 同語彙；離線雙擊時自動退回系統字型，功能不受影響 -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,9 +19,12 @@
 <body>
 
 <div class="shell">
-<aside class="sidebar">
+<!-- 手機抽屜導覽的遮罩（≤960px 才顯示；點擊關閉抽屜） -->
+<div class="nav-scrim" id="nav-scrim" hidden></div>
+<aside class="sidebar" id="sidebar">
   <div class="side-brand">
-    <div class="brand-mark">SG</div>
+    <!-- 班守 IP「守守」（輪班企鵝）：完整版與設計理念見 assets/logo.svg -->
+    <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 64 64" width="30" height="30" xmlns="http://www.w3.org/2000/svg"><ellipse cx="25.5" cy="58" rx="4" ry="2.3" fill="#f2a93b"/><ellipse cx="38.5" cy="58" rx="4" ry="2.3" fill="#f2a93b"/><path d="M32 7.5 C44.5 7.5 50.5 18.5 50.5 33.5 C50.5 48.5 43.5 57.5 32 57.5 C20.5 57.5 13.5 48.5 13.5 33.5 C13.5 18.5 19.5 7.5 32 7.5 Z" fill="#4060ef"/><path d="M16.6 29.5 C13.2 34.5 13.2 45.5 17.2 50.5 C19.6 46.5 20.1 37.5 19.1 30.5 Z" fill="#3350dd"/><path d="M47.4 29.5 C50.8 34.5 50.8 45.5 46.8 50.5 C44.4 46.5 43.9 37.5 44.9 30.5 Z" fill="#3350dd"/><path d="M32 29.5 C40 29.5 44 33.5 44 39.5 C44 47.5 39.5 54 32 55.2 C24.5 54 20 47.5 20 39.5 C20 33.5 24 29.5 32 29.5 Z" fill="#fff6ea"/><circle cx="26" cy="23.5" r="3" fill="#16233a"/><circle cx="38" cy="23.5" r="3" fill="#16233a"/><circle cx="27" cy="22.5" r="1" fill="#fff"/><circle cx="39" cy="22.5" r="1" fill="#fff"/><ellipse cx="20.6" cy="27.4" rx="2.1" ry="1.3" fill="#f2a93b" opacity=".4"/><ellipse cx="43.4" cy="27.4" rx="2.1" ry="1.3" fill="#f2a93b" opacity=".4"/><path d="M32 26.6 L35.2 29 Q32 32.2 28.8 29 Z" fill="#f2a93b"/></svg></div>
     <div class="brand-text">
       <div class="brand-name">班守 ShiftGuard</div>
       <div class="brand-sub">排班治理平台</div>
@@ -33,6 +37,10 @@
 
 <div class="main-col">
 <header class="topbar">
+  <!-- 手機導覽開關（≤960px 才顯示）：參考 Hamburger Menu＋Drawer 標準模式 -->
+  <button class="nav-burger" id="nav-burger" aria-label="開啟導覽選單" aria-expanded="false" aria-controls="sidebar">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
   <div class="top-title" id="top-title">系統入口</div>
   <div class="topbar-right">
     <span class="badge badge-demo">模擬資料 · 非真實人員</span>

@@ -417,7 +417,29 @@ function renderNav(active) {
   if (t) t.textContent = `${g.label}｜${cur ? cur[1] : ''}`;
 }
 
+/* 手機抽屜導覽（≤960px 側欄轉為左滑 Drawer；桌機這組函式等於 no-op） */
+function openMobileNav() {
+  document.body.classList.add('nav-open');
+  const scrim = $('#nav-scrim');
+  if (scrim) {
+    scrim.hidden = false;
+    void scrim.offsetWidth;   // 強制 reflow 讓透明度轉場生效（背景分頁 rAF 不觸發，不能依賴）
+    scrim.classList.add('show');
+  }
+  const burger = $('#nav-burger');
+  if (burger) burger.setAttribute('aria-expanded', 'true');
+}
+function closeMobileNav() {
+  if (!document.body.classList.contains('nav-open')) return;
+  document.body.classList.remove('nav-open');
+  const scrim = $('#nav-scrim');
+  if (scrim) { scrim.classList.remove('show'); scrim.hidden = true; }
+  const burger = $('#nav-burger');
+  if (burger) burger.setAttribute('aria-expanded', 'false');
+}
+
 function switchScreen(name) {
+  closeMobileNav();   // 手機上點任何導覽項或跳轉畫面時收起抽屜
   $$('.screen').forEach((s) => s.classList.toggle('active', s.id === `screen-${name}`));
   renderNav(name);
   // 讓每個畫面可直接以 #hash 連結（home.html 的「排班／替班」按鈕即靠這個進場）
@@ -3142,6 +3164,14 @@ function init() {
     const item = ev.target.closest('.side-item');
     if (item) switchScreen(item.dataset.screen);
   });
+  // 手機抽屜：漢堡開、遮罩／Esc 關（switchScreen 內已含「切畫面即收抽屜」）
+  const burger = $('#nav-burger');
+  if (burger) burger.addEventListener('click', () => {
+    if (document.body.classList.contains('nav-open')) closeMobileNav(); else openMobileNav();
+  });
+  const scrim = $('#nav-scrim');
+  if (scrim) scrim.addEventListener('click', closeMobileNav);
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeMobileNav(); });
   initPortal();
   initFhir();
   // 支援 #hash 直達（home.html 的「排班系統／替班系統」按鈕、書籤、返回鍵）
