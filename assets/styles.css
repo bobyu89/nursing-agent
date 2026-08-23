@@ -119,6 +119,25 @@ a.badge:hover { color: var(--ink); border-color: var(--ink-faint); }
 .side-item.locked:hover { background: none; color: var(--ink-soft); }
 .side-lock { font-size: 11px; flex: none; }
 
+/* 身份視角切換（側欄品牌下方；示範用） */
+.role-switch {
+  display: flex; gap: 4px; padding: 4px;
+  background: var(--line-soft); border-radius: 10px;
+}
+.role-switch button {
+  appearance: none; border: 0; background: none; cursor: pointer; font: inherit;
+  flex: 1; font-size: 12px; font-weight: 600; color: var(--ink-faint);
+  padding: 6px 2px; border-radius: 7px; white-space: nowrap;
+  transition: background .15s ease, color .15s ease;
+}
+.role-switch button:hover { color: var(--ink); }
+.role-switch button.active { background: var(--surface); color: var(--brand-dark); box-shadow: var(--shadow); }
+
+/* 唯讀視角（護理師／督導主任）：班表管理功能整塊隱藏、顯示唯讀說明 */
+body:not(.role-head) .roster-manage { display: none !important; }
+.roster-readonly { display: none; }
+body:not(.role-head) .roster-readonly { display: block; }
+
 /* 新手教學入口（側欄底部） */
 .side-tour {
   appearance: none; border: 1px dashed var(--brand); background: var(--brand-tint);

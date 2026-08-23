@@ -394,30 +394,85 @@ function refreshAfterScheduleChange() {
  * 首層依「系統」分流：入口 → 排班系統／替班系統 → 總覽／治理。
  * 畫面 id 與編號不變（台本與文件以編號指涉）。 */
 
-const NAV_GROUPS = [
-  { key: 'home', label: '入口', screens: [
-    ['portal', '系統入口', '⌂'],
-  ] },
-  { key: 'sched', label: '排班系統', screens: [
-    ['roster', '班表工作區', '5'], ['swap', '換班簽核', '換'], ['generate', '班表生成', '8'],
-  ] },
-  { key: 'gap', label: '替班系統', screens: [
-    ['intake', '通報解析', '1'], ['candidates', '替補候選', '2'],
-    ['confirm', '主管確認', '3'], ['multi', '多筆與韌性', '7'],
-    ['dispatch', '調度棋盤', '督'],
-  ] },
-  { key: 'ov', label: '總覽', screens: [
-    ['today', '今日戰情', '今'], ['overview', '人力缺口', '◎'], ['capability', '能力與出勤', '★'],
-    ['retention', '留任雷達', '留'], ['ratio', '護病比', '比'],
-  ] },
-  { key: 'gov', label: '治理', screens: [
-    ['dashboard', '公平與留痕', '4'], ['rules', '規則庫', '6'],
-    ['policy', '政策沙盤', '盤'], ['fhir', 'FHIR 介接', '9'],
-  ] },
-];
+/* ══ 身份視角（示範用；正式導入由院內 SSO／帳號權限決定）════
+ * 每個身份只看到自己的工作流，導覽依工作順序排列（不是功能分類）：
+ * 護理師只有排班相關、護理長是缺班處理的完整迴路、督導／主任是管理儀表板。
+ * 儀表板類畫面只出現在高階視角——護理長作業時不被雜訊打擾。 */
+
+const ROLES = {
+  staff: {
+    label: '護理師', home: 'roster', canEditRoster: false,
+    groups: [
+      { key: 'me', label: '我的工作', screens: [
+        ['roster', '本月班表'], ['swap', '換班預檢'], ['intake', '通報缺班'],
+      ] },
+    ],
+  },
+  head: {
+    label: '護理長', home: 'portal', canEditRoster: true,
+    groups: [
+      { key: 'home', label: '入口', screens: [['portal', '系統入口']] },
+      { key: 'daily', label: '每天先看', screens: [['today', '今日戰情']] },
+      { key: 'gap', label: '缺班處理', screens: [
+        ['intake', '通報解析'], ['candidates', '替補候選'],
+        ['confirm', '主管確認'], ['multi', '多筆與韌性'],
+      ] },
+      { key: 'sched', label: '排班管理', screens: [
+        ['roster', '班表工作區'], ['swap', '換班簽核'], ['generate', '班表生成'],
+      ] },
+      { key: 'audit', label: '對帳', screens: [['dashboard', '公平與留痕']] },
+    ],
+  },
+  exec: {
+    label: '督導／主任', home: 'today', canEditRoster: false,
+    groups: [
+      { key: 'war', label: '戰情', screens: [
+        ['today', '今日戰情'], ['overview', '人力缺口'],
+      ] },
+      { key: 'dispatch', label: '跨單位調度', screens: [['dispatch', '調度棋盤']] },
+      { key: 'people', label: '人力經營', screens: [
+        ['retention', '留任雷達'], ['ratio', '護病比'], ['capability', '能力與出勤'],
+      ] },
+      { key: 'gov', label: '制度與稽核', screens: [
+        ['policy', '政策沙盤'], ['rules', '規則庫'],
+        ['dashboard', '公平與留痕'], ['fhir', 'FHIR 介接'],
+      ] },
+    ],
+  },
+};
+
+const ROLE_KEY = 'shiftguard.role.v1';
+let CURRENT_ROLE = 'head';   // 預設護理長——主線示範的視角
+
+function currentRole() { return ROLES[CURRENT_ROLE]; }
+function roleGroups() { return currentRole().groups; }
+function roleAllows(screen) {
+  return roleGroups().some((g) => g.screens.some(([id]) => id === screen));
+}
+
+function setRole(key, opts) {
+  opts = opts || {};
+  if (!ROLES[key]) return;
+  if (key === CURRENT_ROLE && !opts.force) return;
+  const prev = CURRENT_ROLE;
+  CURRENT_ROLE = key;
+  try { localStorage.setItem(ROLE_KEY, key); } catch (e) {}
+  document.body.classList.remove('role-staff', 'role-head', 'role-exec');
+  document.body.classList.add(`role-${key}`);
+  $$('#role-switch button').forEach((b) => b.classList.toggle('active', b.dataset.role === key));
+  NAV_OPEN.clear();
+  renderRoster();   // 班表格子的可編輯語義隨身份即時切換
+  const cur = screenFromHash();
+  const target = roleAllows(cur) ? cur : currentRole().home;
+  switchScreen(target);
+  if (!(opts && opts.silent) && prev !== key) {
+    logAction('切換身份視角', `${ROLES[prev] ? ROLES[prev].label : prev} → ${currentRole().label}（示範用切換；正式導入由院內帳號權限決定）`);
+    toast(`已切換為「${currentRole().label}」視角`);
+  }
+}
 
 function navGroupOf(name) {
-  return NAV_GROUPS.find((g) => g.screens.some(([id]) => id === name)) || NAV_GROUPS[0];
+  return roleGroups().find((g) => g.screens.some(([id]) => id === name)) || roleGroups()[0];
 }
 
 const NAV_ICONS = { home: 'home', sched: 'calendar', gap: 'swap', ov: 'chart', gov: 'shield' };
@@ -458,6 +513,7 @@ const TOUR = {
   active: false,
   idx: 0,
   start() {
+    setRole('head', { silent: true });   // 教學走護理長的完整迴路
     this.active = true;
     this.idx = 0;
     switchScreen('portal');
@@ -561,7 +617,7 @@ const NAV_OPEN = new Set();
 function renderNav(active, autoOpen = true) {
   const g = navGroupOf(active);
   if (autoOpen) NAV_OPEN.add(g.key);   // 切換畫面時自動展開所在組；手動收合時不強制
-  $('#nav').innerHTML = NAV_GROUPS.map((x) => {
+  $('#nav').innerHTML = roleGroups().map((x) => {
     const open = NAV_OPEN.has(x.key) || x.screens.length === 1;
     return `
     <div class="side-group${open ? '' : ' collapsed'}" data-group="${x.key}">
@@ -605,6 +661,15 @@ function closeMobileNav() {
 }
 
 function switchScreen(name) {
+  // 身份隔離：不屬於目前視角的畫面一律擋下（含 #hash 直接跳）
+  if (!roleAllows(name)) {
+    let owner = null; let label = name;
+    Object.values(ROLES).forEach((r) => r.groups.forEach((g) => g.screens.forEach(([id, lb]) => {
+      if (id === name) { label = lb; if (!owner) owner = r.label; }
+    })));
+    toast(`「${label}」屬於「${owner || '其他身份'}」視角——用側欄上方的身份切換`, 'warn');
+    return;
+  }
   // 教學模式的硬條件：目前步驟尚未完成前，其餘畫面一律擋下（含 #hash 直接跳）
   if (TOUR.active && !TOUR.allowed(name)) {
     toast('請先完成目前的教學步驟——跟著發光的按鈕走', 'warn');
@@ -630,8 +695,10 @@ function switchScreen(name) {
 function screenFromHash() {
   const h = decodeURIComponent((location.hash || '').replace(/^#/, ''));
   if (h && document.getElementById(`screen-${h}`)) return h;
-  const g = NAV_GROUPS.find((x) => x.key === h);
-  return g ? g.screens[0][0] : 'portal';
+  const LEGACY = { sched: 'roster', gap: 'intake', ov: 'today', gov: 'dashboard' };
+  if (LEGACY[h]) return LEGACY[h];
+  const g = roleGroups().find((x) => x.key === h);
+  return g ? g.screens[0][0] : currentRole().home;
 }
 
 /* ══ ⌂ 系統入口（Portal）═══════════════════════════════ */
@@ -2472,6 +2539,7 @@ function renderRoster() {
       const inner = sh
         ? `<span class="cell cell-${sh.shift}">${sh.shift}${sh.isReplacement ? '<sup>替</sup>' : sh.isSwap ? '<sup>換</sup>' : ''}</span>`
         : '<span style="color:var(--ink-faint)">·</span>';
+      if (!currentRole().canEditRoster) return `<td class="center">${inner}</td>`;
       return `<td class="center td-edit" data-sid="${esc(s.id)}" data-d="${d}" tabindex="0" role="button"` +
         ` aria-label="${esc(s.id)} ${shortDate(d)}（${weekdayOf(d)}）目前${sh ? SHIFT_TYPES[sh.shift].name : '未排班'}，按 Enter 循環編輯"` +
         ` title="${shortDate(d)}（${weekdayOf(d)}）點擊編輯：無→白→小夜→大夜→清除">${inner}</td>`;
@@ -2487,6 +2555,7 @@ function renderRoster() {
 
 /** 格子循環編輯：無 → 白班 → 小夜 → 大夜 → 清除；每次變更留痕並保存 */
 function cycleShiftCell(staffId, date) {
+  if (!currentRole().canEditRoster) return;   // 唯讀視角（護理師／督導）不可改班表
   const staff = STAFF.find((s) => s.id === staffId);
   if (!staff || engine.isOnLeave(staff, date)) return;
   const order = [null, 'D', 'E', 'N'];
@@ -3207,7 +3276,9 @@ function handleSwapCheck() {
     ${r.notices.length ? `<p class="fineprint">${r.notices.map(esc).join('；<br>')}</p>` : ''}
     <div class="btn-row">
       ${r.ok
-    ? '<button class="btn btn-primary" id="btn-swap-approve" style="margin-top:0">核准互換並寫回班表</button>'
+    ? (CURRENT_ROLE === 'head'
+      ? '<button class="btn btn-primary" id="btn-swap-approve" style="margin-top:0">核准互換並寫回班表</button>'
+      : '<span class="tag tag-ok">預檢通過——正式核准由護理長執行（此視角僅供預檢）</span>')
     : '<span class="tag tag-danger">存在硬性違規，不可核准——請同仁改談其他班次；門檻依據可於規則庫檢視</span>'}
     </div>`;
 
@@ -3220,6 +3291,7 @@ function handleSwapCheck() {
 
   const approve = $('#btn-swap-approve');
   if (approve) approve.addEventListener('click', () => {
+    if (CURRENT_ROLE !== 'head') { toast('核准寫回屬於護理長權限', 'warn'); return; }
     // 預檢與核准之間班表可能被動過（另一視窗、匯入）——寫回前引擎再驗一次存在性
     if (!engine.applySwap(a, b)) {
       toast('寫回失敗：班次已變動，請重新執行預檢', 'danger');
@@ -3645,6 +3717,15 @@ function init() {
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeMobileNav(); });
   initPortal();
   initFhir();
+  // 身份視角：還原上次選擇（網址畫面優先於身份預設首頁）
+  let storedRole = null;
+  try { storedRole = localStorage.getItem(ROLE_KEY); } catch (e) {}
+  if (storedRole && ROLES[storedRole]) CURRENT_ROLE = storedRole;
+  document.body.classList.add(`role-${CURRENT_ROLE}`);
+  $$('#role-switch button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.role === CURRENT_ROLE);
+    b.addEventListener('click', () => setRole(b.dataset.role));
+  });
   // 新手教學：側欄底部隨時可重啟；首次進站顯示歡迎卡
   on('#btn-tour-restart', 'click', () => { TOUR.start(); toast('新手教學開始——跟著發光的按鈕走'); });
   maybeShowWelcome();
@@ -3886,7 +3967,9 @@ function init() {
   renderCapability();
   renderPortalStatus();
   renderFhirStats();
-  switchScreen(screenFromHash());
+  // 進場畫面：網址指名的畫面不屬於目前身份時，安靜落到該身份的首頁（不彈警告）
+  const entry = screenFromHash();
+  switchScreen(roleAllows(entry) ? entry : currentRole().home);
 }
 
 document.addEventListener('DOMContentLoaded', init);

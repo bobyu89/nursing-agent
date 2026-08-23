@@ -30,6 +30,13 @@
       <div class="brand-sub">排班治理平台</div>
     </div>
   </div>
+  <!-- 身份視角（示範用切換；正式導入由院內 SSO／帳號權限決定）：
+       每個身份只看到自己的工作流——護理師唯讀班表、護理長缺班迴路、督導主任管理儀表板 -->
+  <div class="role-switch" id="role-switch" title="示範用身份切換；正式導入由院內帳號權限決定">
+    <button data-role="staff">護理師</button>
+    <button data-role="head" class="active">護理長</button>
+    <button data-role="exec">督導主任</button>
+  </div>
   <!-- 側欄導覽：群組（可收合）＋畫面（app.js 動態渲染）。
        畫面編號只存在於台本與文件（docs/DEMO-SCRIPT.md），介面上不再顯示。 -->
   <nav id="nav" aria-label="主導覽"></nav>
@@ -372,8 +379,10 @@
         <button class="btn btn-sm" id="btn-month-prev">◀ 前一月</button>
         <button class="btn btn-sm" id="btn-month-demo">示範月</button>
         <button class="btn btn-sm" id="btn-month-next">後一月 ▶</button>
-        <button class="btn btn-sm btn-primary" id="btn-roster-save" style="margin-left:auto;margin-top:0">💾 立即儲存</button>
-        <button class="btn btn-sm" id="btn-roster-reset">還原示範班表</button>
+        <span class="roster-manage" style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-sm btn-primary" id="btn-roster-save" style="margin-top:0">💾 立即儲存</button>
+          <button class="btn btn-sm" id="btn-roster-reset">還原示範班表</button>
+        </span>
       </div>
       <div class="table-scroll roster-scroll"><table id="roster-table"></table></div>
       <div class="legend">
@@ -382,14 +391,15 @@
         <span><i class="dot dot-n"></i>大夜 23:00–07:00（跨日）</span>
         <span><i class="dot dot-l"></i>請假</span>
       </div>
-      <p class="fineprint">
+      <p class="fineprint roster-manage">
         <b>點任一格子</b>可循環編輯：無 → 白班 → 小夜 → 大夜 → 清除（請假格不可編輯）。
         每一次變更<b>自動儲存</b>到本機瀏覽器並寫入決策留痕（右上角有儲存時間戳；「立即儲存」可隨時手動確認）；
         「還原示範班表」回到出廠資料。編輯不會自動重算進行中的缺班評估——條件改變請回「缺班事件」重新確認。
       </p>
+      <p class="fineprint roster-readonly">此視角為<b>唯讀</b>：可查詢班表與月工時；排班與匯入由護理長執行。</p>
     </div>
 
-    <div class="card">
+    <div class="card roster-manage">
       <div class="card-head">
         <h2>Excel 匯入／匯出</h2>
         <span class="tag tag-neutral">目前顯示的月份</span>
