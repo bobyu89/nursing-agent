@@ -21,6 +21,7 @@ const state = {
   swap: { a: null, b: null },    // 換班簽核：甲乙兩側點選的班次（{staffId,date,shift}）
   todayDate: GAP_EVENT.raisedAt.slice(0, 10),   // 今日戰情的基準日（示範今日 2026-08-08）
   ovWeekStart: WEEK.start,       // ◎ 總覽的分析週（篩選連動：換週＝KPI／圖表／行動全部重算）
+  ovFocus: null,                 // ◎ 總覽的交叉聚焦（Power BI 式：點圖表 → {type:'shift'|'day', v}）
   ratioLevel: 'RH',              // 護病比適用層級（示範預設：區域醫院）
   ratioApplied: false,           // 全平台需求口徑是否已切換為護病比（session 內）
 };
@@ -818,8 +819,9 @@ function chartDays(days, { need, width = 360 } = {}) {
     const x = padL + i * step;
     const ok2 = d.v >= need;
     const barH = Math.max(2, top + innerH - y(d.v));
-    return `<rect x="${x}" y="${y(d.v)}" width="${bw}" height="${barH}" rx="4" fill="${ok2 ? 'var(--brand)' : 'var(--danger)'}" opacity=".88"><title>${esc(d.label)}：已排 ${d.v}／需 ${need}</title></rect>
-      <text x="${x + bw / 2}" y="${H - 7}" text-anchor="middle" class="cd-lbl">${esc(d.label)}</text>`;
+    const ck = d.key ? ` class="ck" data-ck="${esc(d.key)}"` : '';
+    return `<g${d.dim ? ' opacity=".25"' : ''}><rect x="${x}" y="${y(d.v)}" width="${bw}" height="${barH}" rx="4" fill="${ok2 ? 'var(--brand)' : 'var(--danger)'}" opacity=".88"${ck}><title>${esc(d.label)}：已排 ${d.v}／需 ${need}${d.key ? '（點擊聚焦）' : ''}</title></rect>
+      <text x="${x + bw / 2}" y="${H - 7}" text-anchor="middle" class="cd-lbl">${esc(d.label)}</text></g>`;
   }).join('');
   const ny = y(need);
   return `<svg class="chart" viewBox="0 0 ${width} ${H}" role="img">
@@ -830,6 +832,7 @@ function chartDays(days, { need, width = 360 } = {}) {
 }
 
 function chartHBar(rows, { max, width = 640, marker } = {}) {
+  // rows[i].key → 該列可點（Power BI 式交叉聚焦）；rows[i].dim → 淡化非焦點列
   const LABEL_W = 96; const RIGHT_W = 96; const BAR_H = 16; const ROW_H = 30;
   const barW = width - LABEL_W - RIGHT_W;
   const H = rows.length * ROW_H + 10;
@@ -844,11 +847,15 @@ function chartHBar(rows, { max, width = 640, marker } = {}) {
       x += w;
       return rect;
     }).join('');
-    return `<g transform="translate(0 ${i * ROW_H + 6})">
+    const hit = r.key
+      ? `<rect x="0" y="-3" width="${width}" height="${ROW_H - 4}" fill="transparent" class="ck" data-ck="${esc(r.key)}"><title>點擊聚焦：${esc(r.label)}</title></rect>`
+      : '';
+    return `<g transform="translate(0 ${i * ROW_H + 6})"${r.dim ? ' opacity=".25"' : ''}>
       <text x="0" y="12" font-size="12" fill="var(--ink-soft)">${esc(r.label)}</text>
       <rect x="${x0}" y="0" width="${barW}" height="${BAR_H}" rx="3" fill="var(--line-soft)"/>
       ${segs}
       <text x="${x0 + barW + 8}" y="12" font-size="12" fill="var(--ink-faint)">${esc(r.right || '')}</text>
+      ${hit}
     </g>`;
   }).join('');
 
@@ -1555,6 +1562,9 @@ function renderToday() {
 
 function renderOverview() {
   const dates = ovDates();   // 分析週可切換（月資料撐腰）；預設＝示範週，demo 數字不變
+  const focus = state.ovFocus;
+  const dimShift = (code) => !!(focus && focus.type === 'shift' && focus.v !== code);
+  const dimDay = (d) => !!(focus && focus.type === 'day' && focus.v !== d);
   const r = engine.workforceGapAnalysis({ dates, demand: UNIT_MIN_STAFF });
   const UNIT = 'MED-3A';
   const cells = r.cells.filter((c) => c.unit === UNIT);
@@ -1571,20 +1581,22 @@ function renderOverview() {
     `<th class="center">${shortDate(d)}<br>（${weekdayOf(d)}）</th>`).join('')}<th class="center">缺口天數</th></tr></thead>`;
   const matrixBody = ['D', 'E', 'N'].map((code) => {
     const row = dates.map((d) => {
+      const dim = dimShift(code) || dimDay(d);
       const cell = cells.find((c) => c.date === d && c.shift === code);
-      if (!cell) return '<td class="center" style="color:var(--ink-faint)">·</td>';
+      const style = dim ? ' style="opacity:.22"' : '';
+      if (!cell) return `<td class="center"${style}><span style="color:var(--ink-faint)">·</span></td>`;
       return cell.gap > 0
-        ? '<td class="center"><span class="cell cell-G">缺</span></td>'
-        : '<td class="center" style="color:var(--ink-faint)">✓</td>';
+        ? `<td class="center"${style}><span class="cell cell-G">缺</span></td>`
+        : `<td class="center"${style}><span style="color:var(--ink-faint)">✓</span></td>`;
     }).join('');
     const days = gapCells.filter((c) => c.shift === code).length;
-    return `<tr><td><b>${SHIFT_TYPES[code].name}</b></td>${row}
+    return `<tr${dimShift(code) ? ' style="opacity:.35"' : ''}><td><b>${SHIFT_TYPES[code].name}</b></td>${row}
       <td class="center">${days ? `<b class="expired">${days} 天</b>` : '0'}</td></tr>`;
   }).join('');
 
   const FLAG_TEXT = { F1: '加班超時需核准', F2: '連續上班天數偏高', F3: '跨單位支援', F4: '公平性集中風險' };
   const fillRows = fills.map((f) => `
-    <div class="fact">
+    <div class="fact"${(dimShift(f.shift) || dimDay(f.date)) ? ' style="opacity:.3"' : ''}>
       <span>${shortDate(f.date)}（${weekdayOf(f.date)}）${SHIFT_TYPES[f.shift].name} → <b>${esc(f.staffId)}</b>${f.cross ? '（跨單位）' : ''}</span>
       <span>${f.flags.length ? f.flags.map((c) => `<span class="tag tag-warn">${c} ${FLAG_TEXT[c] || ''}</span>`).join(' ') : '<span style="color:var(--ink-faint)">無風險標記</span>'}</span>
     </div>`).join('');
@@ -1623,13 +1635,18 @@ function renderOverview() {
       label: SHIFT_TYPES[code].name,
       right: `${n} 班次`,
       segs: [{ v: n, color: 'var(--danger)', title: '缺口' }],
+      key: `shift:${code}`,
+      dim: dimShift(code),
     };
   }), { max: dates.length });
 
   $('#overview-body').innerHTML = `
     ${dashMeta(
       `資料範圍 ${shortDate(dates[0])}–${shortDate(dates[6])}${state.ovWeekStart === WEEK.start ? '（示範週）' : ''}`,
-      `<span class="ov-weeknav"><button class="btn btn-sm" id="btn-ovw-prev">◀ 前一週</button><button class="btn btn-sm" id="btn-ovw-demo">示範週</button><button class="btn btn-sm" id="btn-ovw-next">後一週 ▶</button></span>`
+      `<span class="ov-weeknav"><button class="btn btn-sm" id="btn-ovw-prev">◀ 前一週</button><button class="btn btn-sm" id="btn-ovw-demo">示範週</button><button class="btn btn-sm" id="btn-ovw-next">後一週 ▶</button></span>${
+        focus ? `<button class="tag tag-warn ov-focus-chip" id="btn-ov-clearfocus">聚焦：${
+          focus.type === 'shift' ? SHIFT_TYPES[focus.v].name : `${shortDate(focus.v)}（${weekdayOf(focus.v)}）`}　✕</button>` : ''
+      }`
     )}
 
     <div class="stat-grid">
@@ -1706,6 +1723,8 @@ function renderOverview() {
         ${chartDays(dates.map((d) => ({
           label: shortDate(d),
           v: cells.filter((c) => c.date === d).reduce((n2, c) => n2 + Math.min(c.scheduled, c.need), 0),
+          key: `day:${d}`,
+          dim: dimDay(d),
         })), { need: cells.filter((c) => c.date === dates[0]).reduce((n2, c) => n2 + c.need, 0) })}
         <p class="fineprint">紅柱＝當日未達需求；虛線＝每日需求班次。點柱可看明細（滑鼠停留）。</p>
       </div>
@@ -1784,8 +1803,9 @@ function renderOverview() {
       </div>
     </details>`;
 
-  on('#btn-ovw-prev', 'click', () => { state.ovWeekStart = addDays(state.ovWeekStart, -7); renderOverview(); });
-  on('#btn-ovw-next', 'click', () => { state.ovWeekStart = addDays(state.ovWeekStart, 7); renderOverview(); });
+  on('#btn-ov-clearfocus', 'click', () => { state.ovFocus = null; renderOverview(); });
+  on('#btn-ovw-prev', 'click', () => { state.ovWeekStart = addDays(state.ovWeekStart, -7); state.ovFocus = null; renderOverview(); });
+  on('#btn-ovw-next', 'click', () => { state.ovWeekStart = addDays(state.ovWeekStart, 7); state.ovFocus = null; renderOverview(); });
   on('#btn-ovw-demo', 'click', () => { state.ovWeekStart = WEEK.start; renderOverview(); });
   on('#btn-ov-intake', 'click', () => switchScreen('intake'));
   on('#btn-ov-multi', 'click', () => switchScreen('multi'));
@@ -3909,6 +3929,18 @@ function init() {
   const scrim = $('#nav-scrim');
   if (scrim) scrim.addEventListener('click', closeMobileNav);
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeMobileNav(); });
+  // Power BI 式交叉聚焦：點總覽圖表的長條＝聚焦該班別／該日（再點一次或 ✕ 清除）。
+  // 委派綁在持久容器上、只綁一次——放進 renderOverview 會隨重繪重複掛監聽。
+  on('#overview-body', 'click', (ev) => {
+    const t = ev.target.closest('[data-ck]');
+    if (!t) return;
+    const idx = t.dataset.ck.indexOf(':');
+    const type = t.dataset.ck.slice(0, idx);
+    const v = t.dataset.ck.slice(idx + 1);
+    const same = state.ovFocus && state.ovFocus.type === type && state.ovFocus.v === v;
+    state.ovFocus = same ? null : { type, v };
+    renderOverview();
+  });
   initPortal();
   initFhir();
   // 身份視角：還原上次選擇（網址畫面優先於身份預設首頁）
