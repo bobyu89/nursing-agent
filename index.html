@@ -60,7 +60,7 @@
       <button class="portal-card" id="portal-sched">
         <div class="portal-glyph">排</div>
         <h2>排班系統</h2>
-        <p>排定與管理班表：點格編輯、Excel 貼上匯入、換班簽核預檢、一鍵生成下週合規草稿。
+        <p>排定與管理班表：點格編輯、Excel 貼上匯入、換班簽核預檢、一鍵生成下一週合規草稿。
            H1–H10 規則（勞基法四週彈性工時、母性保護）在班表排出來的那一刻就把關。</p>
         <div class="portal-status" id="portal-sched-status"></div>
         <div class="portal-go">進入排班系統 →</div>
@@ -354,7 +354,7 @@
   <section class="screen" id="screen-roster">
     <div class="screen-head">
       <h1>班表與人員</h1>
-      <p class="lede">這裡是<strong>排班工作區</strong>，以<strong>月</strong>為單位：點格子直接排班、下載範例 Excel 填好匯回、或套用畫面 8 的生成草稿。<strong>每一次變更都自動儲存</strong>並留痕，全系統畫面（戰情、缺口、負荷、調度⋯）即時同步重算。</p>
+      <p class="lede">這裡是<strong>內科病房 3A 的排班工作區</strong>，以<strong>月</strong>為單位：點格子直接排班、下載範例 Excel 填好匯回、或套用畫面 8 的生成草稿。<strong>每一次變更都自動儲存</strong>並留痕，全系統畫面（戰情、缺口、負荷、調度⋯）即時同步重算。排班是病房別的事——跨單位人員由其所屬單位排班。</p>
     </div>
     <div class="card">
       <div class="card-head">
@@ -362,6 +362,7 @@
         <span>
           <span class="tag tag-ok" id="roster-saved" hidden>已自動儲存</span>
           <span class="tag tag-warn" id="roster-modified" hidden>已修改（非示範預設）</span>
+          <span class="tag tag-brand">內科病房 3A</span>
           <span class="tag tag-neutral" id="month-label"></span>
         </span>
       </div>
@@ -568,7 +569,7 @@
         <span class="tag tag-neutral">門檻與規則庫連動</span>
       </div>
       <div id="gen-scenario"></div>
-      <button class="btn btn-primary" id="btn-gen-run" data-ico="calendar">生成下週班表</button>
+      <button class="btn btn-primary" id="btn-gen-run" data-ico="calendar">生成下一週班表（8/31 起）</button>
       <p class="fineprint">
         生成使用與缺班替補<b>完全相同的一份 H1–H6 檢查程式碼</b>與規則庫參數；
         現有班表作為邊界條件——週日大夜的殘影（H4）、跨週的連續上班天數（H5）都會約束下週的生成。
@@ -601,7 +602,7 @@
       <div id="policy-result"></div>
       <p class="fineprint">
         試算範圍：<b>主動預警</b>（現有班表立刻多出的違規／達門檻）、<b>本週缺口合法吸收</b>（殘餘缺口變化）、
-        <b>下週班表生成</b>（排不出的格子與阻擋原因）——三者用的都是替補評估同一份 H1–H10 程式碼。
+        <b>下一週班表生成</b>（排不出的格子與阻擋原因）——三者用的都是替補評估同一份 H1–H10 程式碼。
         「沒有影響」也是誠實的答案：代表這條收緊在目前班表下有餘裕。
       </p>
     </div>

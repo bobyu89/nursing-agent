@@ -1013,7 +1013,7 @@ function handlePolicyRun() {
         <div class="q-hint" style="margin:4px 0">新規則下無人可合法吸收的缺口：${d.residualCells.map((c) =>
     `${shortDate(c.date)} ${SHIFT_TYPES[c.shift].name} @ ${esc(UNITS[c.unit] || c.unit)}`).join('、')}</div>` : ''}
 
-      <div class="fact" style="margin-top:10px"><span><b>下週班表生成：填滿格數（共 ${d.genSlotCount} 格）</b></span><span>${deltaTag(d.genFilledBefore, d.genFilledAfter, true)}</span></div>
+      <div class="fact" style="margin-top:10px"><span><b>下一週班表生成：填滿格數（共 ${d.genSlotCount} 格）</b></span><span>${deltaTag(d.genFilledBefore, d.genFilledAfter, true)}</span></div>
       ${d.genBlockersAfter.length ? `
         <div class="q-hint" style="margin:4px 0">排不出的格子，阻擋原因分佈：${d.genBlockersAfter.map((b) =>
     `${b.code}×${b.count}`).join('、')}</div>` : ''}
@@ -1319,7 +1319,7 @@ function renderOverview() {
       <div class="btn-row" style="margin-top:12px">
         <button class="btn btn-primary" id="btn-ov-intake">處理今日缺班通報 →</button>
         <button class="btn" id="btn-ov-multi">多筆缺班與全局指派 →</button>
-        <button class="btn" id="btn-ov-generate">生成下週班表（第 0 層）→</button>
+        <button class="btn" id="btn-ov-generate">生成下一週班表（第 0 層）→</button>
       </div>
     </div>
 
@@ -2268,7 +2268,14 @@ function renderAuditLog() {
 
 /* ══ 畫面 5：班表與人員 ═════════════════════════════════ */
 
-/** 目前顯示月份的所有日期（排班以月為單位；示範資料集中在 2026-08 第一週） */
+/** 排班工作區的人員範圍：本病房（內科 3A）——排班是病房別的事，
+ *  跨單位人員（如外科 N-08）由其所屬單位排班，這裡只讀不排 */
+const ROSTER_UNIT = 'MED-3A';
+function rosterStaff() {
+  return STAFF.filter((s) => s.unit === ROSTER_UNIT);
+}
+
+/** 目前顯示月份的所有日期（排班以月為單位；示範資料涵蓋 2026-08 整月） */
 function rosterDates() {
   const [y, m] = state.rosterMonth.split('-').map(Number);
   const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
@@ -2296,7 +2303,7 @@ function renderRoster() {
     }).join('')
   }<th class="center">月工時</th></tr></thead>`;
 
-  const body = STAFF.map((s) => {
+  const body = rosterStaff().map((s) => {
     const cells = dates.map((d) => {
       if (engine.isOnLeave(s, d)) return '<td class="center"><span class="cell cell-L">假</span></td>';
       const sh = SHIFTS.find((x) => x.staffId === s.id && x.date === d);
@@ -2399,10 +2406,13 @@ function applyRosterRows(rows, sourceLabel) {
   dataRows.forEach((cellsRaw, li) => {
     const cells = cellsRaw.map((c) => String(c == null ? '' : c).trim());
     const id = (cells[0] || '').toUpperCase();
-    const staff = STAFF.find((s) => s.id === id);
+    const staff = rosterStaff().find((s) => s.id === id);
     if (!staff) {
       if (cells.every((c) => c === '')) return;   // 全空列靜默略過
-      errors.push(`第 ${li + 1} 列：查無人員代號「${cells[0] || '(空白)'}」`);
+      const other = STAFF.find((s) => s.id === id);
+      errors.push(other
+        ? `第 ${li + 1} 列：「${id}」屬 ${UNITS[other.unit] || other.unit}，本工作區僅排內科 3A`
+        : `第 ${li + 1} 列：查無人員代號「${cells[0] || '(空白)'}」`);
       return;
     }
     const rowEntries = [];
@@ -2590,7 +2600,7 @@ function rosterTemplateCsv() {
   const NAME = { D: '白', E: '小', N: '大' };
   const header = ['人員代號', '職務', ...dates.map((d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`)];
   const lines = [header.join(',')];
-  STAFF.forEach((s) => {
+  rosterStaff().forEach((s) => {
     const cells = dates.map((d) => {
       if (engine.isOnLeave(s, d)) return '假';
       const sh = SHIFTS.find((x) => x.staffId === s.id && x.date === d);
