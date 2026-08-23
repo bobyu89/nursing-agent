@@ -431,16 +431,153 @@ const SCREEN_ICONS = {
   dashboard: 'clipboard', rules: 'shield', policy: 'layers', fhir: 'link',
 };
 
-function renderNav(active) {
+/* ══ 新手教學（Guided Tour）═══════════════════════════════
+ * 六步帶完一筆缺班處理的完整治理迴路。硬條件：完成目前步驟前，
+ * 其餘畫面在側欄上鎖（🔒）、直接跳轉也會被擋——一步做完才開下一步。
+ * 目前該點的按鈕會發光提示。可隨時跳過；完成／跳過後全部解鎖。 */
+
+const TOUR_KEY = 'shiftguard.tour.v1';
+const TOUR_STEPS = [
+  { title: '第 1 步｜今日戰情', text: '護理長每天從這裡開始：今天三班到齊了嗎、未來 48 小時哪裡有洞。點側欄發光的「今日戰情」。',
+    screens: ['portal', 'today'], target: '#nav .side-item[data-screen="today"]', doneOn: 'visit:today' },
+  { title: '第 2 步｜從洞出發', text: '「未來 48 小時」列出了 8/9 的缺口。點缺口列右側的「快速通報」，把這個洞交給系統。',
+    screens: ['portal', 'today', 'intake'], target: '#today-body .today-goto-intake', doneOn: 'visit:intake' },
+  { title: '第 3 步｜解析通報訊息', text: '這是昨晚收到的請假訊息。按「以 AI 解析通報訊息」——寫到的抓出來，沒寫到的不臆測、轉為追問。',
+    screens: ['portal', 'today', 'intake'], target: '#btn-parse', doneOn: 'parsed' },
+  { title: '第 4 步｜尋找合規替補', text: '按「確認缺班條件，開始尋找替補」。從這裡開始是確定性規則引擎（H1–H10），語言模型不參與計算。',
+    screens: ['portal', 'today', 'intake', 'candidates'], target: '#btn-evaluate', doneOn: 'evaluated' },
+  { title: '第 5 步｜選定人選', text: '合格者每一分都有依據，不推薦者逐條寫明原因。點開發光的第一名卡片看評分細節，然後按卡片裡的「選定」按鈕。',
+    screens: ['portal', 'today', 'intake', 'candidates', 'confirm'], target: '.cand-head', doneOn: 'chosen' },
+  { title: '第 6 步｜人工確認並留痕', text: '勾選三項人工確認——全部勾完，結案按鈕才會解鎖（Agent 不代為執行）。按下「完成主管確認並留痕」。',
+    screens: ['portal', 'today', 'intake', 'candidates', 'confirm', 'dashboard'], target: '#confirm-checklist', doneOn: 'confirmed' },
+  { title: '🎉 完成！一筆缺班的完整治理迴路', text: '通報 → 解析 → 合規評估 → 主管確認 → 寫回留痕，全部走完。側欄已全部解鎖，接著可以探索：換班簽核、調度棋盤、政策沙盤⋯',
+    screens: null, target: null, doneOn: null },
+];
+
+const TOUR = {
+  active: false,
+  idx: 0,
+  start() {
+    this.active = true;
+    this.idx = 0;
+    switchScreen('portal');
+    this.render();
+  },
+  end(flag) {
+    this.active = false;
+    this.clearGlow();
+    const card = $('#tour-card');
+    if (card) card.remove();
+    try { localStorage.setItem(TOUR_KEY, flag); } catch (e) {}
+    renderNav(screenFromHash());
+  },
+  step() { return TOUR_STEPS[this.idx]; },
+  allowed(screen) {
+    if (!this.active) return true;
+    const st = this.step();
+    return !st.screens || st.screens.includes(screen);
+  },
+  notify(evt) {
+    if (!this.active) return;
+    if (this.step().doneOn === evt) {
+      this.idx += 1;
+      this.render();
+      renderNav(screenFromHash());   // 解鎖進度反映到側欄
+    }
+  },
+  clearGlow() { $$('.tour-glow').forEach((el) => el.classList.remove('tour-glow')); },
+  render() {
+    const st = this.step();
+    let card = $('#tour-card');
+    if (!card) {
+      card = document.createElement('div');
+      card.id = 'tour-card';
+      document.body.appendChild(card);
+    }
+    const last = this.idx === TOUR_STEPS.length - 1;
+    card.innerHTML = `
+      <div class="tour-head"><b>${esc(st.title)}</b><span class="tour-count">${Math.min(this.idx + 1, 6)}/6</span></div>
+      <p>${esc(st.text)}</p>
+      <div class="tour-actions">
+        ${last ? '<button class="btn btn-sm btn-primary" id="btn-tour-done" style="margin-top:0">完成教學</button>'
+               : '<button class="btn btn-sm" id="btn-tour-skip">跳過教學</button>'}
+      </div>`;
+    on('#btn-tour-skip', 'click', () => this.end('skip'));
+    on('#btn-tour-done', 'click', () => { this.end('done'); toast('新手教學完成！側欄的「🎓 新手教學」可以隨時再看一次'); });
+    this.applyGlow();
+  },
+  applyGlow(tries) {
+    this.clearGlow();
+    const st = this.step();
+    if (!st || !st.target || !this.active) return;
+    let el = document.querySelector(st.target);
+    // 目標在收合的分組裡（display:none）＝發了光也看不到——自動展開該組再發
+    if (el && !el.offsetParent) {
+      const grp = el.closest('.side-group');
+      if (grp && grp.dataset.group) {
+        NAV_OPEN.add(grp.dataset.group);
+        renderNav(screenFromHash(), false);
+        el = document.querySelector(st.target);
+      }
+    }
+    if (el && el.offsetParent) { el.classList.add('tour-glow'); return; }
+    // 目標可能還在非同步渲染中（候選卡的 LLM 摘要要跑幾秒）——輪詢重試最多 8 秒
+    const n = tries || 0;
+    if (n < 20) setTimeout(() => this.applyGlow(n + 1), 400);
+  },
+};
+
+/** 首次進站的歡迎卡：只出現一次；選「開始教學」進入導覽模式 */
+function maybeShowWelcome() {
+  let flag = null;
+  try { flag = localStorage.getItem(TOUR_KEY); } catch (e) {}
+  if (flag) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'welcome-wrap';
+  wrap.innerHTML = `
+    <div class="welcome-card">
+      <svg viewBox="0 0 64 64" width="72" height="72" aria-hidden="true"><ellipse cx="25.5" cy="58" rx="4" ry="2.3" fill="#f2a93b"/><ellipse cx="38.5" cy="58" rx="4" ry="2.3" fill="#f2a93b"/><path d="M32 7.5 C44.5 7.5 50.5 18.5 50.5 33.5 C50.5 48.5 43.5 57.5 32 57.5 C20.5 57.5 13.5 48.5 13.5 33.5 C13.5 18.5 19.5 7.5 32 7.5 Z" fill="#4060ef"/><path d="M16.6 29.5 C13.2 34.5 13.2 45.5 17.2 50.5 C19.6 46.5 20.1 37.5 19.1 30.5 Z" fill="#3350dd"/><path d="M47.4 29.5 C50.8 34.5 50.8 45.5 46.8 50.5 C44.4 46.5 43.9 37.5 44.9 30.5 Z" fill="#3350dd"/><path d="M32 29.5 C40 29.5 44 33.5 44 39.5 C44 47.5 39.5 54 32 55.2 C24.5 54 20 47.5 20 39.5 C20 33.5 24 29.5 32 29.5 Z" fill="#fff6ea"/><circle cx="26" cy="23.5" r="3" fill="#16233a"/><circle cx="38" cy="23.5" r="3" fill="#16233a"/><circle cx="27" cy="22.5" r="1" fill="#fff"/><circle cx="39" cy="22.5" r="1" fill="#fff"/><ellipse cx="20.6" cy="27.4" rx="2.1" ry="1.3" fill="#ee94a5"/><ellipse cx="43.4" cy="27.4" rx="2.1" ry="1.3" fill="#ee94a5"/><path d="M32 26.6 L35.2 29 Q32 32.2 28.8 29 Z" fill="#f2a93b"/></svg>
+      <h2>歡迎使用 班守 ShiftGuard</h2>
+      <p>第一次來？功能有點多——讓守守用 <b>6 個步驟</b>帶你跑完一筆缺班處理，
+         從通報到留痕大約三分鐘。教學中一次只開放一步，做完才解鎖下一步。</p>
+      <div class="btn-row" style="justify-content:center">
+        <button class="btn btn-primary" id="btn-welcome-start" style="margin-top:0">🎓 開始新手教學</button>
+        <button class="btn" id="btn-welcome-skip">先自己逛逛</button>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+  on('#btn-welcome-start', 'click', () => { wrap.remove(); TOUR.start(); });
+  on('#btn-welcome-skip', 'click', () => {
+    wrap.remove();
+    try { localStorage.setItem(TOUR_KEY, 'skip'); } catch (e) {}
+    toast('隨時可以按側欄底部的「🎓 新手教學」開始導覽');
+  });
+}
+
+/** 側欄分組展開狀態：預設只開目前畫面所在的組，其餘收合——
+ *  新手看到的是四個大分類，不是十八個功能。使用者手動開合的狀態在 session 內保留。 */
+const NAV_OPEN = new Set();
+
+function renderNav(active, autoOpen = true) {
   const g = navGroupOf(active);
-  $('#nav').innerHTML = NAV_GROUPS.map((x) => `
-    <div class="side-group">
-      <div class="side-label">${x.label}</div>
-      ${x.screens.map(([id, label, no]) => `
-        <button class="side-item${id === active ? ' active' : ''}" data-screen="${id}">
-          ${icon(SCREEN_ICONS[id] || NAV_ICONS[x.key])}<span class="side-txt">${label}</span><span class="side-no">${no}</span>
-        </button>`).join('')}
-    </div>`).join('');
+  if (autoOpen) NAV_OPEN.add(g.key);   // 切換畫面時自動展開所在組；手動收合時不強制
+  $('#nav').innerHTML = NAV_GROUPS.map((x) => {
+    const open = NAV_OPEN.has(x.key) || x.screens.length === 1;
+    return `
+    <div class="side-group${open ? '' : ' collapsed'}" data-group="${x.key}">
+      <button class="side-label" data-toggle="${x.key}" aria-expanded="${open}">
+        <span>${x.label}</span>
+        <svg class="chev" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      ${x.screens.map(([id, label]) => {
+        const locked = !TOUR.allowed(id);
+        return `
+        <button class="side-item${id === active ? ' active' : ''}${locked ? ' locked' : ''}" data-screen="${id}"${locked ? ' aria-disabled="true" title="請先完成目前的教學步驟"' : ''}>
+          ${icon(SCREEN_ICONS[id] || NAV_ICONS[x.key])}<span class="side-txt">${label}</span>${locked ? '<span class="side-lock" aria-hidden="true">🔒</span>' : ''}
+        </button>`;
+      }).join('')}
+    </div>`;
+  }).join('');
   const t = $('#top-title');
   const cur = g.screens.find((sc) => sc[0] === active);
   if (t) t.textContent = `${g.label}｜${cur ? cur[1] : ''}`;
@@ -468,6 +605,12 @@ function closeMobileNav() {
 }
 
 function switchScreen(name) {
+  // 教學模式的硬條件：目前步驟尚未完成前，其餘畫面一律擋下（含 #hash 直接跳）
+  if (TOUR.active && !TOUR.allowed(name)) {
+    toast('請先完成目前的教學步驟——跟著發光的按鈕走', 'warn');
+    TOUR.applyGlow();
+    return;
+  }
   closeMobileNav();   // 手機上點任何導覽項或跳轉畫面時收起抽屜
   $$('.screen').forEach((s) => s.classList.toggle('active', s.id === `screen-${name}`));
   renderNav(name);
@@ -480,6 +623,7 @@ function switchScreen(name) {
     MOTION.enter(active);
     MOTION.count(Array.from(active.querySelectorAll('.ov-num, .kpi-num')));
   }
+  TOUR.notify(`visit:${name}`);   // 教學步驟推進放最後：hash 與畫面狀態已定
 }
 
 /** 進場畫面：#hash 指名畫面（#roster）或分組（#sched → 該組第一個畫面），否則入口 */
@@ -1476,6 +1620,7 @@ async function doParse() {
   const got = ['date', 'shift', 'unit', 'requiredCerts'].filter((f) => parsed.extracted[f].value);
   logAction('解析通報訊息',
     `自訊息抽出 ${got.length} 項欄位（${got.join('、')}）；${parsed.missing.length} 項未載明，轉為追問`);
+  TOUR.notify('parsed');
 }
 
 function handleEvaluate() {
@@ -1519,6 +1664,7 @@ function handleEvaluate() {
   renderRoster();
   renderStaffTable();   // 證照效期以本次事件日期重新判定
   switchScreen('candidates');
+  TOUR.notify('evaluated');
 }
 
 /* ══ 畫面 1：快速通報（班表點選）════════════════════════
@@ -2153,9 +2299,11 @@ async function chooseCandidate(idx) {
     }
 
     switchScreen('dashboard');
+    TOUR.notify('confirmed');
   });
 
   switchScreen('confirm');
+  TOUR.notify('chosen');
 }
 
 /* ══ 畫面 4：公平性與留痕 ═══════════════════════════════ */
@@ -3471,8 +3619,21 @@ function init() {
 
   // 側欄導覽：事件委派（每次切換都重繪，委派在容器上不掉監聽）
   on('#nav', 'click', (ev) => {
+    const label = ev.target.closest('.side-label');
+    if (label) {   // 分組收合
+      const key = label.dataset.toggle;
+      if (NAV_OPEN.has(key)) NAV_OPEN.delete(key); else NAV_OPEN.add(key);
+      renderNav(screenFromHash(), false);
+      return;
+    }
     const item = ev.target.closest('.side-item');
-    if (item) switchScreen(item.dataset.screen);
+    if (!item) return;
+    if (item.classList.contains('locked')) {
+      toast('請先完成目前的教學步驟——跟著發光的按鈕走', 'warn');
+      TOUR.applyGlow();
+      return;
+    }
+    switchScreen(item.dataset.screen);
   });
   // 手機抽屜：漢堡開、遮罩／Esc 關（switchScreen 內已含「切畫面即收抽屜」）
   const burger = $('#nav-burger');
@@ -3484,6 +3645,9 @@ function init() {
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeMobileNav(); });
   initPortal();
   initFhir();
+  // 新手教學：側欄底部隨時可重啟；首次進站顯示歡迎卡
+  on('#btn-tour-restart', 'click', () => { TOUR.start(); toast('新手教學開始——跟著發光的按鈕走'); });
+  maybeShowWelcome();
   // 支援 #hash 直達（home.html 的「排班系統／替班系統」按鈕、書籤、返回鍵）
   window.addEventListener('hashchange', () => {
     const name = screenFromHash();

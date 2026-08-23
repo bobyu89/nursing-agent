@@ -106,12 +106,26 @@ a.badge:hover { color: var(--ink); border-color: var(--ink-faint); }
 .side-item:hover { background: var(--hover); color: var(--ink); }
 .side-item.active { background: var(--brand-tint); color: var(--brand-dark); font-weight: 700; }
 .side-item.active .ico { opacity: 1; }
-.side-no {
-  width: 20px; height: 20px; border-radius: 6px; flex: none;
-  background: var(--line-soft); color: var(--ink-faint);
-  display: grid; place-items: center; font-size: 11px; font-weight: 700;
+/* 分組收合：新手先看到四個大分類，點分類名展開 */
+.side-label { appearance: none; border: 0; background: none; cursor: pointer; width: 100%;
+  display: flex; align-items: center; justify-content: space-between; }
+.side-label:hover { color: var(--ink); }
+.side-label .chev { transition: transform .18s ease; transform: rotate(90deg); opacity: .55; }
+.side-group.collapsed .side-label .chev { transform: rotate(0deg); }
+.side-group.collapsed .side-item { display: none; }
+
+/* 教學模式的鎖定項：完成目前步驟前不可點 */
+.side-item.locked { opacity: .42; cursor: not-allowed; }
+.side-item.locked:hover { background: none; color: var(--ink-soft); }
+.side-lock { font-size: 11px; flex: none; }
+
+/* 新手教學入口（側欄底部） */
+.side-tour {
+  appearance: none; border: 1px dashed var(--brand); background: var(--brand-tint);
+  color: var(--brand-dark); cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
+  border-radius: 9px; padding: 9px 10px; text-align: center;
 }
-.side-item.active .side-no { background: var(--brand); color: var(--on-brand); }
+.side-tour:hover { background: #e2e9fd; }
 .side-home {
   font-size: 12.5px; color: var(--ink-faint);
   padding: 10px 10px 2px; border-top: 1px solid var(--line-soft);
@@ -638,6 +652,40 @@ tbody tr:hover td { background: var(--hover); }
   .reasons { gap: 10px; }
   .footer { padding: 14px 16px; }
 }
+
+/* ── 新手教學：發光提示、步驟卡、歡迎卡 ─────────────── */
+.tour-glow {
+  position: relative; z-index: 45;
+  box-shadow: 0 0 0 3px var(--brand), 0 0 22px rgba(64,96,239,.5) !important;
+  border-radius: 10px;
+  animation: tour-pulse 1.5s ease-in-out infinite;
+}
+@keyframes tour-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--brand), 0 0 10px rgba(64,96,239,.35); }
+  50%      { box-shadow: 0 0 0 5px var(--brand), 0 0 26px rgba(64,96,239,.65); }
+}
+#tour-card {
+  position: fixed; right: 18px; bottom: 18px; z-index: 90;
+  width: min(340px, calc(100vw - 36px));
+  background: var(--surface); border: 1px solid var(--brand); border-radius: 14px;
+  box-shadow: 0 14px 44px rgba(16,24,40,.22);
+  padding: 14px 16px 12px;
+}
+#tour-card .tour-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+#tour-card .tour-head b { font-size: 14.5px; }
+#tour-card .tour-count { font-size: 11.5px; font-weight: 700; color: var(--brand-dark); background: var(--brand-tint); border-radius: 999px; padding: 2px 9px; flex: none; }
+#tour-card p { margin: 0 0 10px; font-size: 13px; line-height: 1.75; color: var(--ink-soft); }
+#tour-card .tour-actions { display: flex; justify-content: flex-end; }
+#welcome-wrap {
+  position: fixed; inset: 0; z-index: 95; display: grid; place-items: center;
+  background: rgba(16,24,40,.5); padding: 20px;
+}
+.welcome-card {
+  background: var(--surface); border-radius: 18px; max-width: 440px; width: 100%;
+  padding: 30px 30px 26px; text-align: center; box-shadow: 0 24px 70px rgba(16,24,40,.3);
+}
+.welcome-card h2 { font-size: 21px; margin: 10px 0 8px; }
+.welcome-card p { margin: 0 0 18px; font-size: 13.5px; line-height: 1.85; color: var(--ink-soft); text-align: left; }
 
 /* ── 動效偏好：使用者要求減少動態時全部關閉 ──────────── */
 @media (prefers-reduced-motion: reduce) {
