@@ -93,7 +93,7 @@ cd cloudflare/linebot; npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
 讓聊天室下方常駐六格大按鈕（戰情儀表板／換班預檢／調度棋盤／負荷雷達／通報缺班／開啟平台），
 底部另有一條「使用說明」細長列——第一次用的人點它就拿到完整教學與照著打的按鈕。
 本目錄的 `richmenu.ps1` 會自動：用 Windows 內建 GDI+ 畫出與平台同視覺的 2500×1686 選單圖
-（「開啟平台」格由班守 IP「守守」坐鎮——企鵝的貝茲幾何與 `assets/logo.svg` 同一份，GDI+ 手工重繪）→
+（「開啟平台」格由班守 IP「守守」（北極熊）坐鎮——幾何與 `assets/logo.svg` 同一份，GDI+ 手工重繪）→
 呼叫 Rich Menu API 建立選單 → 上傳圖片 → 設為所有人的預設選單 → 清掉舊版（安全換版）。
 「開啟平台」的動作在腳本頂端設定了 `$LIFF_ID`（與 `wrangler.toml` 同步）時走
 `liff.line.me` 全高視窗，與 bot 按鈕行為一致；清空則退回一般網址：

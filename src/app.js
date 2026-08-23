@@ -493,7 +493,7 @@ const SCREEN_ICONS = {
  * 其餘畫面在側欄上鎖（🔒）、直接跳轉也會被擋——一步做完才開下一步。
  * 目前該點的按鈕會發光提示。可隨時跳過；完成／跳過後全部解鎖。 */
 
-const PENGUIN_SVG = '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><ellipse cx="25.5" cy="58" rx="4" ry="2.3" fill="#f2a93b"/><ellipse cx="38.5" cy="58" rx="4" ry="2.3" fill="#f2a93b"/><path d="M32 7.5 C44.5 7.5 50.5 18.5 50.5 33.5 C50.5 48.5 43.5 57.5 32 57.5 C20.5 57.5 13.5 48.5 13.5 33.5 C13.5 18.5 19.5 7.5 32 7.5 Z" fill="#4060ef"/><path d="M16.6 29.5 C13.2 34.5 13.2 45.5 17.2 50.5 C19.6 46.5 20.1 37.5 19.1 30.5 Z" fill="#3350dd"/><path d="M47.4 29.5 C50.8 34.5 50.8 45.5 46.8 50.5 C44.4 46.5 43.9 37.5 44.9 30.5 Z" fill="#3350dd"/><path d="M32 29.5 C40 29.5 44 33.5 44 39.5 C44 47.5 39.5 54 32 55.2 C24.5 54 20 47.5 20 39.5 C20 33.5 24 29.5 32 29.5 Z" fill="#fff6ea"/><circle cx="26" cy="23.5" r="3" fill="#16233a"/><circle cx="38" cy="23.5" r="3" fill="#16233a"/><circle cx="27" cy="22.5" r="1" fill="#fff"/><circle cx="39" cy="22.5" r="1" fill="#fff"/><ellipse cx="20.6" cy="27.4" rx="2.1" ry="1.3" fill="#ee94a5"/><ellipse cx="43.4" cy="27.4" rx="2.1" ry="1.3" fill="#ee94a5"/><path d="M32 26.6 L35.2 29 Q32 32.2 28.8 29 Z" fill="#f2a93b"/></svg>';
+const MASCOT_SVG = '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="14.5" cy="15" r="9.2" fill="#f7efdf"/><circle cx="49.5" cy="15" r="9.2" fill="#f7efdf"/><circle cx="15.5" cy="16" r="4.8" fill="#d9d4c8"/><circle cx="48.5" cy="16" r="4.8" fill="#d9d4c8"/><path d="M32 9 C48.5 9 58 22 58 38 C58 53 47 61.5 32 61.5 C17 61.5 6 53 6 38 C6 22 15.5 9 32 9 Z" fill="#f7efdf"/><ellipse cx="32" cy="45" rx="11.5" ry="9" fill="#e6e1d4"/><circle cx="22.5" cy="33.5" r="2.9" fill="#16233a"/><circle cx="41.5" cy="33.5" r="2.9" fill="#16233a"/><circle cx="23.5" cy="32.5" r="1" fill="#ffffff"/><circle cx="42.5" cy="32.5" r="1" fill="#ffffff"/><rect x="27.4" y="39.2" width="9.2" height="5.6" rx="2.8" fill="#16233a"/><path d="M28.5 49.5 Q32 52.5 35.5 49.5" fill="none" stroke="#16233a" stroke-width="1.8" stroke-linecap="round"/></svg>';
 
 const TOUR_KEY = 'shiftguard.tour.v1';
 const TOUR_STEPS = [
@@ -526,7 +526,7 @@ const TOUR = {
   end(flag) {
     this.active = false;
     this.clearGlow();
-    this.hidePenguin();
+    this.hideMascot();
     const card = $('#tour-card');
     if (card) card.remove();
     try { localStorage.setItem(TOUR_KEY, flag); } catch (e) {}
@@ -547,21 +547,21 @@ const TOUR = {
     }
   },
   clearGlow() { $$('.tour-glow').forEach((el) => el.classList.remove('tour-glow')); },
-  _penguinTarget: null,
-  penguinEl() {
-    let el = $('#tour-penguin');
+  _mascotTarget: null,
+  mascotEl() {
+    let el = $('#tour-mascot');
     if (!el) {
       el = document.createElement('div');
-      el.id = 'tour-penguin';
-      el.innerHTML = `<div class="tp-bob">${PENGUIN_SVG}</div>`;
+      el.id = 'tour-mascot';
+      el.innerHTML = `<div class="tp-bob">${MASCOT_SVG}</div>`;
       el.hidden = true;
       document.body.appendChild(el);
     }
     return el;
   },
-  placePenguin(target) {
-    const p = this.penguinEl();
-    this._penguinTarget = target;
+  placeMascot(target) {
+    const p = this.mascotEl();
+    this._mascotTarget = target;
     const r = target.getBoundingClientRect();
     const SIZE = 62;
     let left; let flip = false;
@@ -578,14 +578,14 @@ const TOUR = {
     p.classList.toggle('flip', flip);
     p.hidden = false;
   },
-  hidePenguin() {
-    const p = $('#tour-penguin');
+  hideMascot() {
+    const p = $('#tour-mascot');
     if (p) p.hidden = true;
-    this._penguinTarget = null;
+    this._mascotTarget = null;
   },
-  repositionPenguin() {
-    if (!this.active || !this._penguinTarget || !this._penguinTarget.isConnected) return;
-    this.placePenguin(this._penguinTarget);
+  repositionMascot() {
+    if (!this.active || !this._mascotTarget || !this._mascotTarget.isConnected) return;
+    this.placeMascot(this._mascotTarget);
   },
   render() {
     const st = this.step();
@@ -593,7 +593,7 @@ const TOUR = {
       // 最終步：守守跳到教學卡上慶祝
       setTimeout(() => {
         const card = $('#tour-card');
-        if (card && this.active) this.placePenguin(card);
+        if (card && this.active) this.placeMascot(card);
       }, 60);
     }
     let card = $('#tour-card');
@@ -604,7 +604,7 @@ const TOUR = {
     }
     const last = this.idx === TOUR_STEPS.length - 1;
     card.innerHTML = `
-      <div class="tour-head"><span class="tour-avatar">${PENGUIN_SVG}</span><b>${esc(st.title)}</b><span class="tour-count">${Math.min(this.idx + 1, 6)}/6</span></div>
+      <div class="tour-head"><span class="tour-avatar">${MASCOT_SVG}</span><b>${esc(st.title)}</b><span class="tour-count">${Math.min(this.idx + 1, 6)}/6</span></div>
       <p>${esc(st.text)}</p>
       <div class="tour-actions">
         ${last ? '<button class="btn btn-sm btn-primary" id="btn-tour-done" style="margin-top:0">完成教學</button>'
@@ -632,8 +632,8 @@ const TOUR = {
         el = document.querySelector(st.target);
       }
     }
-    if (el && el.offsetParent) { el.classList.add('tour-glow'); this.placePenguin(el); return; }
-    this.hidePenguin();
+    if (el && el.offsetParent) { el.classList.add('tour-glow'); this.placeMascot(el); return; }
+    this.hideMascot();
     // 目標可能還在非同步渲染中（候選卡的 LLM 摘要要跑幾秒）——輪詢重試最多 8 秒
     const n = tries || 0;
     if (n < 20) setTimeout(() => this.applyGlow(n + 1), 400);
@@ -649,7 +649,7 @@ function maybeShowWelcome() {
   wrap.id = 'welcome-wrap';
   wrap.innerHTML = `
     <div class="welcome-card">
-      <span class="welcome-mascot">${PENGUIN_SVG}</span>
+      <span class="welcome-mascot">${MASCOT_SVG}</span>
       <h2>歡迎使用 班守 ShiftGuard</h2>
       <p>第一次來？功能有點多——讓守守用 <b>6 個步驟</b>帶你跑完一筆缺班處理，
          從通報到留痕大約三分鐘。教學中一次只開放一步，做完才解鎖下一步。</p>
@@ -4014,8 +4014,8 @@ function init() {
     const drill = ev.target.closest('[data-drill]');
     if (drill) { ev.preventDefault(); drill.click(); }
   });
-  window.addEventListener('scroll', () => TOUR.repositionPenguin(), true);
-  window.addEventListener('resize', () => TOUR.repositionPenguin());
+  window.addEventListener('scroll', () => TOUR.repositionMascot(), true);
+  window.addEventListener('resize', () => TOUR.repositionMascot());
   initPortal();
   initFhir();
   // 身份視角：還原上次選擇（網址畫面優先於身份預設首頁）

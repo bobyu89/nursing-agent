@@ -66,7 +66,7 @@ $cells = @(
   @{ title = '調度棋盤';   sub = '守恆律借調建議';     icon = 'board' },
   @{ title = '負荷雷達';   sub = '誰一直在扛，看得見'; icon = 'gauge' },
   @{ title = '通報缺班';   sub = '一鍵帶入請假範例';   icon = 'chat'  },
-  @{ title = '開啟平台';   sub = '守守帶路・完整功能'; icon = 'penguin' }
+  @{ title = '開啟平台';   sub = '守守帶路・完整功能'; icon = 'mascot' }
 )
 
 $margin = 40.0; $gap = 40.0
@@ -87,73 +87,46 @@ $penLine  = New-Object System.Drawing.Pen($cLine, 4)
 $penBrand = New-Object System.Drawing.Pen($cBrand, 14)
 $penBrand.StartCap = 'Round'; $penBrand.EndCap = 'Round'
 
-function Draw-Penguin([float]$cx, [float]$cy, [float]$s) {
-  # 班守 IP「守守」（輪班企鵝）：與 assets/logo.svg 同一份幾何，SVG 貝茲手工轉 GDI+
-  # (cx,cy)＝企鵝視覺中心（單位座標 32,34 的落點）；s＝縮放（1 單位 → s px）
-  # 唯一的 Q（二次貝茲）已轉三次：C1=P0+2/3(Q-P0)、C2=P2+2/3(Q-P2)
+function Draw-Mascot([float]$cx, [float]$cy, [float]$s) {
+  # 班守 IP「守守」（北極熊）：與 assets/logo.svg 同一份幾何，SVG 手工轉 GDI+
+  # (cx,cy)＝視覺中心（單位座標 32,34 的落點）；s＝縮放（1 單位 → s px）
   $ox = $cx - 32 * $s; $oy = $cy - 34 * $s
-  $bWing   = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml('#3350DD'))
-  $bBelly  = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml('#FFF6EA'))
-  $bAmber  = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml('#F2A93B'))
-  $bCheek  = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml('#EE94A5'))
-  $bShadow = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(28, 22, 35, 58))
-
-  # 地面陰影與腳先畫，身體壓在上面（腳掌自然只露出前緣）
-  $g.FillEllipse($bShadow, ($ox + 18 * $s),   ($oy + 57 * $s),   (28 * $s),  (4.8 * $s))
-  $g.FillEllipse($bAmber,  ($ox + 21.5 * $s), ($oy + 55.7 * $s), (8 * $s),   (4.6 * $s))
-  $g.FillEllipse($bAmber,  ($ox + 34.5 * $s), ($oy + 55.7 * $s), (8 * $s),   (4.6 * $s))
-
-  # 身體（蛋形，垂直漸層 #5B78F5 → #4060EF）
-  $body = New-Object System.Drawing.Drawing2D.GraphicsPath
-  $body.AddBezier(($ox+32*$s),($oy+7.5*$s),  ($ox+44.5*$s),($oy+7.5*$s),  ($ox+50.5*$s),($oy+18.5*$s), ($ox+50.5*$s),($oy+33.5*$s))
-  $body.AddBezier(($ox+50.5*$s),($oy+33.5*$s),($ox+50.5*$s),($oy+48.5*$s),($ox+43.5*$s),($oy+57.5*$s), ($ox+32*$s),($oy+57.5*$s))
-  $body.AddBezier(($ox+32*$s),($oy+57.5*$s), ($ox+20.5*$s),($oy+57.5*$s), ($ox+13.5*$s),($oy+48.5*$s), ($ox+13.5*$s),($oy+33.5*$s))
-  $body.AddBezier(($ox+13.5*$s),($oy+33.5*$s),($ox+13.5*$s),($oy+18.5*$s),($ox+19.5*$s),($oy+7.5*$s),  ($ox+32*$s),($oy+7.5*$s))
-  $body.CloseFigure()
-  $bodyRect = New-Object System.Drawing.RectangleF(($ox + 13.5 * $s), ($oy + 7.5 * $s), (37 * $s), (50 * $s))
-  $bBody = New-Object System.Drawing.Drawing2D.LinearGradientBrush($bodyRect,
-    [System.Drawing.ColorTranslator]::FromHtml('#5B78F5'),
-    [System.Drawing.ColorTranslator]::FromHtml('#4060EF'),
+  $bInner = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml('#D9D4C8'))
+  $bMuzzle = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml('#E6E1D4'))
+  $furRect = New-Object System.Drawing.RectangleF(($ox + 5 * $s), ($oy + 5 * $s), (54 * $s), (57 * $s))
+  $bFur = New-Object System.Drawing.Drawing2D.LinearGradientBrush($furRect,
+    [System.Drawing.ColorTranslator]::FromHtml('#FFFDF6'),
+    [System.Drawing.ColorTranslator]::FromHtml('#F3ECDB'),
     [System.Drawing.Drawing2D.LinearGradientMode]::Vertical)
-  $g.FillPath($bBody, $body)
 
-  # 左右翅膀
-  $wl = New-Object System.Drawing.Drawing2D.GraphicsPath
-  $wl.AddBezier(($ox+16.6*$s),($oy+29.5*$s), ($ox+13.2*$s),($oy+34.5*$s), ($ox+13.2*$s),($oy+45.5*$s), ($ox+17.2*$s),($oy+50.5*$s))
-  $wl.AddBezier(($ox+17.2*$s),($oy+50.5*$s), ($ox+19.6*$s),($oy+46.5*$s), ($ox+20.1*$s),($oy+37.5*$s), ($ox+19.1*$s),($oy+30.5*$s))
-  $wl.CloseFigure()
-  $g.FillPath($bWing, $wl)
-  $wr = New-Object System.Drawing.Drawing2D.GraphicsPath
-  $wr.AddBezier(($ox+47.4*$s),($oy+29.5*$s), ($ox+50.8*$s),($oy+34.5*$s), ($ox+50.8*$s),($oy+45.5*$s), ($ox+46.8*$s),($oy+50.5*$s))
-  $wr.AddBezier(($ox+46.8*$s),($oy+50.5*$s), ($ox+44.4*$s),($oy+46.5*$s), ($ox+43.9*$s),($oy+37.5*$s), ($ox+44.9*$s),($oy+30.5*$s))
-  $wr.CloseFigure()
-  $g.FillPath($bWing, $wr)
+  # 耳朵（先畫，頭蓋上）＋內耳
+  $g.FillEllipse($bFur, ($ox + 5.3 * $s),  ($oy + 5.8 * $s), (18.4 * $s), (18.4 * $s))
+  $g.FillEllipse($bFur, ($ox + 40.3 * $s), ($oy + 5.8 * $s), (18.4 * $s), (18.4 * $s))
+  $g.FillEllipse($bInner, ($ox + 10.7 * $s), ($oy + 11.2 * $s), (9.6 * $s), (9.6 * $s))
+  $g.FillEllipse($bInner, ($ox + 43.7 * $s), ($oy + 11.2 * $s), (9.6 * $s), (9.6 * $s))
 
-  # 白肚（盾形，呼應「守」）
-  $belly = New-Object System.Drawing.Drawing2D.GraphicsPath
-  $belly.AddBezier(($ox+32*$s),($oy+29.5*$s), ($ox+40*$s),($oy+29.5*$s),  ($ox+44*$s),($oy+33.5*$s),   ($ox+44*$s),($oy+39.5*$s))
-  $belly.AddBezier(($ox+44*$s),($oy+39.5*$s), ($ox+44*$s),($oy+47.5*$s),  ($ox+39.5*$s),($oy+54*$s),   ($ox+32*$s),($oy+55.2*$s))
-  $belly.AddBezier(($ox+32*$s),($oy+55.2*$s), ($ox+24.5*$s),($oy+54*$s),  ($ox+20*$s),($oy+47.5*$s),   ($ox+20*$s),($oy+39.5*$s))
-  $belly.AddBezier(($ox+20*$s),($oy+39.5*$s), ($ox+20*$s),($oy+33.5*$s),  ($ox+24*$s),($oy+29.5*$s),   ($ox+32*$s),($oy+29.5*$s))
-  $belly.CloseFigure()
-  $g.FillPath($bBelly, $belly)
+  # 頭（四段貝茲的大圓臉）
+  $head = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $head.AddBezier(($ox+32*$s),($oy+9*$s),   ($ox+48.5*$s),($oy+9*$s),   ($ox+58*$s),($oy+22*$s),   ($ox+58*$s),($oy+38*$s))
+  $head.AddBezier(($ox+58*$s),($oy+38*$s),  ($ox+58*$s),($oy+53*$s),    ($ox+47*$s),($oy+61.5*$s), ($ox+32*$s),($oy+61.5*$s))
+  $head.AddBezier(($ox+32*$s),($oy+61.5*$s),($ox+17*$s),($oy+61.5*$s),  ($ox+6*$s),($oy+53*$s),    ($ox+6*$s),($oy+38*$s))
+  $head.AddBezier(($ox+6*$s),($oy+38*$s),   ($ox+6*$s),($oy+22*$s),     ($ox+15.5*$s),($oy+9*$s),  ($ox+32*$s),($oy+9*$s))
+  $head.CloseFigure()
+  $g.FillPath($bFur, $head)
 
-  # 眼睛、高光、腮紅
-  $g.FillEllipse($bInk,   ($ox + 23 * $s),   ($oy + 20.5 * $s), (6 * $s),   (6 * $s))
-  $g.FillEllipse($bInk,   ($ox + 35 * $s),   ($oy + 20.5 * $s), (6 * $s),   (6 * $s))
-  $g.FillEllipse([System.Drawing.Brushes]::White, ($ox + 26 * $s), ($oy + 21.5 * $s), (2 * $s), (2 * $s))
-  $g.FillEllipse([System.Drawing.Brushes]::White, ($ox + 38 * $s), ($oy + 21.5 * $s), (2 * $s), (2 * $s))
-  $g.FillEllipse($bCheek, ($ox + 18.5 * $s), ($oy + 26.1 * $s), (4.2 * $s), (2.6 * $s))
-  $g.FillEllipse($bCheek, ($ox + 41.3 * $s), ($oy + 26.1 * $s), (4.2 * $s), (2.6 * $s))
+  # 口鼻部、眼睛、鼻子、微笑
+  $g.FillEllipse($bMuzzle, ($ox + 20.5 * $s), ($oy + 36 * $s), (23 * $s), (18 * $s))
+  $g.FillEllipse($bInk, ($ox + 19.6 * $s), ($oy + 30.6 * $s), (5.8 * $s), (5.8 * $s))
+  $g.FillEllipse($bInk, ($ox + 38.6 * $s), ($oy + 30.6 * $s), (5.8 * $s), (5.8 * $s))
+  $g.FillEllipse([System.Drawing.Brushes]::White, ($ox + 22.5 * $s), ($oy + 31.5 * $s), (2 * $s), (2 * $s))
+  $g.FillEllipse([System.Drawing.Brushes]::White, ($ox + 41.5 * $s), ($oy + 31.5 * $s), (2 * $s), (2 * $s))
+  $nose = New-RoundedPath ($ox + 27.4 * $s) ($oy + 39.2 * $s) (9.2 * $s) (5.6 * $s) (2.8 * $s)
+  $g.FillPath($bInk, $nose)
+  $penSmile = New-Object System.Drawing.Pen([System.Drawing.ColorTranslator]::FromHtml('#16233A'), (1.8 * $s))
+  $penSmile.StartCap = 'Round'; $penSmile.EndCap = 'Round'
+  $g.DrawBezier($penSmile, ($ox+28.5*$s),($oy+49.5*$s), ($ox+30.83*$s),($oy+51.5*$s), ($ox+33.17*$s),($oy+51.5*$s), ($ox+35.5*$s),($oy+49.5*$s))
 
-  # 嘴（琥珀菱形，下緣圓弧）
-  $beak = New-Object System.Drawing.Drawing2D.GraphicsPath
-  $beak.AddLine(($ox+32*$s),($oy+26.6*$s), ($ox+35.2*$s),($oy+29*$s))
-  $beak.AddBezier(($ox+35.2*$s),($oy+29*$s), ($ox+33.07*$s),($oy+31.13*$s), ($ox+30.93*$s),($oy+31.13*$s), ($ox+28.8*$s),($oy+29*$s))
-  $beak.CloseFigure()
-  $g.FillPath($bAmber, $beak)
-
-  $bWing.Dispose(); $bBelly.Dispose(); $bAmber.Dispose(); $bCheek.Dispose(); $bShadow.Dispose(); $bBody.Dispose()
+  $bInner.Dispose(); $bMuzzle.Dispose(); $bFur.Dispose(); $penSmile.Dispose()
 }
 
 function Draw-Icon([string]$kind, [float]$cx, [float]$cy) {
@@ -195,8 +168,8 @@ function Draw-Icon([string]$kind, [float]$cx, [float]$cy) {
       $g.DrawEllipse($penBrand, $cx - 26, $cy - 58, 52, 116)
       $g.DrawLine($penBrand, $cx - 58, $cy, $cx + 58, $cy)
     }
-    'penguin' { # 班守 IP「守守」本尊坐鎮「開啟平台」格
-      Draw-Penguin $cx $cy 3.4
+    'mascot' { # 班守 IP「守守」（北極熊）本尊坐鎮「開啟平台」格
+      Draw-Mascot $cx $cy 3.4
     }
   }
 }
