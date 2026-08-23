@@ -686,7 +686,7 @@ function switchScreen(name) {
   const active = $(`#screen-${name}`);
   if (active) {
     MOTION.enter(active);
-    MOTION.count(Array.from(active.querySelectorAll('.ov-num, .kpi-num')));
+    MOTION.count(Array.from(active.querySelectorAll('.ov-num, .kpi-num, .stat-num')));
   }
   TOUR.notify(`visit:${name}`);   // 教學步驟推進放最後：hash 與畫面狀態已定
 }
@@ -736,6 +736,55 @@ function initPortal() {
  * max 為共同尺度；marker 可在指定值畫垂直虛線（如飽和門檻）。
  * 顏色用 CSS 變數字串，inline SVG 直接繼承主題。
  */
+/** 半圓量表（零依賴 SVG）：pathLength=100 讓 dasharray 直接吃百分比 */
+function chartGauge(pct, { color = 'var(--brand)', label = '' } = {}) {
+  const p = Math.max(0, Math.min(100, Math.round(pct)));
+  return `<svg class="gauge" viewBox="0 0 200 120" role="img" aria-label="${esc(label)} ${p}%">
+    <path d="M18 106 A 82 82 0 0 1 182 106" fill="none" stroke="var(--line-soft)" stroke-width="15" stroke-linecap="round" pathLength="100"/>
+    <path d="M18 106 A 82 82 0 0 1 182 106" fill="none" stroke="${color}" stroke-width="15" stroke-linecap="round" pathLength="100" stroke-dasharray="${p} 100"/>
+    <text x="100" y="84" text-anchor="middle" class="gauge-num">${p}<tspan class="gauge-pct">%</tspan></text>
+    <text x="100" y="106" text-anchor="middle" class="gauge-lbl">${esc(label)}</text>
+  </svg>`;
+}
+
+/** 刻度條（參考 SaaS 儀表板的直紋進度）：total 格，依 segs 順序上色，剩餘為底色 */
+function ticksBar(segs, total, { h = 20 } = {}) {
+  const W = 6;
+  const items = [];
+  let i = 0;
+  segs.forEach((s) => {
+    for (let k = 0; k < s.n && i < total; k++, i++) {
+      items.push(`<rect x="${i * W}" y="0" width="3.4" height="${h}" rx="1.4" fill="${s.color}"${s.title ? `><title>${esc(s.title)}</title></rect>` : '/>'}`);
+    }
+  });
+  for (; i < total; i++) items.push(`<rect x="${i * W}" y="0" width="3.4" height="${h}" rx="1.4" fill="var(--line)"/>`);
+  return `<svg class="ticks" viewBox="0 0 ${total * W - 2.6} ${h}" preserveAspectRatio="none" role="img">${items.join('')}</svg>`;
+}
+
+/** 每日長條＋需求虛線（一週人力覆蓋）：達標＝品牌色、未達＝紅 */
+function chartDays(days, { need, width = 360 } = {}) {
+  const H = 122; const padL = 10; const padR = 10; const padB = 24; const top = 16;
+  const innerH = H - padB - top;
+  const max = Math.max(need, ...days.map((d) => d.v)) || 1;
+  const n = days.length;
+  const bw = Math.min(26, (width - padL - padR) / n * 0.62);
+  const step = (width - padL - padR - bw) / (n - 1);
+  const y = (v) => top + innerH * (1 - v / max);
+  const bars = days.map((d, i) => {
+    const x = padL + i * step;
+    const ok2 = d.v >= need;
+    const barH = Math.max(2, top + innerH - y(d.v));
+    return `<rect x="${x}" y="${y(d.v)}" width="${bw}" height="${barH}" rx="4" fill="${ok2 ? 'var(--brand)' : 'var(--danger)'}" opacity=".88"><title>${esc(d.label)}：已排 ${d.v}／需 ${need}</title></rect>
+      <text x="${x + bw / 2}" y="${H - 7}" text-anchor="middle" class="cd-lbl">${esc(d.label)}</text>`;
+  }).join('');
+  const ny = y(need);
+  return `<svg class="chart" viewBox="0 0 ${width} ${H}" role="img">
+    ${bars}
+    <line x1="${padL}" y1="${ny}" x2="${width - padR}" y2="${ny}" stroke="var(--warn)" stroke-width="2" stroke-dasharray="5 4"/>
+    <text x="${width - padR}" y="${ny - 6}" text-anchor="end" class="cd-need">需求 ${need}</text>
+  </svg>`;
+}
+
 function chartHBar(rows, { max, width = 640, marker } = {}) {
   const LABEL_W = 96; const RIGHT_W = 96; const BAR_H = 16; const ROW_H = 30;
   const barW = width - LABEL_W - RIGHT_W;
@@ -1533,6 +1582,68 @@ function renderOverview() {
       <p class="fineprint">一句話：本週缺 ${gapCells.length} 班次可全數合法吸收${flagged.length ? `，但 ${flagged.length} 筆有公平性代價` : ''}${structuralMed.length ? `；${structuralMed.map((s) => SHIFT_TYPES[s.shift].name).join('、')}為結構性缺口，補洞不是解方` : ''}。</p>
     </div>
 
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-head">${icon('chart')}<span>排班補足率</span></div>
+        ${chartGauge(need ? (sched / need) * 100 : 0, {
+          label: `已排 ${sched}／需 ${need}`,
+          color: sched >= need ? 'var(--ok)' : (sched / need >= 0.7 ? 'var(--brand)' : 'var(--danger)'),
+        })}
+      </div>
+      <div class="stat-card">
+        <div class="stat-head">${icon('target')}<span>本週缺口</span></div>
+        <div class="stat-num ${gapCells.length ? 'danger' : 'ok'}">${gapCells.length}<span class="stat-unit">班次</span></div>
+        ${ticksBar([
+          { n: sched, color: 'var(--brand)', title: `已排定 ${sched}` },
+          { n: gapCells.length, color: 'var(--danger)', title: `缺口 ${gapCells.length}` },
+        ], need)}
+        <div class="stat-sub">合計 ${gapHours} 小時人力</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-head">${icon('user-check')}<span>可合法吸收</span></div>
+        <div class="stat-num">${fills.length}<span class="stat-unit">／${gapCells.length}</span></div>
+        ${ticksBar([
+          { n: fills.length - flagged.length, color: 'var(--ok)', title: '無代價' },
+          { n: flagged.length, color: 'var(--warn)', title: '帶公平性代價' },
+        ], Math.max(gapCells.length, 1))}
+        <div class="stat-sub">${flagged.length ? `${flagged.length} 筆帶公平性代價` : '全數無風險標記'}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-head">${icon('shield')}<span>殘餘缺口</span></div>
+        <div class="stat-num ${residual.length ? 'danger' : 'ok'}">${residual.length}<span class="stat-unit">班次</span></div>
+        ${ticksBar([{ n: residual.length, color: 'var(--danger)', title: '無人可合法填補' }], Math.max(gapCells.length, 1))}
+        <div class="stat-sub">${structuralMed.length
+          ? `⚠ 結構性訊號：${structuralMed.map((s) => `${SHIFT_TYPES[s.shift].name} ${s.days}/${WEEK_DATES.length} 天`).join('、')}`
+          : '無結構性訊號'}</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <h2>一週人力覆蓋</h2>
+          <span class="tag tag-neutral">已排定 vs 每日需求</span>
+        </div>
+        ${chartDays(WEEK_DATES.map((d) => ({
+          label: shortDate(d),
+          v: cells.filter((c) => c.date === d).reduce((n2, c) => n2 + Math.min(c.scheduled, c.need), 0),
+        })), { need: cells.filter((c) => c.date === WEEK_DATES[0]).reduce((n2, c) => n2 + c.need, 0) })}
+        <p class="fineprint">紅柱＝當日未達需求；虛線＝每日需求班次。點柱可看明細（滑鼠停留）。</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>各班別缺口</h2>
+          ${(() => {
+            const worst = ['D', 'E', 'N'].map((code) => ({ code, n: gapCells.filter((c) => c.shift === code).length }))
+              .sort((a, b) => b.n - a.n)[0];
+            return worst.n ? `<span class="tag tag-danger">${SHIFT_TYPES[worst.code].name} ${worst.n}/${WEEK_DATES.length} 天</span>` : '<span class="tag tag-ok">本週零缺口</span>';
+          })()}
+        </div>
+        ${gapChart}
+        <p class="fineprint">同一班別反覆出現缺口＝結構性訊號，補洞不是解方——回到源頭（員額／培訓／班表生成）。</p>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-head">
         <h2>需要行動</h2>
@@ -1551,8 +1662,6 @@ function renderOverview() {
     <details class="drill">
       <summary>缺口矩陣：班別 × 日期（依據）</summary>
       <div class="drill-body">
-        <h4 style="margin:8px 0 0;font-size:13px;color:var(--ink-faint)">各班別缺口天數</h4>
-        ${gapChart}
         <div class="table-scroll"><table>${matrixHead}<tbody>${matrixBody}</tbody></table></div>
         <p class="fineprint">需求基準＝各班別最低安全配置（規則庫可調）。</p>
       </div>
