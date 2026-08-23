@@ -935,22 +935,34 @@ function renderCapability() {
 
   $('#capability-body').innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:8px">${stampTag()}</div>
-    <div class="kpi-row">
-      <div class="kpi ${balanceBad ? 'kpi-bad' : 'kpi-ok'}">
-        <div class="kpi-num">${worstBalance.ok}／${worstBalance.staffed}</div>
-        <div class="kpi-lbl">帶班平衡（最弱：${SHIFT_TYPES[worstBalance.code].name}的資深覆蓋天數）</div>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-head">${icon('award')}<span>帶班平衡（最弱班別）</span></div>
+        ${chartGauge(worstBalance.staffed ? (worstBalance.ok / worstBalance.staffed) * 100 : 0, {
+          label: `${SHIFT_TYPES[worstBalance.code].name}資深覆蓋 ${worstBalance.ok}／${worstBalance.staffed} 天`,
+          color: balanceBad ? 'var(--danger)' : 'var(--ok)',
+        })}
       </div>
-      <div class="kpi ${spCritical.length ? 'kpi-bad' : 'kpi-ok'}">
-        <div class="kpi-num">${spCritical.length}</div>
-        <div class="kpi-lbl">資格單點依賴（有效持有 ≤ 1 人）</div>
+      <div class="stat-card">
+        <div class="stat-head">${icon('shield')}<span>資格單點依賴</span></div>
+        <div class="stat-num ${spCritical.length ? 'danger' : 'ok'}">${spCritical.length}<span class="stat-unit">項資格</span></div>
+        ${ticksBar([{ n: spCritical.length, color: 'var(--danger)', title: '有效持有 ≤ 1 人' }], Math.max(Object.keys(CERTS).length, 1))}
+        <div class="stat-sub">${spCritical.length ? `${spCritical.map((x) => x.code).join('、')}——持有者倒下，能力就從單位消失` : '各資格皆有 2 人以上有效持有'}</div>
       </div>
-      <div class="kpi ${(expired.length + expSoon.length) ? 'kpi-warn' : 'kpi-ok'}">
-        <div class="kpi-num">${expired.length}＋${expSoon.length}</div>
-        <div class="kpi-lbl">證照：已過期＋90 天內到期</div>
+      <div class="stat-card">
+        <div class="stat-head">${icon('clipboard')}<span>證照效期</span></div>
+        <div class="stat-num ${expired.length ? 'danger' : ((expSoon.length) ? '' : 'ok')}">${expired.length + expSoon.length}<span class="stat-unit">張需處理</span></div>
+        ${ticksBar([
+          { n: expired.length, color: 'var(--danger)', title: '已過期' },
+          { n: expSoon.length, color: 'var(--warn)', title: '90 天內到期' },
+        ], Math.max(STAFF.reduce((n2, s) => n2 + Object.keys(s.certs).length, 0), 1))}
+        <div class="stat-sub">紅＝已過期（不計戰力）、黃＝90 天內到期；底＝全體持有證照數</div>
       </div>
-      <div class="kpi ${spread >= 3 ? 'kpi-warn' : 'kpi-ok'}">
-        <div class="kpi-num">${spread}</div>
-        <div class="kpi-lbl">代班集中度（最高 − 最低次數）</div>
+      <div class="stat-card">
+        <div class="stat-head">${icon('scale')}<span>代班集中度</span></div>
+        <div class="stat-num ${spread >= 3 ? 'danger' : 'ok'}">${spread}<span class="stat-unit">次差距</span></div>
+        ${ticksBar([{ n: spread, color: spread >= 3 ? 'var(--danger)' : 'var(--ok)', title: '最高−最低' }], Math.max(getSoftParam('S1', 5), spread, 1))}
+        <div class="stat-sub">最高與最低代班次數的差；底＝S1 飽和門檻 ${getSoftParam('S1', 5)} 次</div>
       </div>
     </div>
 
@@ -1405,9 +1417,18 @@ function renderToday() {
     const chips = rows.map((s) =>
       `<span class="chip today-chip">${esc(s.staffId)}${s.isReplacement ? '<sup>替</sup>' : s.isSwap ? '<sup>換</sup>' : ''}` +
       `<span class="qp-cnt">${esc(s.unit)}</span></span>`).join('');
+    const n3a = rows.filter((s) => s.unit === 'MED-3A').length;
+    const min3a = (UNIT_MIN_STAFF['MED-3A'] || {})[t.code] || 0;
+    const gauge = min3a > 0
+      ? `<div class="today-gauge">${chartGauge(Math.min(100, (n3a / min3a) * 100), {
+          label: `3A 在班 ${n3a}／需 ${min3a}`,
+          color: n3a >= min3a ? 'var(--ok)' : 'var(--danger)',
+        })}</div>`
+      : '';
     return `<div class="qp-col${short.length ? ' today-short' : ''}">
       <div class="qp-col-head"><b>${t.name}</b><span class="qp-time">${t.start}–${t.end}</span>
         <span class="qp-time" style="margin-left:auto">${rows.length} 人</span></div>
+      ${gauge}
       ${chips ? `<div class="qp-people">${chips}</div>` : '<div class="qp-col-empty">無人排班</div>'}
       ${short.map((x) => `<div class="today-gap">▲ ${esc(UNITS[x.u])}低於最低配置：${x.n}／需 ${x.min}</div>`).join('')}
     </div>`;
