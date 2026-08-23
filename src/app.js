@@ -736,6 +736,17 @@ function initPortal() {
  * max 為共同尺度；marker 可在指定值畫垂直虛線（如飽和門檻）。
  * 顏色用 CSS 變數字串，inline SVG 直接繼承主題。
  */
+/** 儀表板 meta 列：受眾第一眼要知道「這是哪裡、哪段時間、資料多新」 */
+function dashMeta(rangeText, extra) {
+  return `<div class="dash-meta">
+    <span class="tag tag-brand">內科病房 3A</span>
+    <span class="tag tag-neutral">${esc(rangeText)}</span>
+    ${extra || ''}
+    <span class="dash-src">資料來源：目前班表（即時計算）</span>
+    ${stampTag()}
+  </div>`;
+}
+
 /** 半圓量表（零依賴 SVG）：pathLength=100 讓 dasharray 直接吃百分比 */
 function chartGauge(pct, { color = 'var(--brand)', label = '' } = {}) {
   const p = Math.max(0, Math.min(100, Math.round(pct)));
@@ -935,6 +946,8 @@ function renderCapability() {
 
   $('#capability-body').innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:8px">${stampTag()}</div>
+    ${dashMeta(`資料範圍 ${shortDate(WEEK_DATES[0])}–${shortDate(WEEK_DATES[6])}（示範週）`)}
+
     <div class="stat-grid">
       <div class="stat-card">
         <div class="stat-head">${icon('award')}<span>帶班平衡（最弱班別）</span></div>
@@ -968,7 +981,7 @@ function renderCapability() {
 
     <div class="card">
       <div class="card-head">
-        <h2>三班資深覆蓋（N3↑ 帶班）</h2>
+        <h2>三班資深覆蓋${balanceBad ? `——${SHIFT_TYPES[worstBalance.code].name}整週無 N3↑` : '——三班皆有帶班'}</h2>
         <span class="tag ${balanceBad ? 'tag-danger' : 'tag-ok'}">綠＝有資深、紅＝無</span>
       </div>
       ${covChart}
@@ -1457,6 +1470,7 @@ function renderToday() {
   }));
 
   el.innerHTML = `
+    ${dashMeta(`今日 ${shortDate(today)} ＋ 未來 48 小時`)}
     <div class="qp-board" style="margin-bottom:14px">${cols}</div>
 
     <div class="card-head" style="margin-top:4px"><h2>未來 48 小時</h2>
@@ -1578,10 +1592,49 @@ function renderOverview() {
   }), { max: WEEK_DATES.length });
 
   $('#overview-body').innerHTML = `
+    ${dashMeta(`資料範圍 ${shortDate(WEEK_DATES[0])}–${shortDate(WEEK_DATES[6])}（示範週）`)}
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-head">${icon('chart')}<span>排班補足率</span></div>
+        ${chartGauge(need ? (sched / need) * 100 : 0, {
+          label: `已排 ${sched}／需 ${need}`,
+          color: sched >= need ? 'var(--ok)' : (sched / need >= 0.7 ? 'var(--brand)' : 'var(--danger)'),
+        })}
+        <div class="stat-sub">目標 100%${sched >= need ? '　✓ 達標' : `　▲ 差 ${need - sched} 班次`}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-head">${icon('target')}<span>本週缺口</span></div>
+        <div class="stat-num ${gapCells.length ? 'danger' : 'ok'}">${gapCells.length}<span class="stat-unit">班次</span></div>
+        ${ticksBar([
+          { n: sched, color: 'var(--brand)', title: `已排定 ${sched}` },
+          { n: gapCells.length, color: 'var(--danger)', title: `缺口 ${gapCells.length}` },
+        ], need)}
+        <div class="stat-sub">目標 0${gapCells.length ? `　▲ 合計 ${gapHours} 小時人力` : '　✓ 達標'}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-head">${icon('user-check')}<span>可合法吸收</span></div>
+        <div class="stat-num">${fills.length}<span class="stat-unit">／${gapCells.length}</span></div>
+        ${ticksBar([
+          { n: fills.length - flagged.length, color: 'var(--ok)', title: '無代價' },
+          { n: flagged.length, color: 'var(--warn)', title: '帶公平性代價' },
+        ], Math.max(gapCells.length, 1))}
+        <div class="stat-sub">目標：缺口全數可吸收${fills.length >= gapCells.length ? '　✓' : `　▲ 尚缺 ${gapCells.length - fills.length}`}${flagged.length ? `；${flagged.length} 筆有代價` : ''}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-head">${icon('shield')}<span>殘餘缺口</span></div>
+        <div class="stat-num ${residual.length ? 'danger' : 'ok'}">${residual.length}<span class="stat-unit">班次</span></div>
+        ${ticksBar([{ n: residual.length, color: 'var(--danger)', title: '無人可合法填補' }], Math.max(gapCells.length, 1))}
+        <div class="stat-sub">目標 0${residual.length ? '　▲ 需升級處理' : '　✓'}；${structuralMed.length
+          ? `⚠ 結構性：${structuralMed.map((x) => `${SHIFT_TYPES[x.shift].name} ${x.days}/${WEEK_DATES.length} 天`).join('、')}`
+          : '無結構性訊號'}</div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-head">
         <h2>缺口方程式｜${UNITS[UNIT]}（本週）</h2>
-        <span>${stampTag()} <span class="tag tag-neutral">名單完整之示範單位</span></span>
+        <span><span class="tag tag-neutral">名單完整之示範單位</span></span>
       </div>
       <div class="ov-eq">
         <div class="ov-term"><div class="ov-num">${need}</div><div class="ov-lbl">營運所需（班次）</div></div>
@@ -1603,46 +1656,13 @@ function renderOverview() {
       <p class="fineprint">一句話：本週缺 ${gapCells.length} 班次可全數合法吸收${flagged.length ? `，但 ${flagged.length} 筆有公平性代價` : ''}${structuralMed.length ? `；${structuralMed.map((s) => SHIFT_TYPES[s.shift].name).join('、')}為結構性缺口，補洞不是解方` : ''}。</p>
     </div>
 
-    <div class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-head">${icon('chart')}<span>排班補足率</span></div>
-        ${chartGauge(need ? (sched / need) * 100 : 0, {
-          label: `已排 ${sched}／需 ${need}`,
-          color: sched >= need ? 'var(--ok)' : (sched / need >= 0.7 ? 'var(--brand)' : 'var(--danger)'),
-        })}
-      </div>
-      <div class="stat-card">
-        <div class="stat-head">${icon('target')}<span>本週缺口</span></div>
-        <div class="stat-num ${gapCells.length ? 'danger' : 'ok'}">${gapCells.length}<span class="stat-unit">班次</span></div>
-        ${ticksBar([
-          { n: sched, color: 'var(--brand)', title: `已排定 ${sched}` },
-          { n: gapCells.length, color: 'var(--danger)', title: `缺口 ${gapCells.length}` },
-        ], need)}
-        <div class="stat-sub">合計 ${gapHours} 小時人力</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-head">${icon('user-check')}<span>可合法吸收</span></div>
-        <div class="stat-num">${fills.length}<span class="stat-unit">／${gapCells.length}</span></div>
-        ${ticksBar([
-          { n: fills.length - flagged.length, color: 'var(--ok)', title: '無代價' },
-          { n: flagged.length, color: 'var(--warn)', title: '帶公平性代價' },
-        ], Math.max(gapCells.length, 1))}
-        <div class="stat-sub">${flagged.length ? `${flagged.length} 筆帶公平性代價` : '全數無風險標記'}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-head">${icon('shield')}<span>殘餘缺口</span></div>
-        <div class="stat-num ${residual.length ? 'danger' : 'ok'}">${residual.length}<span class="stat-unit">班次</span></div>
-        ${ticksBar([{ n: residual.length, color: 'var(--danger)', title: '無人可合法填補' }], Math.max(gapCells.length, 1))}
-        <div class="stat-sub">${structuralMed.length
-          ? `⚠ 結構性訊號：${structuralMed.map((s) => `${SHIFT_TYPES[s.shift].name} ${s.days}/${WEEK_DATES.length} 天`).join('、')}`
-          : '無結構性訊號'}</div>
-      </div>
-    </div>
-
     <div class="grid-2">
       <div class="card">
         <div class="card-head">
-          <h2>一週人力覆蓋</h2>
+          <h2>一週人力覆蓋${(() => {
+            const short2 = WEEK_DATES.filter((d) => cells.filter((c) => c.date === d).some((c) => c.scheduled < c.need)).length;
+            return short2 ? `——${short2} 天未達需求` : '——每天皆達需求';
+          })()}</h2>
           <span class="tag tag-neutral">已排定 vs 每日需求</span>
         </div>
         ${chartDays(WEEK_DATES.map((d) => ({
@@ -1653,7 +1673,10 @@ function renderOverview() {
       </div>
       <div class="card">
         <div class="card-head">
-          <h2>各班別缺口</h2>
+          <h2>各班別缺口${(() => {
+            const w2 = ['D', 'E', 'N'].map((code) => ({ code, n: gapCells.filter((c) => c.shift === code).length })).sort((a, b) => b.n - a.n)[0];
+            return w2.n ? `——集中在${SHIFT_TYPES[w2.code].name}` : '——本週零缺口';
+          })()}</h2>
           ${(() => {
             const worst = ['D', 'E', 'N'].map((code) => ({ code, n: gapCells.filter((c) => c.shift === code).length }))
               .sort((a, b) => b.n - a.n)[0];
