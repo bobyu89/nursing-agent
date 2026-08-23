@@ -320,8 +320,15 @@ function resetRules() {
  */
 const SCHEDULE_STORE_KEY = 'shiftguard.schedule.v1';
 
+/** 示範資料版本戳記：出廠 SHIFTS 一改（如整月示範班表上線）就要跳版——
+ *  本機保存的舊班表是「基於舊示範資料的編輯」，直接疊上新資料只會蓋掉新內容、
+ *  讓使用者以為更新沒生效。版本不符時自動重置並留痕說明。 */
+const DEMO_DATA_REV = '2026-08-month-fill-v1';
+
 function saveSchedule() {
-  try { localStorage.setItem(SCHEDULE_STORE_KEY, JSON.stringify(SHIFTS)); } catch (e) {}
+  try {
+    localStorage.setItem(SCHEDULE_STORE_KEY, JSON.stringify({ rev: DEMO_DATA_REV, shifts: SHIFTS }));
+  } catch (e) {}
   // 儲存狀態指示：每一次寫入都把時間戳亮給使用者看——「有沒有存到」不用猜
   const chip = $('#roster-saved');
   if (chip) {
@@ -337,7 +344,14 @@ function loadSchedule() {
   try {
     const raw = localStorage.getItem(SCHEDULE_STORE_KEY);
     if (!raw) return null;
-    const arr = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    // 舊格式（裸陣列）或版本不符：這份存檔基於舊的示範資料——
+    // 疊上來只會蓋掉新內容，直接重置並回報，讓新示範資料完整呈現
+    if (Array.isArray(parsed) || !parsed || parsed.rev !== DEMO_DATA_REV) {
+      localStorage.removeItem(SCHEDULE_STORE_KEY);
+      return { staleReset: true };
+    }
+    const arr = parsed.shifts;
     if (!Array.isArray(arr)) return null;
     const valid = arr.filter((x) => x
       && STAFF.some((s) => s.id === x.staffId)
@@ -3406,7 +3420,12 @@ function init() {
     }
   }
   const schedLoad = loadSchedule();
-  if (schedLoad) {
+  if (schedLoad && schedLoad.staleReset) {
+    logAction('示範資料已更新，本機舊班表自動重置',
+      `偵測到本機保存的班表基於舊版示範資料（版本戳記不符 ${DEMO_DATA_REV}）——` +
+      '直接疊上會蓋掉新內容，已自動改用最新示範班表（含整月模擬資料）',
+      '班守 ShiftGuard');
+  } else if (schedLoad) {
     const badge = $('#roster-modified');
     if (badge) badge.hidden = false;
     logAction('載入本機保存的班表',
@@ -3658,7 +3677,8 @@ function init() {
         logAction('另一視窗還原了示範班表', '請重新整理本頁以載入出廠資料', '班守 ShiftGuard');
         return;
       }
-      if (loadSchedule()) {
+      const sync = loadSchedule();
+      if (sync && !sync.staleReset) {
         const badge = $('#roster-modified');
         if (badge) badge.hidden = false;
         refreshAfterScheduleChange();
