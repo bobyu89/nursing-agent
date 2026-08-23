@@ -439,6 +439,12 @@ const ROLES = {
         ['policy', '政策沙盤'], ['rules', '規則庫'],
         ['dashboard', '公平與留痕'], ['fhir', 'FHIR 介接'],
       ] },
+      // 上級可看下級的作業（督導是護理長的主管）——檢視開放、寫回動作仍屬護理長
+      { key: 'headview', label: '護理長作業（檢視）', screens: [
+        ['intake', '通報解析'], ['candidates', '替補候選'],
+        ['confirm', '主管確認'], ['multi', '多筆與韌性'],
+        ['roster', '班表工作區'], ['swap', '換班簽核'], ['generate', '班表生成'],
+      ] },
     ],
   },
 };
@@ -2562,7 +2568,9 @@ async function chooseCandidate(idx) {
       <div class="no-send">系統不具備發送能力，也不會寫入院內正式班表。是否發送、何時發送，由主管自行決定。</div>
       <div class="btn-row">
         <button class="btn" id="btn-copy">複製草稿到剪貼簿</button>
-        <button class="btn btn-primary" id="btn-confirm" style="margin-top:0" disabled>完成主管確認並留痕</button>
+        ${CURRENT_ROLE === 'head'
+          ? '<button class="btn btn-primary" id="btn-confirm" style="margin-top:0" disabled>完成主管確認並留痕</button>'
+          : '<span class="tag tag-ok">檢視模式——結案寫回由護理長執行（此視角可完整審視流程與依據）</span>'}
       </div>
     </div>`;
 
@@ -2576,6 +2584,7 @@ async function chooseCandidate(idx) {
     prog.textContent = `已確認 ${done}/${chkItems.length}`;
     prog.className = `tag ${all ? 'tag-ok' : 'tag-warn'}`;
     const btn = $('#btn-confirm');
+    if (!btn) return;   // 檢視模式（非護理長）沒有結案鈕
     btn.disabled = !all;
     btn.textContent = all ? '完成主管確認並留痕' : `完成主管確認並留痕（尚餘 ${chkItems.length - done} 項）`;
     btn.title = all ? '' : '人工確認事項全部勾選後才能結案';
@@ -3456,6 +3465,8 @@ function handleGenRun() {
 
   const applyGen = $('#btn-gen-apply');
   if (applyGen) applyGen.addEventListener('click', () => {
+    // 寫回守門必須在任何資料變動之前（先刪再擋會把班表弄壞）
+    if (CURRENT_ROLE !== 'head') { toast('套用寫入班表屬護理長權限——此視角僅供檢視生成結果', 'warn'); return; }
     // 覆蓋該單位在生成週的既有班次，寫入草稿
     for (let i = SHIFTS.length - 1; i >= 0; i--) {
       if (sc.dates.includes(SHIFTS[i].date) && SHIFTS[i].unit === sc.unit) SHIFTS.splice(i, 1);
