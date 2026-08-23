@@ -66,15 +66,17 @@ $cells = @(
   @{ title = '調度棋盤';   sub = '守恆律借調建議';     icon = 'board' },
   @{ title = '負荷雷達';   sub = '誰一直在扛，看得見'; icon = 'gauge' },
   @{ title = '通報缺班';   sub = '一鍵帶入請假範例';   icon = 'chat'  },
-  @{ title = '開啟平台';   sub = '守守帶路：完整功能與留痕'; icon = 'penguin' }
+  @{ title = '開啟平台';   sub = '守守帶路・完整功能'; icon = 'penguin' }
 )
 
 $margin = 40.0; $gap = 40.0
 $cw = ($W - 2 * $margin - 2 * $gap) / 3   # 780
 $ch = ($H - 2 * $margin - $gap) / 2       # 783
 
-$fTitle = New-Object System.Drawing.Font('Microsoft JhengHei', 68, [System.Drawing.FontStyle]::Bold, 'Pixel')
-$fSub   = New-Object System.Drawing.Font('Microsoft JhengHei', 34, [System.Drawing.FontStyle]::Regular, 'Pixel')
+# 字級以手機實際顯示為準：2500px 寬的圖縮到聊天室約 370px 寬，縮比 ~6.8 倍——
+# 標題 96px ≈ 螢幕 14px、副標 46px ≈ 螢幕 7px，再小就看不清了
+$fTitle = New-Object System.Drawing.Font('Microsoft JhengHei', 96, [System.Drawing.FontStyle]::Bold, 'Pixel')
+$fSub   = New-Object System.Drawing.Font('Microsoft JhengHei', 46, [System.Drawing.FontStyle]::Regular, 'Pixel')
 $bCard  = New-Object System.Drawing.SolidBrush($cCard)
 $bInk   = New-Object System.Drawing.SolidBrush($cInk)
 $bFaint = New-Object System.Drawing.SolidBrush($cFaint)
@@ -212,9 +214,9 @@ for ($i = 0; $i -lt 6; $i++) {
   $g.FillPath($bTint, $badge)
   Draw-Icon $cells[$i].icon ($x + 56 + 105) ($y + 56 + 105)
 
-  # 下方：標題與副標
-  $g.DrawString($cells[$i].title, $fTitle, $bInk,   ($x + 48), ($y + $ch - 250))
-  $g.DrawString($cells[$i].sub,   $fSub,   $bFaint, ($x + 56), ($y + $ch - 120))
+  # 下方：標題與副標（字級放大後同步下修起點，維持底部留白）
+  $g.DrawString($cells[$i].title, $fTitle, $bInk,   ($x + 44), ($y + $ch - 320))
+  $g.DrawString($cells[$i].sub,   $fSub,   $bFaint, ($x + 52), ($y + $ch - 140))
 }
 
 $g.Dispose()
