@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; media-src https://d8j0ntlcm91z4.cloudfront.net; object-src 'none'; base-uri 'self'">
+        content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' https://d8j0ntlcm91z4.cloudfront.net; object-src 'none'; base-uri 'self'">
   <meta name="referrer" content="no-referrer">
   <title>班守 ShiftGuard｜夜再深，也要有人守班</title>
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
@@ -338,6 +338,15 @@
     .final-band { text-align: center; padding: 40px 24px 8px; }
     .final-band h2 { font-size: clamp(30px, 4.6vw, 46px) !important; }
     .final-band .cta-solid { margin-top: 34px; }
+
+    /* 產品影片區：封面即影片第一幕，poster 點播零跳接 */
+    .video-shell { margin: 44px auto 0; max-width: 1060px; }
+    .video-shell video {
+      display: block; width: 100%; aspect-ratio: 16 / 9;
+      border-radius: 18px; border: 1px solid var(--border);
+      background: hsl(228 48% 12%);
+      box-shadow: 0 30px 80px hsl(228 60% 4% / .55);
+    }
     .sec-note { font-size: 12px; color: var(--muted-foreground); margin-top: 14px; line-height: 1.8; }
   </style>
 </head>
@@ -398,8 +407,8 @@
     </p>
     <div class="cta-row animate-fade-rise-delay-2">
       <a class="cta-solid" href="index.html">立即體驗 Demo</a>
-      <a class="liquid-glass btn-glass cta" href="#roles" style="flex-direction:row">
-        <b>90 秒看懂它幫誰省了什麼 ↓</b>
+      <a class="liquid-glass btn-glass cta" href="#video" style="flex-direction:row">
+        <b>97 秒，看懂班守 ↓</b>
       </a>
     </div>
     <p class="cta-sub animate-fade-rise-delay-3">
@@ -407,8 +416,23 @@
       或 <a href="https://line.me/R/ti/p/@913sepht">加入 LINE 通報機器人</a>在聊天室完成通報與替補建議
     </p>
   </section>
-  <a class="scroll-cue" href="#pain" aria-label="往下看更多"></a>
+  <a class="scroll-cue" href="#video" aria-label="往下看更多"></a>
 </div>
+
+<!-- ══ 產品影片：97 秒看懂 ═══════════════════════ -->
+<section class="section" id="video">
+  <h2 class="reveal">97 秒，看懂班守。</h2>
+  <p class="lead reveal">從凌晨的一句 LINE 通報，到主任儀表板上的留任雷達——一支影片走完整條排班治理鏈。</p>
+  <div class="video-shell reveal">
+    <video controls preload="none" playsinline
+           poster="assets/video/shiftguard-promo-cover.png"
+           aria-label="班守 ShiftGuard 產品影片，97 秒">
+      <source src="assets/video/shiftguard-promo.mp4" type="video/mp4">
+      您的瀏覽器不支援影片播放——<a href="assets/video/shiftguard-promo.mp4">下載影片檔</a>。
+    </video>
+  </div>
+  <p class="sec-note reveal">影片畫面為示範平台功能重現，示範資料非真實個資；字卡與旁白同步，靜音觀看也完整。</p>
+</section>
 
 <!-- ══ 痛點：為什麼現在 ═══════════════════════ -->
 <section class="section" id="pain">
