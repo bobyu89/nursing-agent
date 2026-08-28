@@ -1,6 +1,6 @@
 ---
 format: 1920x1080
-duration: 94s
+duration: 97s
 message: "班表照顧好，人就留得住"
 arc: 刺（hook）→ 痛（三刀）→ 亮（亮相）→ 證（三能力）→ 信（治理）→ 收（CTA）
 audience: 護理長（畫面主角）＋護理部主任（帳單層）；官網訪客靜音自動播放
@@ -8,6 +8,21 @@ mode: autonomous
 ---
 
 規格真相源：`video-spec.md`（18 鏡，用戶逐句審定）。本檔 14 格＝規格 18 鏡合併連續同框後的派工單位；每格的 `spec_scenes` 指回規格鏡號，字卡／音效／畫面細節以規格為準。設計真相源：`design.md`（ShiftGuard Indigo；暗場 dark-canvas、亮場 primary）。
+
+## Frame 0 — 片頭封面幕
+
+- scene: 與 poster/cover.png 完全同畫面起手（poster 無縫接播放）——停一拍後元素錯峰退場（膠囊→副標→字標→守守→大字→格線），沉入純暗畫布硬切冷開場；BGM 首和弦墊底、無旁白
+- duration: 3s
+- poster: 0.5s
+- transition_in: 影片起始
+- status: animated
+- voiceover: 無
+- src: compositions/frames/00-cover.html
+- window: 0.0–3.0
+- spec_scenes: （迭代新增——片頭封面，回應「突然開始」回饋）
+- blueprint: titlecard-reveal (Adapt — 靜帧起手＋內容清場退場)
+- rules: 純退場編排（autoAlpha 錯峰），無入場動畫
+- sfx: 無
 
 ## Frame 1 — 冷開場：離職單的謊言
 
@@ -18,7 +33,7 @@ mode: autonomous
 - status: animated
 - voiceover: "離職單上，寫的是家庭因素。真相，藏在班表裡。"
 - src: compositions/frames/01-cold-open.html
-- window: 0.0–6.9
+- window: 3.0–9.9
 - spec_scenes: S01+S02
 - blueprint: kinetic-type-beats (Adapt — statement beats onto payoff)
 - rules: kinetic-beat-slam, css-marker-patterns (sketchout 劃掉), waterfall-entry
@@ -33,11 +48,11 @@ mode: autonomous
 - status: animated
 - voiceover: "缺班，靠人情調度。"
 - src: compositions/frames/02-pain-line.html
-- window: 6.9–10.9
+- window: 9.9–13.9
 - spec_scenes: S03
 - blueprint: kinetic-type-beats (Adapt — 字卡 slam 為主角、聊天氣泡為降暗底景)
 - rules: spring-pop-entrance (氣泡 stagger 入場；字卡以重 overshoot 的 spring-pop 落下), css-marker-patterns (marker 橫掃)
-- sfx: 7.3s message pop (vol 0.25)
+- sfx: 10.3s message pop (vol 0.25)
 
 ## Frame 3 — 痛二：換班靠猜
 
@@ -48,7 +63,7 @@ mode: autonomous
 - status: animated
 - voiceover: "換班，靠感覺賭一把。"
 - src: compositions/frames/03-pain-swap.html
-- window: 10.9–14.7
+- window: 13.9–17.7
 - spec_scenes: S04
 - blueprint: grid-card-assemble (Adapt — 班表列自組裝，對調為插曲)
 - rules: waterfall-entry (列展開), scale-swap-transition (兩格對調), kinetic-beat-slam (字卡＋問號)
@@ -63,7 +78,7 @@ mode: autonomous
 - status: animated
 - voiceover: "連續上了幾天、夜班排得多密——沒有人真的算過。"
 - src: compositions/frames/04-pain-heat.html
-- window: 14.7–20.2
+- window: 17.7–23.2
 - spec_scenes: S05
 - blueprint: dataviz-countup (Adapt — 數據戲劇化惡化中的問題；熱力圖為載體)
 - rules: spring-pop-entrance (格 stagger), sine-wave-loop (danger 熱區灼燒脈動), kinetic-beat-slam (字卡)
@@ -78,7 +93,7 @@ mode: autonomous
 - status: animated
 - voiceover: "班守 ShiftGuard。"
 - src: compositions/frames/05-reveal.html
-- window: 20.2–23.4
+- window: 23.2–26.4
 - spec_scenes: S06
 - blueprint: kinetic-type-beats (Adapt — Introducing name-drop onto lockup)
 - rules: spring-pop-entrance, waterfall-entry
@@ -93,7 +108,7 @@ mode: autonomous
 - status: animated
 - voiceover: "把排班，從人情變成治理。"
 - src: compositions/frames/06-position.html
-- window: 23.4–27.4
+- window: 26.4–30.4
 - spec_scenes: S07
 - blueprint: titlecard-reveal (Adapt — 單一克制動作：光譜軸畫出＋游標滑行)
 - rules: svg-path-draw (軸線畫出), nudge-curve (游標慢-快-慢滑行), spring-pop-entrance (標籤)
@@ -108,11 +123,11 @@ mode: autonomous
 - status: animated
 - voiceover: "護理師在 LINE 說一句話，系統聽懂。合格的替補前三名，直接送回來——不用再一個一個打電話。沒講清楚的條件，它會用按鈕追問，不臆測。"
 - src: compositions/frames/07-cap1-line.html
-- window: 27.4–42.7
+- window: 30.4–45.7
 - spec_scenes: S08+S09（內部相位軟切＋相位 C 追問註記；步驟小卡 ①–④）
 - blueprint: agent-progress-theater (Adapt — 對話串逐則堆疊至收據卡收束)
 - rules: discrete-text-sequence (打字含停頓；游標閃爍同規則的 square-wave 樣式), spring-pop-entrance (氣泡／建議卡), kinetic-beat-slam (字卡)
-- sfx: 27.8s typewriter tick (0.2)；33.8s message pop (0.25)；38.6s message pop (0.2，追問膠囊)
+- sfx: 30.8s typewriter tick (0.2)；36.8s message pop (0.25)；41.6s message pop (0.2，追問膠囊)
 
 ## Frame 8 — 能力二：換班預檢
 
@@ -123,11 +138,11 @@ mode: autonomous
 - status: animated
 - voiceover: "換班先預檢。違規的當場擋下——像這一筆，碰到母性保護，直接攔。放行的附上法規依據——憑哪一條，清清楚楚。"
 - src: compositions/frames/08-cap2-swap.html
-- window: 42.7–56.3
+- window: 45.7–59.3
 - spec_scenes: S10+S11（內部相位軟切；紅卡加長可讀＋步驟小卡 ①–④）
 - blueprint: device-surface-showcase (Adapt — 視窗英雄、畫面流轉；素材＝真實錄屏，退化 mock 復刻)
 - rules: coordinate-target-zoom (攔截瞬間 punch-in), waterfall-entry (法據逐條；攔截卡與字卡以快速 fromTo scale 落下), kinetic-beat-slam (字卡)
-- sfx: 45.5s soft ui click (0.3)；46.2s low soft thump (0.3)
+- sfx: 48.5s soft ui click (0.3)；49.2s low soft thump (0.3)
 - assets: assets/rec-swap-block.mp4, assets/rec-swap-ok.mp4 [待補充素材→退化 mock]
 
 ## Frame 9 — 能力三：主任的儀表板
@@ -139,7 +154,7 @@ mode: autonomous
 - status: animated
 - voiceover: "主任的儀表板：人力缺口、負荷、留任風險，一頁看完。五個維度的負荷累積，誰快撐不住，提前看見。"
 - src: compositions/frames/09-cap3-dash.html
-- window: 56.3–68.5
+- window: 59.3–71.5
 - spec_scenes: S12+S13（內部相位軟切；步驟小卡 ①–②）
 - blueprint: device-surface-showcase (Adapt — 儀表板換頁；素材＝真實錄屏，退化 mock 復刻)
 - rules: coordinate-target-zoom, waterfall-entry (雷達列), sine-wave-loop (高負荷列 pulse)
@@ -155,7 +170,7 @@ mode: autonomous
 - status: animated
 - voiceover: "最關鍵的一件事：AI，沒有計算工時的權限。"
 - src: compositions/frames/10-trust-versus.html
-- window: 68.5–74.9
+- window: 71.5–77.9
 - spec_scenes: S14
 - blueprint: comparison-split (Reproduce — 鏡面對開雙欄＋徽章 punctuate)
 - rules: split-tilt-cards, css-marker-patterns (marker)
@@ -170,7 +185,7 @@ mode: autonomous
 - status: animated
 - voiceover: "數字歸規則引擎，勞基法十條硬規則內建，"
 - src: compositions/frames/11-trust-rules.html
-- window: 74.9–80.1
+- window: 77.9–83.1
 - spec_scenes: S15
 - blueprint: transcript-scroll-artifact-reveal (Adapt — 縱向捲讀即證據，無 pivot)
 - rules: viewport-change (捲動), sine-wave-loop (pulse), kinetic-beat-slam (字卡)
@@ -186,11 +201,11 @@ mode: autonomous
 - status: animated
 - voiceover: "98 項自動測試把關。"
 - src: compositions/frames/12-trust-98.html
-- window: 80.1–83.5
+- window: 83.1–86.5
 - spec_scenes: S16
 - blueprint: dataviz-countup (Reproduce — count-up 數字英雄)
 - rules: counting-dynamic-scale, waterfall-entry
-- sfx: 81.9s low soft thump (0.3)
+- sfx: 84.9s low soft thump (0.3)
 
 ## Frame 13 — 核心句
 
@@ -201,7 +216,7 @@ mode: autonomous
 - status: animated
 - voiceover: "班表照顧好，人就留得住。"
 - src: compositions/frames/13-core-line.html
-- window: 83.5–88.5
+- window: 86.5–91.5
 - spec_scenes: S17
 - blueprint: titlecard-reveal (Adapt — 呼吸鏡：一次克制入場＋靜帧)
 - rules: waterfall-entry, css-marker-patterns (marker)
@@ -209,14 +224,14 @@ mode: autonomous
 
 ## Frame 14 — CTA：現在就能試
 
-- scene: 亮場。極簡瀏覽器框居中，URL 列「bobyu89.github.io/nursing-agent」可讀；視窗內標準字＋accent 實心按鈕「立即體驗示範平台」——CTA 動作壓在前 3 秒（框浮入、按鈕 slam＋pulse 一次），其後靜帧停留，末尾 dissolve 收黑（全片唯一 exit）。BGM 89.5–93.9 fade-out
+- scene: 亮場。極簡瀏覽器框居中，URL 列「bobyu89.github.io/nursing-agent」可讀；視窗內標準字＋accent 實心按鈕「立即體驗示範平台」——CTA 動作壓在前 3 秒（框浮入、按鈕 slam＋pulse 一次），其後靜帧停留，末尾 dissolve 收黑（全片唯一 exit）。BGM 92.5–96.9 fade-out
 - duration: 5.4s
 - poster: 3.0s
 - transition_in: crossfade
 - status: animated
 - voiceover: "班守 ShiftGuard，現在就能試。"
 - src: compositions/frames/14-cta.html
-- window: 88.5–93.9
+- window: 91.5–96.9
 - spec_scenes: S18
 - blueprint: titlecard-reveal (Adapt — CTA end-card，收於停留)
 - rules: spring-pop-entrance, press-release-spring (按鈕 pulse), ambient-glow-bloom (按鈕後極淡光暈)
