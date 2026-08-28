@@ -12,6 +12,30 @@
             <span data-hf-id="hf-r5m0" id="f07-typed"></span><span data-hf-id="hf-txei" id="f07-cursor"></span>
           </div>
 
+          <!-- 守守：機器人頭像（進場與點點同拍，之後常駐） -->
+          <div id="f07-avatar" aria-hidden="true">
+            <svg viewBox="0 0 64 64">
+              <defs>
+                <radialGradient id="f07-sg-fur" cx="50%" cy="26%" r="90%">
+                  <stop offset="0%" stop-color="#fffdf6"/>
+                  <stop offset="100%" stop-color="#f3ecdb"/>
+                </radialGradient>
+              </defs>
+              <circle cx="14.5" cy="15" r="9.2" fill="url(#f07-sg-fur)"/>
+              <circle cx="49.5" cy="15" r="9.2" fill="url(#f07-sg-fur)"/>
+              <circle cx="15.5" cy="16" r="4.8" fill="#d9d4c8"/>
+              <circle cx="48.5" cy="16" r="4.8" fill="#d9d4c8"/>
+              <path d="M32 9 C48.5 9 58 22 58 38 C58 53 47 61.5 32 61.5 C17 61.5 6 53 6 38 C6 22 15.5 9 32 9 Z" fill="url(#f07-sg-fur)"/>
+              <ellipse cx="32" cy="45" rx="11.5" ry="9" fill="#e6e1d4"/>
+              <circle cx="22.5" cy="33.5" r="2.9" fill="#16233a"/>
+              <circle cx="41.5" cy="33.5" r="2.9" fill="#16233a"/>
+              <circle cx="23.5" cy="32.5" r="1" fill="#ffffff"/>
+              <circle cx="42.5" cy="32.5" r="1" fill="#ffffff"/>
+              <rect x="27.4" y="39.2" width="9.2" height="5.6" rx="2.8" fill="#16233a"/>
+              <path d="M28.5 49.5 Q32 52.5 35.5 49.5" fill="none" stroke="#16233a" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </div>
+
           <!-- bot "typing" dots (dies the instant the ack card lands) -->
           <div data-hf-id="hf-ylnf" id="f07-dots">
             <i data-hf-id="hf-zr3r" class="f07-dot"></i><i data-hf-id="hf-l2pj" class="f07-dot"></i><i data-hf-id="hf-koei" class="f07-dot"></i>
@@ -111,7 +135,7 @@
       position: absolute;
       left: 170px;
       top: 120px;
-      width: 620px;
+      width: 676px;
       height: 690px;
       background: #efe9e2;
       border: 1px solid rgba(22, 35, 58, 0.1);
@@ -153,10 +177,29 @@
     }
 
     /* bot typing dots bubble */
+    /* 守守頭像（官方 assets/logo.svg 原樣內嵌，僅漸層 id 加前綴；logo 資產不受禁漸層約束） */
+    #f07-avatar {
+      position: absolute;
+      top: 106px;
+      left: 22px;
+      width: 46px;
+      height: 46px;
+      padding: 4px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 50%;
+      opacity: 0;
+      will-change: transform;
+    }
+    #f07-avatar svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
     #f07-dots {
       position: absolute;
       top: 106px;
-      left: 26px;
+      left: 82px;
       width: 96px;
       height: 52px;
       background: #ffffff;
@@ -181,7 +224,7 @@
     #f07-ack,
     #f07-sug {
       position: absolute;
-      left: 26px;
+      left: 82px;
       width: 568px;
       background: #ffffff;
       border: 1px solid #e4e9f1;
@@ -429,6 +472,7 @@
       /* ============ Phase A2 (2.45–4.9s) — dots, then ack card rows light up ============ */
       /* VO: 「系統聽懂」 */
 
+      tl.fromTo("#f07-avatar", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(1.6)" }, 2.45);
       tl.fromTo("#f07-dots", { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: "power3.out" }, 2.45);
       var dots = gsap.utils.toArray(".f07-dot");
       dots.forEach(function (d, i) {
