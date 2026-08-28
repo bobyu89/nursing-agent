@@ -34,8 +34,10 @@ Demo Day 亦現場播放。雙層收訊：畫面主角是護理長（凌晨缺�
 - 平台真實錄屏 5 段由 agent 以瀏覽器操作錄製（清單見 video-spec § 5）；
   個別段落可退化為 mock 復刻，需同步更新 § 6 素材依賴。
 - LINE 對話重建（chat-thread 改 LINE 視覺，規範見 design.md § Components）。
-- 旁白：本地 TTS 中文（繁中），voice 試聽後定；語速 1.05。
-- BGM：暖鋼琴弦樂（免版稅，搜尋條件見 video-spec § 5）；音效僅極輕介面音。
+- 旁白：Microsoft Edge 神經語音 zh-TW-HsiaoChenNeural（曉臻，台灣腔，自然語速）——
+  用戶否決 Kokoro 中文後裁定。
+- BGM：用戶選定 HeyGen 曲庫 warm-piano，交叉淡接鋪滿全片＋carve 動態閃避＋
+  宏觀情緒車道；音效僅極輕介面音。
 - 反白閃屏全片 1 次（S05→S06 亮相）；無 shader、無音頻反應。
 - 無聲播放友好：字卡承擔完整敘事線，不加逐句字幕。
 

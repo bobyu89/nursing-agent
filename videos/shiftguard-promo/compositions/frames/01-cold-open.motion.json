@@ -1,13 +1,13 @@
 {
   "scene": "01-cold-open",
-  "duration_s": 5.6,
+  "duration_s": 6.9,
   "rules": ["kinetic-beat-slam", "css-marker-patterns", "waterfall-entry"],
   "exit": {
-    "vector": "slow push-in (stage scale 1→1.045, linear) ≈ 8px/s outward at frame edges; bg grid drifting up ≈ 11px/s; payoff line itself at rest",
+    "vector": "slow push-in (stage scale 1→1.045 linear over 6.9s) ≈ 6px/s outward at frame edges; bg grid drifting up ≈ 11px/s; payoff line itself at rest",
     "still_moving": true
   },
   "entry": {
-    "vector": "none at t=0 (bare dark canvas; first entrance, card float-up 46px/0.6s, starts at 0.15s)",
+    "vector": "none at t=0 (bare dark canvas; first entrance, card float-up 46px/0.6s, starts at 0.2s)",
     "from_rest": true
   }
 }

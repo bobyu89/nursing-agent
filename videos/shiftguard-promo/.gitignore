@@ -3,3 +3,5 @@ snapshots/
 .hyperframes/
 renders/
 *.log
+audition/
+.thumbnails/

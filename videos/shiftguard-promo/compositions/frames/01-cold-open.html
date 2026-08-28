@@ -1,10 +1,10 @@
 <template>
-  <div data-hf-id="hf-usdt" id="root" data-composition-id="01-cold-open" data-duration="5.6" data-width="1920" data-height="1080">
+  <div data-hf-id="hf-usdt" id="root" data-composition-id="01-cold-open" data-duration="6.9" data-width="1920" data-height="1080">
     <!-- full-bleed ground (never on #root) -->
-    <div data-hf-id="hf-2ybe" id="f01-clip" class="clip f01-bg" data-start="0" data-duration="5.6" data-track-index="0"></div>
+    <div data-hf-id="hf-2ybe" id="f01-clip" class="clip f01-bg" data-start="0" data-duration="6.9" data-track-index="0"></div>
 
     <!-- faint roster grid, fades in behind the payoff line -->
-    <div data-hf-id="hf-0t8g" class="clip" id="f01-grid" data-start="0" data-duration="5.6" data-track-index="1">
+    <div data-hf-id="hf-0t8g" class="clip" id="f01-grid" data-start="0" data-duration="6.9" data-track-index="1">
       <span data-hf-id="hf-btgf" class="f01-gv" style="left: 240px"></span>
       <span data-hf-id="hf-tb45" class="f01-gv" style="left: 400px"></span>
       <span data-hf-id="hf-vekm" class="f01-gv" style="left: 560px"></span>
@@ -24,7 +24,7 @@
     </div>
 
     <!-- content stage (slow push-in runs on this layer) -->
-    <div data-hf-id="hf-o9pz" class="clip" id="f01-stage" data-start="0" data-duration="5.6" data-track-index="2">
+    <div data-hf-id="hf-o9pz" class="clip" id="f01-stage" data-start="0" data-duration="6.9" data-track-index="2">
       <!-- beat 1: the resignation form card -->
       <div data-hf-id="hf-aln0" id="f01-cardgroup" data-layout-allow-overlap="">
         <div data-hf-id="hf-dsib" id="f01-card">
@@ -228,21 +228,21 @@
       (function () {
         window.__timelines = window.__timelines || {};
         var tl = gsap.timeline({ paused: true });
-        var D = 5.6;
+        var D = 6.9;
         var F = 1 / 60;
 
-        /* one time table — the beat spine of the shot */
+        /* one time table — the beat spine of the shot (HsiaoChen read: sentence 1 ≈ 0–3.6, sentence 2 from ≈ 3.9) */
         var T = {
-          card: 0.15,
-          f1: 0.5,
-          f2: 0.62,
-          f3: 0.74,
-          stamp: 1.55, // VO reaches 「家庭因素」
-          skf: 2.42, // danger cross-out
-          skb: 2.58,
-          clear: 2.88, // the lie fades out
-          truth: 3.05, // VO 「真相…」 waterfall
-          grid: 3.45,
+          card: 0.2,
+          f1: 0.65,
+          f2: 0.8,
+          f3: 0.95,
+          stamp: 2.15, // VO reaches 「家庭因素」
+          skf: 3.6, // danger cross-out — phase 2 opens
+          skb: 3.78,
+          clear: 4.05, // the lie fades out
+          truth: 4.25, // VO 「真相…」 waterfall
+          grid: 4.7,
         };
 
         /* macro camera: slow continuous push-in under the whole shot */
