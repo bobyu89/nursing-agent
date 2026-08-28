@@ -3,7 +3,7 @@
     @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
 @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
 @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
-/* ============ 08-cap2-swap — 能力二：換班預檢 ============ */
+/* ============ 08-cap2-swap — 能力二：換班預檢（13.6s 加長版＋步驟籤） ============ */
     #root {
       position: relative;
       width: 1920px;
@@ -320,7 +320,7 @@
       font-variant-numeric: tabular-nums;
     }
 
-    /* ---- overlay: section label + 字卡 ---- */
+    /* ---- overlay: section label + step chips + 字卡 ---- */
     #f08-overlay {
       position: absolute;
       inset: 0;
@@ -346,6 +346,54 @@
       border-radius: 3px;
       background: #4060ef;
       flex: none;
+    }
+    /* step chips — accumulate bottom-left, above the 字卡 zone, each STAYS */
+    .f08-chip {
+      position: absolute;
+      left: 96px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px 0 8px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      box-shadow: 0 4px 12px rgba(22, 35, 58, 0.07);
+      opacity: 0;
+    }
+    #f08-chip1 {
+      top: 548px;
+    }
+    #f08-chip2 {
+      top: 600px;
+    }
+    #f08-chip3 {
+      top: 652px;
+    }
+    #f08-chip4 {
+      top: 704px;
+    }
+    .f08-chip-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .f08-chip-text {
+      font-size: 20px;
+      font-weight: 600;
+      color: #16233a;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
     }
     .f08-caption {
       position: absolute;
@@ -387,11 +435,11 @@
     }
   </style>
 
-  <div data-hf-id="hf-ytwp" id="root" data-composition-id="08-cap2-swap" data-duration="9.6" data-width="1920" data-height="1080">
+  <div data-hf-id="hf-640u" id="root" data-composition-id="08-cap2-swap" data-duration="13.6" data-width="1920" data-height="1080">
     <!-- full-bleed ground -->
-    <div data-hf-id="hf-0o37" id="f08-bg" class="clip" data-start="0" data-duration="9.6" data-track-index="0"></div>
+    <div data-hf-id="hf-w8di" id="f08-bg" class="clip" data-start="0" data-duration="13.6" data-track-index="0"></div>
 
-    <div data-hf-id="hf-svqs" id="f08-main" class="clip" data-start="0" data-duration="9.6" data-track-index="1">
+    <div data-hf-id="hf-qtnx" id="f08-main" class="clip" data-start="0" data-duration="13.6" data-track-index="1">
       <div data-hf-id="hf-ojyk" id="f08-zoom-outer" data-layout-allow-overflow="">
         <div data-hf-id="hf-z1vg" id="f08-zoom-inner">
           <div data-hf-id="hf-l5mq" id="f08-window">
@@ -437,7 +485,7 @@
                     <span data-hf-id="hf-4y9d" class="f08-alert-title">換班不成立</span>
                   </div>
                   <div data-hf-id="hf-na3n" id="f08-alert-reason">
-                    <span data-hf-id="hf-h92t" class="f08-hchip">H10</span>個人限制班別（母性保護）——N-03 限制期間不得排入大夜
+                    <span data-hf-id="hf-et8v" class="f08-hchip" id="f08-h10chip">H10</span>個人限制班別（母性保護）——N-03 限制期間不得排入大夜
                   </div>
                   <div data-hf-id="hf-16y7" id="f08-alert-basis">勞動基準法第 49 條</div>
                 </div>
@@ -508,6 +556,20 @@
       <!-- overlay above camera -->
       <div data-hf-id="hf-jili" id="f08-overlay">
         <div data-hf-id="hf-q0i1" id="f08-toplabel"><span data-hf-id="hf-s3dh" class="f08-tick"></span>能力二・換班簽核預檢</div>
+
+        <div data-hf-id="hf-96sn" class="f08-chip" id="f08-chip1" data-layout-allow-overlap>
+          <span data-hf-id="hf-ihyy" class="f08-chip-num" data-layout-allow-overlap>1</span><span data-hf-id="hf-5t9b" class="f08-chip-text" data-layout-allow-overlap>選擇換班雙方</span>
+        </div>
+        <div data-hf-id="hf-0iws" class="f08-chip" id="f08-chip2" data-layout-allow-overlap>
+          <span data-hf-id="hf-iw9z" class="f08-chip-num" data-layout-allow-overlap>2</span><span data-hf-id="hf-3fgd" class="f08-chip-text" data-layout-allow-overlap>一鍵預檢</span>
+        </div>
+        <div data-hf-id="hf-1akl" class="f08-chip" id="f08-chip3" data-layout-allow-overlap>
+          <span data-hf-id="hf-jal0" class="f08-chip-num" data-layout-allow-overlap>3</span><span data-hf-id="hf-h5b6" class="f08-chip-text" data-layout-allow-overlap>違規攔截・附原因</span>
+        </div>
+        <div data-hf-id="hf-k2aa" class="f08-chip" id="f08-chip4" data-layout-allow-overlap>
+          <span data-hf-id="hf-jow1" class="f08-chip-num" data-layout-allow-overlap>4</span><span data-hf-id="hf-7gl2" class="f08-chip-text" data-layout-allow-overlap>放行・附法據</span>
+        </div>
+
         <div data-hf-id="hf-l6ef" class="f08-caption" id="f08-capA">
           <span data-hf-id="hf-69ec" class="f08-cap-text">換班預檢</span>
           <span data-hf-id="hf-5udi" class="f08-cap-bar"></span>
@@ -526,89 +588,93 @@
       window.__timelines = window.__timelines || {};
       var tl = gsap.timeline({ paused: true });
 
-      /* -- Scene 1 (0–1.6s)：外框落定、甲乙兩人與預檢鈕組裝 -- */
+      /* -- Scene 1 (0–1.8s)：外框落定、步驟①、甲乙兩人與預檢鈕組裝 -- */
       tl.fromTo("#f08-window", { y: 56, opacity: 0, scale: 0.985 }, { y: 0, opacity: 1, scale: 1, duration: 0.55, ease: "power3.out" }, 0);
       tl.fromTo("#f08-toplabel", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power2.out" }, 0.12);
+      tl.fromTo("#f08-chip1", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.6);
       tl.fromTo("#f08-pa1", { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 0.62);
-      tl.fromTo("#f08-swapA", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.42, ease: "back.out(1.8)" }, 0.84);
-      tl.fromTo("#f08-pa2", { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 1.02);
-      tl.fromTo("#f08-btnA", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, 1.34);
+      tl.fromTo("#f08-swapA", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.42, ease: "back.out(1.8)" }, 0.86);
+      tl.fromTo("#f08-pa2", { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 1.06);
+      tl.fromTo("#f08-btnA", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, 1.4);
 
-      /* -- Scene 2 (2.6s)：按下「預檢」（sfx click @ 37.4 abs = 2.6 local） -- */
-      tl.to("#f08-btnA", { scale: 0.955, duration: 0.09, ease: "power2.in" }, 2.6);
-      tl.to("#f08-btnA", { scale: 1, duration: 0.24, ease: "back.out(3)" }, 2.69);
-      tl.to("#f08-btnA", { backgroundColor: "#3350dd", duration: 0.09, ease: "none" }, 2.6);
-      tl.to("#f08-btnA", { backgroundColor: "#4060ef", duration: 0.3, ease: "power1.out" }, 2.72);
-      tl.to("#f08-swapA-ico", { rotation: 180, duration: 0.5, ease: "power2.inOut", transformOrigin: "50% 50%" }, 2.6);
+      /* -- Scene 2 (2.8s)：步驟②＋按下「預檢」（sfx click @ 2.8 local） -- */
+      tl.fromTo("#f08-chip2", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 2.8);
+      tl.to("#f08-btnA", { scale: 0.955, duration: 0.09, ease: "power2.in" }, 2.8);
+      tl.to("#f08-btnA", { scale: 1, duration: 0.24, ease: "back.out(3)" }, 2.89);
+      tl.to("#f08-btnA", { backgroundColor: "#3350dd", duration: 0.09, ease: "none" }, 2.8);
+      tl.to("#f08-btnA", { backgroundColor: "#4060ef", duration: 0.3, ease: "power1.out" }, 2.92);
+      tl.to("#f08-swapA-ico", { rotation: 180, duration: 0.5, ease: "power2.inOut", transformOrigin: "50% 50%" }, 2.8);
 
-      /* -- Scene 2b (2.95s)：danger 攔截卡快速 fromTo scale 落下 -- */
+      /* -- Scene 3 (3.5s)：danger 攔截卡快速 fromTo scale 落下（sfx thump @ 3.5）＋步驟③ -- */
       tl.fromTo(
         "#f08-alert",
         { y: -44, scale: 1.3, opacity: 0, filter: "blur(9px)" },
         { y: 0, scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.34, ease: "power4.out" },
-        2.95
+        3.5
       );
-      tl.fromTo("#f08-alert-reason", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.32, ease: "power2.out" }, 3.14);
-      tl.fromTo("#f08-alert-basis", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power2.out" }, 3.32);
+      tl.fromTo("#f08-chip3", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 3.7);
+      tl.fromTo("#f08-alert-reason", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.32, ease: "power2.out" }, 3.72);
+      tl.fromTo("#f08-alert-basis", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power2.out" }, 3.95);
 
-      /* -- Scene 3 (3.1–4.95s)：攔截瞬間 punch-in（coordinate-target-zoom）
-            攔截卡中心 (1234,478)，offset=(274,-62) → counter=(-274,62)，scale 1.42 -- */
-      tl.to("#f08-zoom-outer", { scale: 1.42, duration: 1.05, ease: "power3.inOut" }, 3.1);
-      tl.to("#f08-zoom-inner", { x: -274, y: 62, duration: 1.05, ease: "power3.inOut" }, 3.1);
+      /* -- Scene 3b (3.6–7.15s)：攔截瞬間 punch-in（coordinate-target-zoom）＋讀秒 HOLD
+            攔截卡中心 (1234,478)，offset=(274,-62) → counter=(-274,62)，scale 1.42；
+            HOLD 期間僅極微推近（嵌套式 counter 與 scale 無關，目標保持置中） -- */
+      tl.to("#f08-zoom-outer", { scale: 1.42, duration: 1.1, ease: "power3.inOut" }, 3.6);
+      tl.to("#f08-zoom-inner", { x: -274, y: 62, duration: 1.1, ease: "power3.inOut" }, 3.6);
+      tl.to("#f08-zoom-outer", { scale: 1.448, duration: 2.3, ease: "sine.inOut" }, 4.85);
 
-      /* 字卡「換班預檢」slam（kinetic-beat-slam；sfx thump @ 38.6 abs = 3.8 local） */
+      /* 字卡「換班預檢」slam（kinetic-beat-slam）@4.6 */
       tl.fromTo(
         "#f08-capA",
         { scale: 1.5, opacity: 0, filter: "blur(14px)" },
         { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.5, ease: "power4.out" },
-        3.8
+        4.6
       );
-      tl.fromTo("#f08-capA .f08-cap-bar", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.38, ease: "power3.out", transformOrigin: "0% 50%" }, 4.18);
+      tl.fromTo("#f08-capA .f08-cap-bar", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.38, ease: "power3.out", transformOrigin: "0% 50%" }, 4.98);
 
-      /* -- Scene 4 (4.95–5.7s)：拉回 ＋ 相位軟切 A→B -- */
-      tl.to("#f08-zoom-outer", { scale: 1, duration: 0.8, ease: "power2.inOut" }, 4.95);
-      tl.to("#f08-zoom-inner", { x: 0, y: 0, duration: 0.8, ease: "power2.inOut" }, 4.95);
-      tl.to(["#f08-phaseA", "#f08-capA"], { opacity: 0, duration: 0.4, ease: "power1.inOut" }, 5.15);
-      tl.fromTo("#f08-phaseB", { opacity: 0, scale: 1.015 }, { opacity: 1, scale: 1, duration: 0.45, ease: "power2.out" }, 5.25);
+      /* VO「碰到母性保護」(≈5.5s)：H10 章一次輕脈衝，讀卡期間畫面不死 */
+      tl.to("#f08-h10chip", { scale: 1.12, duration: 0.3, ease: "sine.inOut", yoyo: true, repeat: 1, transformOrigin: "50% 50%" }, 5.55);
 
-      /* -- Scene 5 (5.8–7.1s)：放行案例——按鈕輕按、綠卡彈入、法據逐條瀑布 -- */
-      tl.to("#f08-btnB", { scale: 0.96, duration: 0.09, ease: "power2.in" }, 5.8);
-      tl.to("#f08-btnB", { scale: 1, duration: 0.22, ease: "back.out(2.5)" }, 5.89);
-      tl.to("#f08-btnB", { backgroundColor: "#3350dd", duration: 0.09, ease: "none" }, 5.8);
-      tl.to("#f08-btnB", { backgroundColor: "#4060ef", duration: 0.28, ease: "power1.out" }, 5.92);
+      /* -- Scene 4 (7.15–8.15s)：拉回 ＋ 相位軟切 A→B（7.6） -- */
+      tl.to("#f08-zoom-outer", { scale: 1, duration: 0.85, ease: "power2.inOut" }, 7.15);
+      tl.to("#f08-zoom-inner", { x: 0, y: 0, duration: 0.85, ease: "power2.inOut" }, 7.15);
+      tl.to(["#f08-phaseA", "#f08-capA"], { opacity: 0, duration: 0.4, ease: "power1.inOut" }, 7.6);
+      tl.fromTo("#f08-phaseB", { opacity: 0, scale: 1.015 }, { opacity: 1, scale: 1, duration: 0.45, ease: "power2.out" }, 7.7);
+
+      /* -- Scene 5 (8.05–8.7s)：放行案例——按鈕輕按、綠卡彈入（8.3）、步驟④（8.4） -- */
+      tl.to("#f08-btnB", { scale: 0.96, duration: 0.09, ease: "power2.in" }, 8.05);
+      tl.to("#f08-btnB", { scale: 1, duration: 0.22, ease: "back.out(2.5)" }, 8.14);
+      tl.to("#f08-btnB", { backgroundColor: "#3350dd", duration: 0.09, ease: "none" }, 8.05);
+      tl.to("#f08-btnB", { backgroundColor: "#4060ef", duration: 0.28, ease: "power1.out" }, 8.17);
       tl.fromTo(
         "#f08-pass",
         { y: -30, scale: 1.18, opacity: 0, filter: "blur(7px)" },
         { y: 0, scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.32, ease: "power4.out" },
-        6.02
+        8.3
       );
+      tl.fromTo("#f08-chip4", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 8.4);
 
-      /* 法規依據 waterfall-entry：binary opacity（tl.set）＋由下而上收攏、加速重疊 */
-      var F = 1 / 60;
-      var w0 = 6.5;
-      tl.set("#f08-b1", { opacity: 1, y: 62 }, w0);
-      tl.to("#f08-b1", { y: 0, duration: 0.18, ease: "power4.out" }, w0);
-      var w1 = w0 + 0.18 + 2 * F;
-      tl.set("#f08-b2", { opacity: 1, y: 48 }, w1);
-      tl.to("#f08-b2", { y: 0, duration: 0.15, ease: "power4.out" }, w1);
-      var w2 = w1 + 0.15 - F;
-      tl.set("#f08-b3", { opacity: 1, y: 44 }, w2);
-      tl.to("#f08-b3", { y: 0, duration: 0.14, ease: "power4.out" }, w2);
-      var w3 = w2 + 0.14 - F;
-      tl.set("#f08-b4", { opacity: 1, y: 42 }, w3);
-      tl.to("#f08-b4", { y: 0, duration: 0.13, ease: "power4.out" }, w3);
+      /* -- Scene 6 (9.0–11.5s)：法規依據逐條落下（waterfall 機制、依旁白放慢、間距遞減） -- */
+      tl.set("#f08-b1", { opacity: 1, y: 62 }, 9.0);
+      tl.to("#f08-b1", { y: 0, duration: 0.18, ease: "power4.out" }, 9.0);
+      tl.set("#f08-b2", { opacity: 1, y: 48 }, 9.75);
+      tl.to("#f08-b2", { y: 0, duration: 0.15, ease: "power4.out" }, 9.75);
+      tl.set("#f08-b3", { opacity: 1, y: 44 }, 10.4);
+      tl.to("#f08-b3", { y: 0, duration: 0.14, ease: "power4.out" }, 10.4);
+      tl.set("#f08-b4", { opacity: 1, y: 42 }, 10.95);
+      tl.to("#f08-b4", { y: 0, duration: 0.13, ease: "power4.out" }, 10.95);
 
-      /* -- Scene 6 (8.05s)：字卡「擋下時，法條攤在眼前」slam -- */
+      /* -- Scene 7 (11.8s)：字卡「擋下時，法條攤在眼前」slam -- */
       tl.fromTo(
         "#f08-capB",
         { scale: 1.45, opacity: 0, filter: "blur(12px)" },
         { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.5, ease: "power4.out" },
-        8.05
+        11.8
       );
-      tl.fromTo("#f08-capB .f08-cap-bar", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.4, ease: "power3.out", transformOrigin: "0% 50%" }, 8.42);
+      tl.fromTo("#f08-capB .f08-cap-bar", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.4, ease: "power3.out", transformOrigin: "0% 50%" }, 12.18);
 
-      /* 尾段安靜推近，鏡頭不死（結束時速度歸零，等硬切） */
-      tl.to("#f08-zoom-outer", { scale: 1.025, duration: 3.5, ease: "sine.inOut" }, 6.1);
+      /* 尾段安靜推近至 13.6（結束時速度歸零，等硬切） */
+      tl.to("#f08-zoom-outer", { scale: 1.025, duration: 5.0, ease: "sine.inOut" }, 8.6);
 
       window.__timelines["08-cap2-swap"] = tl;
     })();

@@ -53,6 +53,18 @@
         transform-origin: left center;
         will-change: transform;
       }
+      #f11tr-subline {
+        position: absolute;
+        left: 140px;
+        top: 598px;
+        font-size: 26px;
+        line-height: 36px;
+        font-weight: 500;
+        letter-spacing: 0.05em;
+        color: #5c6b85;
+        opacity: 0;
+        will-change: transform, opacity;
+      }
 
       /* ---- 極簡瀏覽器外框（無紅綠燈） ---- */
       .f11tr-browser {
@@ -170,6 +182,7 @@
       <!-- 字卡：勞基法規則內建 -->
       <div data-hf-id="hf-jg2b" class="f11tr-title"><span data-hf-id="hf-t1rr" id="f11tr-t-lead">勞基法規則</span><span data-hf-id="hf-5jzf" id="f11tr-t-accent">內建</span></div>
       <div data-hf-id="hf-2gws" id="f11tr-under"></div>
+      <div id="f11tr-subline">十條硬規則逐條攤開——每一條都附法源</div>
 
       <!-- 規則手冊 mock（規劃錄屏未到位 → 依真實條文復刻） -->
       <div data-hf-id="hf-hkq0" class="f11tr-browser" id="f11tr-browser">
@@ -274,6 +287,10 @@
           { scaleX: 1, duration: 0.35, ease: "power3.out" },
           BEATS[2]
         );
+
+        // Phase 2b (3.0–3.16s) — 說明副線 waterfall-entry：底線掃完緊接著whip上、停留到 cut
+        tl.set("#f11tr-subline", { opacity: 1, y: 40 }, 3.0);
+        tl.to("#f11tr-subline", { y: 0, duration: 0.16, ease: "power4.out" }, 3.0);
 
         // Phase 3 (4.3–5.0s) — H10 經過時輕 pulse（sine-wave-loop yoyo 形，有限次），捲動不停。
         // 156.7px/s 下 H10（內容偏移 1175）於 3.36s 入視窗、4.31s 全見，pulse 峰值 4.65s。

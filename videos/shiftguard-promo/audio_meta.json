@@ -62,21 +62,21 @@
     {
       "id": "f07",
       "path": "assets/voice/f07.wav",
-      "duration_s": 9.672,
+      "duration_s": 14.52,
       "words": [],
       "voice": "zh-TW-HsiaoChenNeural"
     },
     {
       "id": "f08",
       "path": "assets/voice/f08.wav",
-      "duration_s": 7.152,
+      "duration_s": 12.816,
       "words": [],
       "voice": "zh-TW-HsiaoChenNeural"
     },
     {
       "id": "f09",
       "path": "assets/voice/f09.wav",
-      "duration_s": 6.648,
+      "duration_s": 11.424,
       "words": [],
       "voice": "zh-TW-HsiaoChenNeural"
     },
@@ -117,6 +117,6 @@
     }
   ],
   "sfx": [],
-  "total_duration_s": 65.544,
+  "total_duration_s": 80.832,
   "tts_engine": "edge-tts zh-TW-HsiaoChenNeural"
 }

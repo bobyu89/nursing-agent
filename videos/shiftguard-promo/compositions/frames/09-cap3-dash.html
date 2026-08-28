@@ -3,7 +3,7 @@
     @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
 @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
 @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
-/* ============ 09-cap3-dash — 能力三：主任的儀表板 ============ */
+/* ============ 09-cap3-dash — 能力三：主任的儀表板（12.2s 加長版＋步驟籤） ============ */
     #root {
       position: relative;
       width: 1920px;
@@ -365,7 +365,7 @@
       font-weight: 800;
     }
 
-    /* ---- overlay: section label + 字卡 ---- */
+    /* ---- overlay: section label + step chips + 字卡 ---- */
     #f09-overlay {
       position: absolute;
       inset: 0;
@@ -391,6 +391,48 @@
       border-radius: 3px;
       background: #4060ef;
       flex: none;
+    }
+    /* step chips — accumulate bottom-left, above the 字卡 zone, each STAYS */
+    .f09-chip {
+      position: absolute;
+      left: 96px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px 0 8px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      box-shadow: 0 4px 12px rgba(22, 35, 58, 0.07);
+      opacity: 0;
+    }
+    #f09-chip1 {
+      top: 652px;
+    }
+    #f09-chip2 {
+      top: 704px;
+    }
+    .f09-chip-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .f09-chip-text {
+      font-size: 20px;
+      font-weight: 600;
+      color: #16233a;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
     }
     #f09-cap {
       position: absolute;
@@ -420,11 +462,11 @@
     }
   </style>
 
-  <div data-hf-id="hf-bv9g" id="root" data-composition-id="09-cap3-dash" data-duration="9.6" data-width="1920" data-height="1080">
+  <div data-hf-id="hf-53ci" id="root" data-composition-id="09-cap3-dash" data-duration="12.2" data-width="1920" data-height="1080">
     <!-- full-bleed ground -->
-    <div data-hf-id="hf-ww4s" id="f09-bg" class="clip" data-start="0" data-duration="9.6" data-track-index="0"></div>
+    <div data-hf-id="hf-mfew" id="f09-bg" class="clip" data-start="0" data-duration="12.2" data-track-index="0"></div>
 
-    <div data-hf-id="hf-kgzv" id="f09-main" class="clip" data-start="0" data-duration="9.6" data-track-index="1">
+    <div data-hf-id="hf-drrz" id="f09-main" class="clip" data-start="0" data-duration="12.2" data-track-index="1">
       <div data-hf-id="hf-r9b7" id="f09-zoom-outer" data-layout-allow-overflow="">
         <div data-hf-id="hf-909v" id="f09-zoom-inner">
           <div data-hf-id="hf-8bbp" id="f09-window">
@@ -538,6 +580,14 @@
       <!-- overlay above camera -->
       <div data-hf-id="hf-4nlj" id="f09-overlay">
         <div data-hf-id="hf-ww2v" id="f09-toplabel"><span data-hf-id="hf-fvqi" class="f09-tick"></span>能力三・今日戰情板</div>
+
+        <div data-hf-id="hf-f3k7" class="f09-chip" id="f09-chip1" data-layout-allow-overlap>
+          <span data-hf-id="hf-z1hn" class="f09-chip-num" data-layout-allow-overlap>1</span><span data-hf-id="hf-fj1z" class="f09-chip-text" data-layout-allow-overlap>今日戰情板・缺口與補足率</span>
+        </div>
+        <div data-hf-id="hf-482k" class="f09-chip" id="f09-chip2" data-layout-allow-overlap>
+          <span data-hf-id="hf-yn6m" class="f09-chip-num" data-layout-allow-overlap>2</span><span data-hf-id="hf-t8t5" class="f09-chip-text" data-layout-allow-overlap>留任雷達・五維負荷</span>
+        </div>
+
         <div data-hf-id="hf-6ubz" id="f09-cap">
           <span data-hf-id="hf-p1va" class="f09-cap-text">留任雷達</span>
           <span data-hf-id="hf-zqcn" class="f09-cap-bar"></span>
@@ -552,78 +602,73 @@
       window.__timelines = window.__timelines || {};
       var tl = gsap.timeline({ paused: true });
 
-      /* -- Scene 1 (0–1.5s)：儀表板外框落定、標題與抬頭小字 -- */
+      /* -- Scene 1 (0–1.5s)：儀表板外框落定、標題、抬頭小字、步驟① -- */
       tl.fromTo("#f09-window", { y: 56, opacity: 0, scale: 0.985 }, { y: 0, opacity: 1, scale: 1, duration: 0.55, ease: "power3.out" }, 0);
       tl.fromTo("#f09-toplabel", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power2.out" }, 0.12);
-      tl.fromTo("#f09-titleA", { y: 22, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.58);
-      tl.fromTo("#f09-hairA", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.5, ease: "power2.out", transformOrigin: "0% 50%" }, 0.66);
+      tl.fromTo("#f09-titleA", { y: 22, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.5);
+      tl.fromTo("#f09-chip1", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.6);
+      tl.fromTo("#f09-hairA", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.5, ease: "power2.out", transformOrigin: "0% 50%" }, 0.62);
       tl.fromTo("#f09-note", { x: -14, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45, ease: "power2.out" }, 0.88);
 
-      /* -- Scene 2 (1.6–2.9s)：KPI 卡與缺口列表跟著旁白進場 -- */
-      tl.fromTo("#f09-k1", { y: 34, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 1.65);
-      tl.fromTo("#f09-gap-title", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power2.out" }, 1.98);
-      tl.fromTo("#f09-gap-row", { x: -26, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 2.1);
-      tl.fromTo("#f09-k2", { y: 34, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 2.38);
-      tl.fromTo("#f09-k3", { y: 34, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 2.64);
+      /* -- Scene 2 (1.9–3.5s)：KPI 卡與缺口列表跟著旁白進場 -- */
+      tl.fromTo("#f09-k1", { y: 34, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 1.9);
+      tl.fromTo("#f09-gap-title", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power2.out" }, 2.2);
+      tl.fromTo("#f09-gap-row", { x: -26, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 2.35);
+      tl.fromTo("#f09-k2", { y: 34, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 2.85);
+      tl.fromTo("#f09-k3", { y: 34, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 3.12);
 
-      /* -- Scene 3 (3.0–4.8s)：輕推近掃過 KPI 列（coordinate-target-zoom＋緩慢橫掃）
+      /* -- Scene 3 (3.5–5.4s)：輕推近掃過 KPI 列（coordinate-target-zoom＋緩慢橫掃）
             KPI 列中心 (994,389)，offset=(34,-151) → 基準 counter=(-34,151)；
             先瞄列左段 (counter x=64)，橫掃至右段 (counter x=-132)，scale 1.16 -- */
-      tl.to("#f09-zoom-outer", { scale: 1.16, duration: 1.1, ease: "power3.inOut" }, 3.0);
-      tl.to("#f09-zoom-inner", { x: 64, y: 151, duration: 1.1, ease: "power3.inOut" }, 3.0);
-      tl.to("#f09-zoom-inner", { x: -132, duration: 0.7, ease: "sine.inOut" }, 4.1);
+      tl.to("#f09-zoom-outer", { scale: 1.16, duration: 1.1, ease: "power3.inOut" }, 3.5);
+      tl.to("#f09-zoom-inner", { x: 64, y: 151, duration: 1.1, ease: "power3.inOut" }, 3.5);
+      tl.to("#f09-zoom-inner", { x: -132, duration: 0.8, ease: "sine.inOut" }, 4.6);
 
-      /* -- Scene 4 (4.8–5.6s)：拉回 ＋ 相位軟切 A→B -- */
-      tl.to("#f09-zoom-outer", { scale: 1, duration: 0.7, ease: "power2.inOut" }, 4.8);
-      tl.to("#f09-zoom-inner", { x: 0, y: 0, duration: 0.7, ease: "power2.inOut" }, 4.8);
-      tl.to("#f09-phaseA", { opacity: 0, duration: 0.4, ease: "power1.inOut" }, 4.98);
-      tl.fromTo("#f09-phaseB", { opacity: 0, scale: 1.015 }, { opacity: 1, scale: 1, duration: 0.45, ease: "power2.out" }, 5.08);
-      tl.fromTo("#f09-titleB", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.32, ease: "power3.out" }, 5.45);
-      tl.fromTo("#f09-hairB", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.45, ease: "power2.out", transformOrigin: "0% 50%" }, 5.55);
-      tl.fromTo("#f09-dim-chip", { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: "back.out(1.8)" }, 5.58);
+      /* -- Scene 4 (5.4–6.5s)：拉回 ＋ 相位軟切 A→B（5.9） -- */
+      tl.to("#f09-zoom-outer", { scale: 1, duration: 0.7, ease: "power2.inOut" }, 5.4);
+      tl.to("#f09-zoom-inner", { x: 0, y: 0, duration: 0.7, ease: "power2.inOut" }, 5.4);
+      tl.to("#f09-phaseA", { opacity: 0, duration: 0.4, ease: "power1.inOut" }, 5.9);
+      tl.fromTo("#f09-phaseB", { opacity: 0, scale: 1.015 }, { opacity: 1, scale: 1, duration: 0.45, ease: "power2.out" }, 6.0);
+      tl.fromTo("#f09-titleB", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.32, ease: "power3.out" }, 6.4);
+      tl.fromTo("#f09-hairB", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.45, ease: "power2.out", transformOrigin: "0% 50%" }, 6.5);
+      tl.fromTo("#f09-chip2", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 6.5);
+      tl.fromTo("#f09-dim-chip", { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: "back.out(1.8)" }, 6.58);
 
-      /* -- Scene 5 (5.7–6.7s)：雷達列 waterfall-entry cascade（binary opacity、由下而上、加速重疊） -- */
-      var F = 1 / 60;
-      var t0 = 5.72;
-      tl.set("#f09-thead", { opacity: 1, y: 56 }, t0);
-      tl.to("#f09-thead", { y: 0, duration: 0.18, ease: "power4.out" }, t0);
-      var t1 = t0 + 0.18 + 2 * F;
-      tl.set("#f09-r1", { opacity: 1, y: 46 }, t1);
-      tl.to("#f09-r1", { y: 0, duration: 0.15, ease: "power4.out" }, t1);
-      var t2 = t1 + 0.15 - F;
-      tl.set("#f09-r2", { opacity: 1, y: 44 }, t2);
-      tl.to("#f09-r2", { y: 0, duration: 0.14, ease: "power4.out" }, t2);
-      var t3 = t2 + 0.14 - F;
-      tl.set("#f09-r3", { opacity: 1, y: 44 }, t3);
-      tl.to("#f09-r3", { y: 0, duration: 0.14, ease: "power4.out" }, t3);
-      var t4 = t3 + 0.14 - F;
-      tl.set("#f09-r4", { opacity: 1, y: 42 }, t4);
-      tl.to("#f09-r4", { y: 0, duration: 0.13, ease: "power4.out" }, t4);
-      var t5 = t4 + 0.13 - F;
-      tl.set("#f09-r5", { opacity: 1, y: 42 }, t5);
-      tl.to("#f09-r5", { y: 0, duration: 0.13, ease: "power4.out" }, t5);
+      /* -- Scene 5 (6.8–9.0s)：雷達列 cascade（waterfall 機制、依旁白放慢、間距遞減） -- */
+      tl.set("#f09-thead", { opacity: 1, y: 56 }, 6.8);
+      tl.to("#f09-thead", { y: 0, duration: 0.18, ease: "power4.out" }, 6.8);
+      tl.set("#f09-r1", { opacity: 1, y: 46 }, 7.15);
+      tl.to("#f09-r1", { y: 0, duration: 0.15, ease: "power4.out" }, 7.15);
+      tl.set("#f09-r2", { opacity: 1, y: 44 }, 7.5);
+      tl.to("#f09-r2", { y: 0, duration: 0.14, ease: "power4.out" }, 7.5);
+      tl.set("#f09-r3", { opacity: 1, y: 44 }, 7.82);
+      tl.to("#f09-r3", { y: 0, duration: 0.14, ease: "power4.out" }, 7.82);
+      tl.set("#f09-r4", { opacity: 1, y: 42 }, 8.12);
+      tl.to("#f09-r4", { y: 0, duration: 0.13, ease: "power4.out" }, 8.12);
+      tl.set("#f09-r5", { opacity: 1, y: 42 }, 8.4);
+      tl.to("#f09-r5", { y: 0, duration: 0.13, ease: "power4.out" }, 8.4);
 
-      /* -- Scene 6 (7.1–7.9s)：N-03 高負荷列單次 pulse（sine 單循環，僅此一顆 warn 點） -- */
-      tl.to("#f09-warn-dot", { scale: 1.9, duration: 0.38, ease: "sine.inOut", yoyo: true, repeat: 1, transformOrigin: "50% 50%" }, 7.15);
+      /* -- Scene 6 (9.4s)：N-03 高負荷列單次 pulse（sine 單循環，僅此一顆 warn 點） -- */
+      tl.to("#f09-warn-dot", { scale: 1.9, duration: 0.38, ease: "sine.inOut", yoyo: true, repeat: 1, transformOrigin: "50% 50%" }, 9.4);
       tl.fromTo(
         "#f09-warn-ring",
         { scale: 0.5, opacity: 0.6 },
         { scale: 2.2, opacity: 0, duration: 0.8, ease: "power2.out", transformOrigin: "50% 50%" },
-        7.15
+        9.4
       );
-      tl.to("#f09-r3", { backgroundColor: "rgba(147,96,10,0.07)", duration: 0.4, ease: "sine.inOut", yoyo: true, repeat: 1 }, 7.12);
+      tl.to("#f09-r3", { backgroundColor: "rgba(147,96,10,0.07)", duration: 0.4, ease: "sine.inOut", yoyo: true, repeat: 1 }, 9.37);
 
-      /* -- Scene 7 (7.85s)：字卡「留任雷達」slam（kinetic-beat-slam） -- */
+      /* -- Scene 7 (10.0s)：字卡「留任雷達」slam（kinetic-beat-slam） -- */
       tl.fromTo(
         "#f09-cap",
         { scale: 1.5, opacity: 0, filter: "blur(14px)" },
         { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.5, ease: "power4.out" },
-        7.85
+        10.0
       );
-      tl.fromTo("#f09-cap .f09-cap-bar", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.4, ease: "power3.out", transformOrigin: "0% 50%" }, 8.22);
+      tl.fromTo("#f09-cap .f09-cap-bar", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.4, ease: "power3.out", transformOrigin: "0% 50%" }, 10.38);
 
-      /* 尾段安靜推近，鏡頭不死（結束時速度歸零，等硬切） */
-      tl.to("#f09-zoom-outer", { scale: 1.022, duration: 3.9, ease: "sine.inOut" }, 5.7);
+      /* 尾段安靜推近至 12.2（結束時速度歸零，等硬切） */
+      tl.to("#f09-zoom-outer", { scale: 1.022, duration: 5.9, ease: "sine.inOut" }, 6.3);
 
       window.__timelines["09-cap3-dash"] = tl;
     })();

@@ -1,6 +1,6 @@
 {
   "scene": "07-cap1-line",
-  "duration_s": 10.2,
+  "duration_s": 15.3,
   "rules": [
     "discrete-text-sequence",
     "spring-pop-entrance",
@@ -8,10 +8,11 @@
     "scale-swap-transition",
     "sine-wave-loop",
     "multi-phase-camera",
-    "css-marker-patterns"
+    "css-marker-patterns",
+    "gsap-effects"
   ],
   "exit": {
-    "vector": "camera micro-drift outward (scale 1.05→1.062 linear over final 2.6s, ~1.5 px/s at panel edge), still scaling at the cut",
+    "vector": "camera micro-drift outward (scale 1.05→1.062 linear over 8.4–15.3s, ~0.6 px/s at panel edge), still scaling at the cut",
     "still_moving": true
   },
   "entry": {

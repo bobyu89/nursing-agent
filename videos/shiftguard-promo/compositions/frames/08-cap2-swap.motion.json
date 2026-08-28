@@ -1,9 +1,9 @@
 {
   "scene": "08-cap2-swap",
-  "duration_s": 9.6,
+  "duration_s": 13.6,
   "rules": ["coordinate-target-zoom", "waterfall-entry", "kinetic-beat-slam"],
   "exit": {
-    "vector": "camera micro-push settles at scale 1.025 (sine.inOut ends exactly at 9.6s, ~0 px/s); composition static at last frame",
+    "vector": "camera micro-push settles at scale 1.025 (sine.inOut ends exactly at 13.6s, ~0 px/s); composition static at last frame",
     "still_moving": false
   },
   "entry": {
