@@ -1,0 +1,314 @@
+<template>
+  <div data-hf-id="hf-usdt" id="root" data-composition-id="01-cold-open" data-duration="5.6" data-width="1920" data-height="1080">
+    <!-- full-bleed ground (never on #root) -->
+    <div data-hf-id="hf-2ybe" id="f01-clip" class="clip f01-bg" data-start="0" data-duration="5.6" data-track-index="0"></div>
+
+    <!-- faint roster grid, fades in behind the payoff line -->
+    <div data-hf-id="hf-0t8g" class="clip" id="f01-grid" data-start="0" data-duration="5.6" data-track-index="1">
+      <span data-hf-id="hf-btgf" class="f01-gv" style="left: 240px"></span>
+      <span data-hf-id="hf-tb45" class="f01-gv" style="left: 400px"></span>
+      <span data-hf-id="hf-vekm" class="f01-gv" style="left: 560px"></span>
+      <span data-hf-id="hf-au9c" class="f01-gv" style="left: 720px"></span>
+      <span data-hf-id="hf-f7tt" class="f01-gv" style="left: 880px"></span>
+      <span data-hf-id="hf-gc8s" class="f01-gv" style="left: 1040px"></span>
+      <span data-hf-id="hf-uae2" class="f01-gv" style="left: 1200px"></span>
+      <span data-hf-id="hf-lkel" class="f01-gv" style="left: 1360px"></span>
+      <span data-hf-id="hf-hpwn" class="f01-gv" style="left: 1520px"></span>
+      <span data-hf-id="hf-w806" class="f01-gv" style="left: 1680px"></span>
+      <span data-hf-id="hf-pj1j" class="f01-gh" style="top: 200px"></span>
+      <span data-hf-id="hf-e75c" class="f01-gh" style="top: 320px"></span>
+      <span data-hf-id="hf-w14t" class="f01-gh" style="top: 440px"></span>
+      <span data-hf-id="hf-6si2" class="f01-gh" style="top: 560px"></span>
+      <span data-hf-id="hf-xufv" class="f01-gh" style="top: 680px"></span>
+      <span data-hf-id="hf-yytp" class="f01-gh" style="top: 800px"></span>
+    </div>
+
+    <!-- content stage (slow push-in runs on this layer) -->
+    <div data-hf-id="hf-o9pz" class="clip" id="f01-stage" data-start="0" data-duration="5.6" data-track-index="2">
+      <!-- beat 1: the resignation form card -->
+      <div data-hf-id="hf-aln0" id="f01-cardgroup" data-layout-allow-overlap="">
+        <div data-hf-id="hf-dsib" id="f01-card">
+          <div data-hf-id="hf-fu7b" class="f01-cardtitle">離職單</div>
+          <div data-hf-id="hf-ws62" class="f01-hr"></div>
+          <div data-hf-id="hf-hn7c" class="f01-field" id="f01-field-1">
+            <span data-hf-id="hf-nw4h" class="f01-flabel">姓名</span><span data-hf-id="hf-f7cx" class="f01-redact" style="width: 180px"></span>
+          </div>
+          <div data-hf-id="hf-qb37" class="f01-field" id="f01-field-2">
+            <span data-hf-id="hf-059l" class="f01-flabel">日期</span><span data-hf-id="hf-2oyy" class="f01-redact" style="width: 132px"></span>
+          </div>
+          <div data-hf-id="hf-2kxe" class="f01-reason" id="f01-field-3">
+            <span data-hf-id="hf-rr7h" class="f01-flabel">離職原因</span>
+            <span data-hf-id="hf-m5ra" class="f01-stampwrap">
+              <span data-hf-id="hf-8obz" id="f01-stamp">
+                <span data-hf-id="hf-kc7e" class="f01-stamptext">家庭因素</span>
+                <span data-hf-id="hf-wwrc" class="f01-sk" aria-hidden="true">
+                  <span data-hf-id="hf-w8xt" class="f01-skline f01-skf"></span>
+                  <span data-hf-id="hf-hfc5" class="f01-skline f01-skb"></span>
+                </span>
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- beat 2: the payoff line, per-word waterfall -->
+      <div data-hf-id="hf-sw7s" id="f01-truth">
+        <span data-hf-id="hf-78nb" class="f01-w" id="f01-w1" data-layout-allow-overlap="">真相</span><span data-hf-id="hf-xjjr" class="f01-w" id="f01-w2">，</span><span data-hf-id="hf-zghz" class="f01-w" id="f01-w3">藏在</span><span data-hf-id="hf-pzid" class="f01-w f01-kw" id="f01-w4"><span data-hf-id="hf-24be" class="f01-kwbar"></span><span data-hf-id="hf-883n" class="f01-kwtext">班表</span></span><span data-hf-id="hf-m32t" class="f01-w" id="f01-w5">裡</span>
+      </div>
+    </div>
+
+    <style>
+      @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+@font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+@font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+#root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: transparent;
+        font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+      .f01-bg {
+        background: #101b30;
+      }
+
+      /* faint roster grid (hairline-rules atmosphere) */
+      #f01-grid .f01-gv {
+        position: absolute;
+        top: 200px;
+        width: 1px;
+        height: 600px;
+        background: rgba(154, 168, 194, 0.11);
+      }
+      #f01-grid .f01-gh {
+        position: absolute;
+        left: 240px;
+        width: 1440px;
+        height: 1px;
+        background: rgba(154, 168, 194, 0.11);
+      }
+
+      #f01-stage {
+        transform-origin: 50% 50%;
+      }
+
+      /* resignation form card — dark-scene card: one step deeper + hairline */
+      #f01-cardgroup {
+        position: absolute;
+        left: 580px;
+        top: 216px;
+        width: 760px;
+        transform-origin: 50% 50%;
+      }
+      #f01-card {
+        background: #16233a;
+        border: 1px solid rgba(228, 233, 241, 0.14);
+        border-radius: 18px;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+        padding: 44px 56px 52px;
+      }
+      .f01-cardtitle {
+        color: #f3f5fa;
+        font-size: 34px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+      }
+      .f01-hr {
+        height: 1px;
+        background: rgba(228, 233, 241, 0.14);
+        margin: 22px 0 30px;
+      }
+      .f01-field {
+        display: flex;
+        align-items: center;
+        gap: 26px;
+        margin-bottom: 24px;
+      }
+      .f01-flabel {
+        color: #9aa8c2;
+        font-size: 25px;
+        font-weight: 500;
+        letter-spacing: 0.08em;
+      }
+      .f01-redact {
+        display: inline-block;
+        height: 20px;
+        border-radius: 6px;
+        background: rgba(154, 168, 194, 0.22);
+      }
+      .f01-reason {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        margin-top: 34px;
+      }
+      .f01-stampwrap {
+        display: block;
+        min-height: 118px;
+      }
+      #f01-stamp {
+        position: relative;
+        display: inline-block;
+        border: 3px solid rgba(243, 245, 250, 0.92);
+        border-radius: 6px;
+        padding: 12px 30px;
+        transform-origin: 50% 50%;
+      }
+      .f01-stamptext {
+        position: relative;
+        z-index: 0;
+        color: #f3f5fa;
+        font-size: 58px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+      }
+      /* sketchout cross-out — danger only on the "crossed out" element */
+      .f01-sk {
+        position: absolute;
+        inset: -4px -10px;
+        overflow: hidden;
+        z-index: 1;
+      }
+      .f01-skline {
+        position: absolute;
+        display: block;
+        top: 50%;
+        margin-top: -3px;
+        left: 0;
+        width: 100%;
+        height: 5px;
+        background: #c92c21;
+        transform-origin: left center;
+      }
+
+      /* payoff line */
+      #f01-truth {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 398px;
+        display: flex;
+        justify-content: center;
+        align-items: baseline;
+      }
+      .f01-w {
+        display: inline-block;
+        opacity: 0;
+        color: #f3f5fa;
+        font-size: 122px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        line-height: 1.15;
+      }
+      .f01-kw {
+        position: relative;
+      }
+      .f01-kwbar {
+        position: absolute;
+        inset: 0.1em -0.05em 0.02em;
+        background: #4060ef;
+        opacity: 0.85;
+        border-radius: 6px;
+        transform: skewX(-2deg);
+        z-index: 0;
+      }
+      .f01-kwtext {
+        position: relative;
+        z-index: 1;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+        var D = 5.6;
+        var F = 1 / 60;
+
+        /* one time table — the beat spine of the shot */
+        var T = {
+          card: 0.15,
+          f1: 0.5,
+          f2: 0.62,
+          f3: 0.74,
+          stamp: 1.55, // VO reaches 「家庭因素」
+          skf: 2.42, // danger cross-out
+          skb: 2.58,
+          clear: 2.88, // the lie fades out
+          truth: 3.05, // VO 「真相…」 waterfall
+          grid: 3.45,
+        };
+
+        /* macro camera: slow continuous push-in under the whole shot */
+        tl.fromTo("#f01-stage", { scale: 1 }, { scale: 1.045, duration: D, ease: "none" }, 0);
+
+        /* Scene 1 — card floats in, ghost fields settle */
+        tl.fromTo(
+          "#f01-cardgroup",
+          { y: 46, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" },
+          T.card
+        );
+        tl.fromTo("#f01-field-1", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, T.f1);
+        tl.fromTo("#f01-field-2", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, T.f2);
+        tl.fromTo("#f01-field-3", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, T.f3);
+
+        /* Scene 2 — 「家庭因素」 stamp-slam (kinetic-beat-slam hit) + card thud */
+        tl.fromTo(
+          "#f01-stamp",
+          { scale: 2.4, rotation: -10, opacity: 0, filter: "blur(10px)" },
+          { scale: 1, rotation: -3, opacity: 1, filter: "blur(0px)", duration: 0.45, ease: "power4.out" },
+          T.stamp
+        );
+        tl.to("#f01-cardgroup", { y: 7, duration: 0.09, ease: "power2.in" }, T.stamp + 0.15);
+        tl.to("#f01-cardgroup", { y: 0, duration: 0.22, ease: "power2.out" }, T.stamp + 0.24);
+
+        /* Scene 3 — danger sketchout crosses the lie out */
+        tl.fromTo(
+          ".f01-skf",
+          { scaleX: 0, rotation: -8 },
+          { scaleX: 1, rotation: -8, duration: 0.3, ease: "power2.out" },
+          T.skf
+        );
+        tl.fromTo(
+          ".f01-skb",
+          { scaleX: 0, rotation: 8 },
+          { scaleX: 1, rotation: 8, duration: 0.3, ease: "power2.out" },
+          T.skb
+        );
+
+        /* beat clear — the crossed-out form fades away (in-shot beat swap, not a frame exit) */
+        tl.to("#f01-cardgroup", { opacity: 0, y: -34, scale: 0.96, duration: 0.42, ease: "power2.in" }, T.clear);
+
+        /* Scene 4 — 「真相，藏在班表裡」 waterfall-entry (binary opacity via set, whip from below) */
+        var t0 = T.truth;
+        tl.set("#f01-w1", { opacity: 1, y: 80 }, t0);
+        tl.to("#f01-w1", { y: 0, duration: 0.18, ease: "power4.out" }, t0);
+        var t1 = t0 + 0.18 + 2 * F;
+        tl.set("#f01-w2", { opacity: 1, y: 40 }, t1);
+        tl.to("#f01-w2", { y: 0, duration: 0.12, ease: "power4.out" }, t1);
+        var t2 = t1 + 0.12 - F;
+        tl.set("#f01-w3", { opacity: 1, y: 46 }, t2);
+        tl.to("#f01-w3", { y: 0, duration: 0.15, ease: "power4.out" }, t2);
+        var t3 = t2 + 0.15 - F;
+        tl.set("#f01-w4", { opacity: 1, y: 70 }, t3);
+        tl.to("#f01-w4", { y: 0, duration: 0.16, ease: "power4.out" }, t3);
+        var t4 = t3 + 0.16 - F;
+        tl.set("#f01-w5", { opacity: 1, y: 70 }, t4);
+        tl.to("#f01-w5", { y: 0, duration: 0.15, ease: "power4.out" }, t4);
+
+        /* faint roster grid surfaces behind the line and keeps drifting */
+        tl.fromTo("#f01-grid", { opacity: 0 }, { opacity: 1, duration: 0.9, ease: "power2.out" }, T.grid);
+        tl.fromTo("#f01-grid", { y: 16 }, { y: -8, duration: D - T.grid, ease: "none" }, T.grid);
+
+        window.__timelines["01-cold-open"] = tl;
+      })();
+    </script>
+  </div>
+</template>

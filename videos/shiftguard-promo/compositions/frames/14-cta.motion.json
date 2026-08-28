@@ -1,0 +1,7 @@
+{
+  "scene": "14-cta",
+  "duration_s": 5.4,
+  "rules": ["spring-pop-entrance", "press-release-spring", "ambient-glow-bloom"],
+  "exit": { "vector": "no translation — full-frame opacity dissolve to #101b30 (4.8–5.4s), completing exactly at the last frame, 0 px/s", "still_moving": true },
+  "entry": { "vector": "none at t=0 (only the flat canvas; browser float-in begins at 0.12s), 0 px/s", "from_rest": true }
+}

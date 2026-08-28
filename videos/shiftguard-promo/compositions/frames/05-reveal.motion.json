@@ -1,0 +1,13 @@
+{
+  "scene": "05-reveal",
+  "duration_s": 3.2,
+  "rules": ["spring-pop-entrance", "waterfall-entry"],
+  "exit": {
+    "vector": "none 0px/s — full lockup held dead still from ~1.95s to end",
+    "still_moving": false
+  },
+  "entry": {
+    "vector": "none 0px/s translation — full-bleed white flash overlay at opacity 1 for 0.00–0.15s (the film's only 反白閃屏), snap-out decay complete by ~0.37s while the wordmark stamps in beneath",
+    "from_rest": true
+  }
+}

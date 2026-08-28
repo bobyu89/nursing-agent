@@ -1,0 +1,13 @@
+{
+  "scene": "06-position",
+  "duration_s": 4,
+  "rules": ["svg-path-draw", "nudge-curve", "spring-pop-entrance", "sine-wave-loop"],
+  "exit": {
+    "vector": "none 0px/s — 治理 pulse settles at 3.78s, dot bump done 3.26s; fully static tail to the cut",
+    "still_moving": false
+  },
+  "entry": {
+    "vector": "none 0px/s — static light canvas at first frame; axis draw begins 0.32s",
+    "from_rest": true
+  }
+}

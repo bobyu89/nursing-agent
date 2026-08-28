@@ -1,0 +1,204 @@
+<template>
+  <div data-hf-id="hf-s3nv" id="root" data-composition-id="02-pain-line" data-duration="4" data-width="1920" data-height="1080">
+    <!-- full-bleed ground -->
+    <div data-hf-id="hf-a63n" id="f02-clip" class="clip f02-bg" data-start="0" data-duration="4" data-track-index="0"></div>
+
+    <!-- content stage (slow push-in) -->
+    <div data-hf-id="hf-2p4i" class="clip" id="f02-stage" data-start="0" data-duration="4" data-track-index="1">
+      <!-- foreground pain card, left -->
+      <div data-hf-id="hf-rik9" id="f02-title">
+        缺班靠<span data-hf-id="hf-9urm" class="f02-kw"><span data-hf-id="hf-8tuz" class="f02-kwbar" id="f02-kwbar"></span><span data-hf-id="hf-1892" class="f02-kwtext">人情</span></span>
+      </div>
+      <div data-hf-id="hf-f3ye" id="f02-hairline"></div>
+
+      <!-- LINE group recreation, right — dimmed backdrop, no avatars, no personal info -->
+      <div data-hf-id="hf-l4ry" id="f02-chat">
+        <div data-hf-id="hf-ufel" class="f02-chatinner">
+          <div data-hf-id="hf-gtwv" class="f02-bubble" id="f02-b1">今天小夜還缺一個人，有人可以幫忙嗎</div>
+          <div data-hf-id="hf-s6iu" class="f02-bubble" id="f02-b2">拜託大家了</div>
+          <div data-hf-id="hf-bq1q" id="f02-read">已讀 17</div>
+        </div>
+      </div>
+    </div>
+
+    <style>
+      @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+@font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+@font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+#root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: transparent;
+        font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+      .f02-bg {
+        background: #101b30;
+      }
+      #f02-stage {
+        transform-origin: 50% 50%;
+      }
+
+      /* pain card — the hero */
+      #f02-title {
+        position: absolute;
+        left: 110px;
+        top: 392px;
+        color: #f3f5fa;
+        font-size: 136px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        line-height: 1.2;
+        transform-origin: 50% 50%;
+        white-space: nowrap;
+      }
+      .f02-kw {
+        position: relative;
+        display: inline-block;
+      }
+      .f02-kwbar {
+        position: absolute;
+        inset: 0.1em -0.05em 0.02em;
+        background: #4060ef;
+        opacity: 0.85;
+        border-radius: 6px;
+        transform-origin: left center;
+        z-index: 0;
+      }
+      .f02-kwtext {
+        position: relative;
+        z-index: 1;
+      }
+      #f02-hairline {
+        position: absolute;
+        left: 116px;
+        top: 596px;
+        width: 320px;
+        height: 2px;
+        background: rgba(243, 245, 250, 0.22);
+        transform-origin: left center;
+      }
+
+      /* LINE recreation — 米白對話區、他人訊息左側白底墨字 */
+      #f02-chat {
+        position: absolute;
+        left: 1060px;
+        top: 140px;
+        width: 720px;
+        height: 680px;
+        background: #efe9dd;
+        border: 1px solid rgba(228, 233, 241, 0.16);
+        border-radius: 18px;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
+        overflow: hidden;
+      }
+      .f02-chatinner {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 44px;
+        gap: 24px;
+      }
+      .f02-bubble {
+        background: #ffffff;
+        color: #16233a;
+        font-size: 33px;
+        line-height: 1.5;
+        font-weight: 400;
+        padding: 20px 28px;
+        border-radius: 4px 20px 20px 20px;
+        max-width: 560px;
+        box-shadow: 0 2px 6px rgba(22, 35, 58, 0.08);
+        transform-origin: 0% 30%;
+      }
+      #f02-read {
+        color: #5c6b85;
+        font-size: 23px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        margin: 2px 0 0 10px;
+        font-variant-numeric: tabular-nums;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+        var D = 4;
+
+        /* time table — the beat spine */
+        var T = {
+          chat: 0.12,
+          b1: 0.4, // syncs with the message-pop sfx the orchestrator mounts at 6.0s global
+          title: 0.45, // VO 「缺班」
+          marker: 1.3, // VO 「人情」
+          b2: 1.45,
+          rule: 1.95,
+          read: 2.45, // 已讀 17 — the silence lands
+          drift: 2.6,
+        };
+
+        /* macro camera: slow push-in under the whole shot */
+        tl.fromTo("#f02-stage", { scale: 1 }, { scale: 1.03, duration: D, ease: "none" }, 0);
+
+        /* dimmed chat panel settles in as backdrop (~50%) */
+        tl.fromTo(
+          "#f02-chat",
+          { opacity: 0, y: 26 },
+          { opacity: 0.55, y: 0, duration: 0.5, ease: "power3.out" },
+          T.chat
+        );
+
+        /* bubbles pop from their tail point — spring-pop-entrance, staggered */
+        tl.fromTo(
+          "#f02-b1",
+          { scale: 0, opacity: 0 },
+          { scale: 1, opacity: 1, duration: 0.5, ease: "power3.out" },
+          T.b1
+        );
+        tl.fromTo(
+          "#f02-b2",
+          { scale: 0, opacity: 0 },
+          { scale: 1, opacity: 1, duration: 0.5, ease: "power3.out" },
+          T.b2
+        );
+        tl.fromTo("#f02-read", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, T.read);
+
+        /* pain card slams down with heavy overshoot (packet: 重 overshoot spring-pop 落下) */
+        tl.fromTo(
+          "#f02-title",
+          { scale: 2.05, filter: "blur(12px)" },
+          { scale: 1, filter: "blur(0px)", duration: 0.6, ease: "back.out(1.7)" },
+          T.title
+        );
+        tl.fromTo("#f02-title", { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power2.out" }, T.title);
+
+        /* accent marker sweep across 「人情」 (css-marker-patterns highlight) */
+        tl.fromTo(
+          "#f02-kwbar",
+          { scaleX: 0, skewX: -2 },
+          { scaleX: 1, skewX: -2, duration: 0.45, ease: "power2.out" },
+          T.marker
+        );
+
+        /* hairline rule draws under the card (atmosphere) */
+        tl.fromTo("#f02-hairline", { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: "power2.out" }, T.rule);
+
+        /* hold-life: chat backdrop drifts up gently, settling to rest */
+        tl.to("#f02-chat", { y: -12, duration: D - T.drift, ease: "sine.inOut" }, T.drift);
+
+        window.__timelines["02-pain-line"] = tl;
+      })();
+    </script>
+  </div>
+</template>

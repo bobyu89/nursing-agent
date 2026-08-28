@@ -1,0 +1,21 @@
+{
+  "scene": "07-cap1-line",
+  "duration_s": 10.2,
+  "rules": [
+    "discrete-text-sequence",
+    "spring-pop-entrance",
+    "kinetic-beat-slam",
+    "scale-swap-transition",
+    "sine-wave-loop",
+    "multi-phase-camera",
+    "css-marker-patterns"
+  ],
+  "exit": {
+    "vector": "camera micro-drift outward (scale 1.05→1.062 linear over final 2.6s, ~1.5 px/s at panel edge), still scaling at the cut",
+    "still_moving": true
+  },
+  "entry": {
+    "vector": "upward ~140 px/s at frame 1 (panel rise y 26→0, power3.out starting t=0)",
+    "from_rest": false
+  }
+}

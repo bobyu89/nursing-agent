@@ -1,0 +1,13 @@
+{
+  "scene": "12-trust-98",
+  "duration_s": 3.4,
+  "rules": ["counting-dynamic-scale", "waterfall-entry"],
+  "exit": {
+    "vector": "0 px/s — fully settled hold from 2.34s to the cut (number landed at scale 1, cascade at rest)",
+    "still_moving": false
+  },
+  "entry": {
+    "vector": "0 px/s translation — static beat for the first 0.12s, then counter scale-growth 0.5→1 begins (no positional motion at frame 1)",
+    "from_rest": true
+  }
+}

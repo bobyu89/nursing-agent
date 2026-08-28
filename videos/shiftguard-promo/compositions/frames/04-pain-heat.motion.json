@@ -1,0 +1,13 @@
+{
+  "scene": "04-pain-heat",
+  "duration_s": 5.5,
+  "rules": ["spring-pop-entrance", "sine-wave-loop", "kinetic-beat-slam"],
+  "exit": {
+    "vector": "slow camera push-in, ~9px/s outward at frame edges (scale 1→1.05 linear over 5.5s, running through the last frame); danger-cell pulses (±2.5px) settle by ~5.16s",
+    "still_moving": true
+  },
+  "entry": {
+    "vector": "none 0px/s — static dark canvas at first frame; card pop begins 0.06s",
+    "from_rest": true
+  }
+}

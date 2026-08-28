@@ -1,0 +1,616 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+@font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+@font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+/* ============ 08-cap2-swap — 能力二：換班預檢 ============ */
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      color: #16233a;
+      -webkit-font-smoothing: antialiased;
+    }
+    #f08-bg,
+    #f08-main {
+      position: absolute;
+      inset: 0;
+    }
+    #f08-bg {
+      background: #f3f5fa;
+    }
+    #f08-main {
+      overflow: hidden;
+    }
+
+    /* ---- virtual camera (coordinate-target-zoom: outer scales, inner translates) ---- */
+    #f08-zoom-outer {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+      will-change: transform;
+    }
+    #f08-zoom-inner {
+      position: absolute;
+      inset: 0;
+      will-change: transform;
+    }
+
+    /* ---- browser / platform frame (mock recreation, no traffic lights) ---- */
+    #f08-window {
+      position: absolute;
+      left: 340px;
+      top: 130px;
+      width: 1240px;
+      height: 650px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow:
+        0 24px 48px rgba(22, 35, 58, 0.08),
+        0 2px 8px rgba(22, 35, 58, 0.05);
+      overflow: hidden;
+    }
+    .f08-toolbar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      height: 46px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e4e9f1;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+    }
+    .f08-pill {
+      width: 300px;
+      height: 20px;
+      border-radius: 10px;
+      background: #eef2f7;
+      border: 1px solid #e4e9f1;
+    }
+    .f08-demo-tag {
+      margin-left: auto;
+      font-size: 17px;
+      letter-spacing: 0.08em;
+      color: #5c6b85;
+      background: #f8fafc;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      padding: 2px 14px;
+      line-height: 24px;
+    }
+    .f08-sidebar {
+      position: absolute;
+      left: 0;
+      top: 46px;
+      bottom: 0;
+      width: 68px;
+      background: #f8fafc;
+      border-right: 1px solid #eef2f7;
+    }
+    .f08-side-item {
+      position: absolute;
+      left: 24px;
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: #eef2f7;
+    }
+    .f08-side-item.f08-active {
+      background: #edf1fe;
+      border: 1px solid rgba(64, 96, 239, 0.55);
+    }
+    .f08-screen {
+      position: absolute;
+      left: 68px;
+      top: 46px;
+      right: 0;
+      bottom: 0;
+    }
+    .f08-phase {
+      position: absolute;
+      inset: 0;
+    }
+    #f08-phaseB {
+      opacity: 0;
+    }
+
+    /* ---- swap form ---- */
+    .f08-person {
+      position: absolute;
+      left: 36px;
+      width: 440px;
+      height: 88px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(22, 35, 58, 0.04);
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 0 24px;
+    }
+    .f08-row1 {
+      top: 165px;
+    }
+    .f08-row2 {
+      top: 269px;
+    }
+    #f08-pa1,
+    #f08-pa2,
+    #f08-swapA,
+    #f08-btnA {
+      opacity: 0;
+    }
+    .f08-avatar {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #edf1fe;
+      color: #4060ef;
+      font-weight: 800;
+      font-size: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+    }
+    .f08-pname {
+      font-size: 24px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .f08-pshift {
+      margin-left: auto;
+      font-size: 19px;
+      color: #47566f;
+      font-variant-numeric: tabular-nums;
+    }
+    .f08-swapdisc {
+      position: absolute;
+      left: 232px;
+      top: 237px;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      box-shadow: 0 4px 12px rgba(22, 35, 58, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+    }
+    .f08-btn {
+      position: absolute;
+      left: 36px;
+      top: 381px;
+      width: 440px;
+      height: 58px;
+      border-radius: 12px;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.3em;
+      text-indent: 0.3em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ---- danger block card (phase A) ---- */
+    #f08-alert {
+      position: absolute;
+      left: 516px;
+      top: 182px;
+      width: 620px;
+      min-height: 240px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-left: 6px solid #c92c21;
+      border-radius: 12px;
+      box-shadow: 0 14px 34px rgba(22, 35, 58, 0.09);
+      padding: 26px 32px 24px;
+      opacity: 0;
+    }
+    .f08-alert-head {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .f08-status-ico {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+    }
+    .f08-ico-danger {
+      background: #fdecea;
+    }
+    .f08-ico-ok {
+      background: #e6f6ef;
+    }
+    .f08-alert-title {
+      font-size: 31px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #c92c21;
+    }
+    #f08-alert-reason {
+      margin-top: 16px;
+      font-size: 22px;
+      line-height: 1.62;
+      color: #16233a;
+      opacity: 0;
+    }
+    .f08-hchip {
+      display: inline-block;
+      padding: 1px 10px 2px;
+      margin-right: 10px;
+      border-radius: 6px;
+      background: #fdecea;
+      color: #c92c21;
+      font-weight: 800;
+      font-size: 19px;
+      vertical-align: 3px;
+      font-variant-numeric: tabular-nums;
+    }
+    #f08-alert-basis {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #eef2f7;
+      font-size: 18px;
+      color: #5c6b85;
+      letter-spacing: 0.02em;
+      opacity: 0;
+    }
+
+    /* ---- ok pass card (phase B) ---- */
+    #f08-pass {
+      position: absolute;
+      left: 516px;
+      top: 155px;
+      width: 620px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-left: 6px solid #117a58;
+      border-radius: 12px;
+      box-shadow: 0 14px 34px rgba(22, 35, 58, 0.09);
+      padding: 26px 32px 20px;
+      opacity: 0;
+    }
+    .f08-pass-title {
+      font-size: 31px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #117a58;
+    }
+    .f08-basis-list {
+      margin-top: 12px;
+    }
+    .f08-basis-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      font-size: 21px;
+      color: #16233a;
+      opacity: 0;
+    }
+    .f08-basis-item + .f08-basis-item {
+      border-top: 1px solid #eef2f7;
+    }
+    .f08-okchip {
+      display: inline-block;
+      padding: 1px 9px 2px;
+      border-radius: 6px;
+      background: #e6f6ef;
+      color: #117a58;
+      font-weight: 800;
+      font-size: 18px;
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---- overlay: section label + 字卡 ---- */
+    #f08-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+    }
+    #f08-toplabel {
+      position: absolute;
+      left: 96px;
+      top: 58px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      color: #47566f;
+      opacity: 0;
+    }
+    .f08-tick {
+      width: 8px;
+      height: 24px;
+      border-radius: 3px;
+      background: #4060ef;
+      flex: none;
+    }
+    .f08-caption {
+      position: absolute;
+      left: 96px;
+      display: inline-block;
+      opacity: 0;
+    }
+    #f08-capA {
+      top: 786px;
+    }
+    #f08-capB {
+      top: 800px;
+    }
+    .f08-cap-text {
+      position: relative;
+      z-index: 1;
+      font-size: 76px;
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      color: #16233a;
+      line-height: 1.05;
+    }
+    #f08-capB .f08-cap-text {
+      font-size: 56px;
+    }
+    .f08-cap-bar {
+      position: absolute;
+      left: -4px;
+      right: -10px;
+      bottom: -12px;
+      height: 14px;
+      border-radius: 3px;
+      background: #4060ef;
+      opacity: 0;
+    }
+    #f08-capB .f08-cap-bar {
+      height: 12px;
+      bottom: -10px;
+    }
+  </style>
+
+  <div data-hf-id="hf-ytwp" id="root" data-composition-id="08-cap2-swap" data-duration="9.6" data-width="1920" data-height="1080">
+    <!-- full-bleed ground -->
+    <div data-hf-id="hf-0o37" id="f08-bg" class="clip" data-start="0" data-duration="9.6" data-track-index="0"></div>
+
+    <div data-hf-id="hf-svqs" id="f08-main" class="clip" data-start="0" data-duration="9.6" data-track-index="1">
+      <div data-hf-id="hf-ojyk" id="f08-zoom-outer" data-layout-allow-overflow="">
+        <div data-hf-id="hf-z1vg" id="f08-zoom-inner">
+          <div data-hf-id="hf-l5mq" id="f08-window">
+            <div data-hf-id="hf-jv80" class="f08-toolbar">
+              <span data-hf-id="hf-hw8v" class="f08-pill"></span>
+              <span data-hf-id="hf-y9iu" class="f08-demo-tag">示範資料</span>
+            </div>
+            <div data-hf-id="hf-xor9" class="f08-sidebar">
+              <span data-hf-id="hf-7y4e" class="f08-side-item f08-active" style="top: 18px"></span>
+              <span data-hf-id="hf-9sqj" class="f08-side-item" style="top: 56px"></span>
+              <span data-hf-id="hf-zh0d" class="f08-side-item" style="top: 94px"></span>
+              <span data-hf-id="hf-1pp0" class="f08-side-item" style="top: 132px"></span>
+            </div>
+
+            <div data-hf-id="hf-r76z" class="f08-screen">
+              <!-- ============ PHASE A：攔截 ============ -->
+              <div data-hf-id="hf-7rnb" class="f08-phase" id="f08-phaseA">
+                <div data-hf-id="hf-tp5n" class="f08-person f08-row1" id="f08-pa1">
+                  <span data-hf-id="hf-3dpd" class="f08-avatar">甲</span>
+                  <span data-hf-id="hf-pooc" class="f08-pname">N-02</span>
+                  <span data-hf-id="hf-9t3m" class="f08-pshift">8/31 小夜</span>
+                </div>
+                <div data-hf-id="hf-jskq" class="f08-swapdisc" id="f08-swapA">
+                  <svg data-hf-id="hf-le4l" id="f08-swapA-ico" width="26" height="26" viewBox="0 0 26 26" fill="none">
+                    <path data-hf-id="hf-8t3v" d="M5 8.5h14M15.5 4.5 19.5 8.5l-4 4" stroke="#4060ef" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path data-hf-id="hf-li7i" d="M21 17.5H7M10.5 13.5l-4 4 4 4" stroke="#4060ef" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </div>
+                <div data-hf-id="hf-j2pl" class="f08-person f08-row2" id="f08-pa2">
+                  <span data-hf-id="hf-vzxs" class="f08-avatar">乙</span>
+                  <span data-hf-id="hf-padb" class="f08-pname">N-03</span>
+                  <span data-hf-id="hf-ezp7" class="f08-pshift">9/2 大夜</span>
+                </div>
+                <div data-hf-id="hf-vtvb" class="f08-btn" id="f08-btnA">預檢</div>
+
+                <div data-hf-id="hf-t948" id="f08-alert">
+                  <div data-hf-id="hf-vyua" class="f08-alert-head">
+                    <span data-hf-id="hf-507y" class="f08-status-ico f08-ico-danger">
+                      <svg data-hf-id="hf-hld2" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path data-hf-id="hf-9kd4" d="M6.5 6.5l11 11M17.5 6.5l-11 11" stroke="#c92c21" stroke-width="3" stroke-linecap="round" />
+                      </svg>
+                    </span>
+                    <span data-hf-id="hf-4y9d" class="f08-alert-title">換班不成立</span>
+                  </div>
+                  <div data-hf-id="hf-na3n" id="f08-alert-reason">
+                    <span data-hf-id="hf-h92t" class="f08-hchip">H10</span>個人限制班別（母性保護）——N-03 限制期間不得排入大夜
+                  </div>
+                  <div data-hf-id="hf-16y7" id="f08-alert-basis">勞動基準法第 49 條</div>
+                </div>
+              </div>
+
+              <!-- ============ PHASE B：放行 ============ -->
+              <div data-hf-id="hf-ww5o" class="f08-phase" id="f08-phaseB">
+                <div data-hf-id="hf-vq9q" class="f08-person f08-row1" id="f08-pb1">
+                  <span data-hf-id="hf-lk51" class="f08-avatar">甲</span>
+                  <span data-hf-id="hf-ohr9" class="f08-pname">N-01</span>
+                  <span data-hf-id="hf-8p71" class="f08-pshift">9/1 白班</span>
+                </div>
+                <div data-hf-id="hf-fugp" class="f08-swapdisc" id="f08-swapB">
+                  <svg data-hf-id="hf-uvq2" width="26" height="26" viewBox="0 0 26 26" fill="none">
+                    <path data-hf-id="hf-l5ej" d="M5 8.5h14M15.5 4.5 19.5 8.5l-4 4" stroke="#4060ef" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path data-hf-id="hf-829e" d="M21 17.5H7M10.5 13.5l-4 4 4 4" stroke="#4060ef" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </div>
+                <div data-hf-id="hf-628s" class="f08-person f08-row2" id="f08-pb2">
+                  <span data-hf-id="hf-osqw" class="f08-avatar">乙</span>
+                  <span data-hf-id="hf-61tw" class="f08-pname">N-02</span>
+                  <span data-hf-id="hf-2eir" class="f08-pshift">9/3 白班</span>
+                </div>
+                <div data-hf-id="hf-2qeo" class="f08-btn" id="f08-btnB">預檢</div>
+
+                <div data-hf-id="hf-lmu9" id="f08-pass">
+                  <div data-hf-id="hf-1hxi" class="f08-alert-head">
+                    <span data-hf-id="hf-h541" class="f08-status-ico f08-ico-ok">
+                      <svg data-hf-id="hf-mtry" width="26" height="26" viewBox="0 0 26 26" fill="none">
+                        <path data-hf-id="hf-akcm" d="M5.5 13.8l5 5L20.5 8" stroke="#117a58" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </span>
+                    <span data-hf-id="hf-snai" class="f08-pass-title">預檢通過</span>
+                  </div>
+                  <div data-hf-id="hf-z0lc" class="f08-basis-list">
+                    <div data-hf-id="hf-d5e5" class="f08-basis-item" id="f08-b1">
+                      <svg data-hf-id="hf-9ila" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path data-hf-id="hf-f3gk" d="M4 10.6l4 4L16 6.4" stroke="#117a58" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                      <span data-hf-id="hf-uwat" class="f08-okchip">H1</span>職務與資格符合
+                    </div>
+                    <div data-hf-id="hf-fx5z" class="f08-basis-item" id="f08-b2">
+                      <svg data-hf-id="hf-t9oi" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path data-hf-id="hf-phfg" d="M4 10.6l4 4L16 6.4" stroke="#117a58" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                      <span data-hf-id="hf-w37w" class="f08-okchip">H2</span>當日未排其他班別
+                    </div>
+                    <div data-hf-id="hf-ph92" class="f08-basis-item" id="f08-b3">
+                      <svg data-hf-id="hf-tnzj" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path data-hf-id="hf-oaid" d="M4 10.6l4 4L16 6.4" stroke="#117a58" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                      <span data-hf-id="hf-wvty" class="f08-okchip">H4</span>班間休息時間充足
+                    </div>
+                    <div data-hf-id="hf-8k1j" class="f08-basis-item" id="f08-b4">
+                      <svg data-hf-id="hf-u2ak" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path data-hf-id="hf-oote" d="M4 10.6l4 4L16 6.4" stroke="#117a58" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                      <span data-hf-id="hf-xa4z" class="f08-okchip">H7</span>雙週例假保障
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- overlay above camera -->
+      <div data-hf-id="hf-jili" id="f08-overlay">
+        <div data-hf-id="hf-q0i1" id="f08-toplabel"><span data-hf-id="hf-s3dh" class="f08-tick"></span>能力二・換班簽核預檢</div>
+        <div data-hf-id="hf-l6ef" class="f08-caption" id="f08-capA">
+          <span data-hf-id="hf-69ec" class="f08-cap-text">換班預檢</span>
+          <span data-hf-id="hf-5udi" class="f08-cap-bar"></span>
+        </div>
+        <div data-hf-id="hf-ciik" class="f08-caption" id="f08-capB">
+          <span data-hf-id="hf-fb7f" class="f08-cap-text">擋下時，法條攤在眼前</span>
+          <span data-hf-id="hf-qryi" class="f08-cap-bar"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      /* -- Scene 1 (0–1.6s)：外框落定、甲乙兩人與預檢鈕組裝 -- */
+      tl.fromTo("#f08-window", { y: 56, opacity: 0, scale: 0.985 }, { y: 0, opacity: 1, scale: 1, duration: 0.55, ease: "power3.out" }, 0);
+      tl.fromTo("#f08-toplabel", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power2.out" }, 0.12);
+      tl.fromTo("#f08-pa1", { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 0.62);
+      tl.fromTo("#f08-swapA", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.42, ease: "back.out(1.8)" }, 0.84);
+      tl.fromTo("#f08-pa2", { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 1.02);
+      tl.fromTo("#f08-btnA", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, 1.34);
+
+      /* -- Scene 2 (2.6s)：按下「預檢」（sfx click @ 37.4 abs = 2.6 local） -- */
+      tl.to("#f08-btnA", { scale: 0.955, duration: 0.09, ease: "power2.in" }, 2.6);
+      tl.to("#f08-btnA", { scale: 1, duration: 0.24, ease: "back.out(3)" }, 2.69);
+      tl.to("#f08-btnA", { backgroundColor: "#3350dd", duration: 0.09, ease: "none" }, 2.6);
+      tl.to("#f08-btnA", { backgroundColor: "#4060ef", duration: 0.3, ease: "power1.out" }, 2.72);
+      tl.to("#f08-swapA-ico", { rotation: 180, duration: 0.5, ease: "power2.inOut", transformOrigin: "50% 50%" }, 2.6);
+
+      /* -- Scene 2b (2.95s)：danger 攔截卡快速 fromTo scale 落下 -- */
+      tl.fromTo(
+        "#f08-alert",
+        { y: -44, scale: 1.3, opacity: 0, filter: "blur(9px)" },
+        { y: 0, scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.34, ease: "power4.out" },
+        2.95
+      );
+      tl.fromTo("#f08-alert-reason", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.32, ease: "power2.out" }, 3.14);
+      tl.fromTo("#f08-alert-basis", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power2.out" }, 3.32);
+
+      /* -- Scene 3 (3.1–4.95s)：攔截瞬間 punch-in（coordinate-target-zoom）
+            攔截卡中心 (1234,478)，offset=(274,-62) → counter=(-274,62)，scale 1.42 -- */
+      tl.to("#f08-zoom-outer", { scale: 1.42, duration: 1.05, ease: "power3.inOut" }, 3.1);
+      tl.to("#f08-zoom-inner", { x: -274, y: 62, duration: 1.05, ease: "power3.inOut" }, 3.1);
+
+      /* 字卡「換班預檢」slam（kinetic-beat-slam；sfx thump @ 38.6 abs = 3.8 local） */
+      tl.fromTo(
+        "#f08-capA",
+        { scale: 1.5, opacity: 0, filter: "blur(14px)" },
+        { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.5, ease: "power4.out" },
+        3.8
+      );
+      tl.fromTo("#f08-capA .f08-cap-bar", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.38, ease: "power3.out", transformOrigin: "0% 50%" }, 4.18);
+
+      /* -- Scene 4 (4.95–5.7s)：拉回 ＋ 相位軟切 A→B -- */
+      tl.to("#f08-zoom-outer", { scale: 1, duration: 0.8, ease: "power2.inOut" }, 4.95);
+      tl.to("#f08-zoom-inner", { x: 0, y: 0, duration: 0.8, ease: "power2.inOut" }, 4.95);
+      tl.to(["#f08-phaseA", "#f08-capA"], { opacity: 0, duration: 0.4, ease: "power1.inOut" }, 5.15);
+      tl.fromTo("#f08-phaseB", { opacity: 0, scale: 1.015 }, { opacity: 1, scale: 1, duration: 0.45, ease: "power2.out" }, 5.25);
+
+      /* -- Scene 5 (5.8–7.1s)：放行案例——按鈕輕按、綠卡彈入、法據逐條瀑布 -- */
+      tl.to("#f08-btnB", { scale: 0.96, duration: 0.09, ease: "power2.in" }, 5.8);
+      tl.to("#f08-btnB", { scale: 1, duration: 0.22, ease: "back.out(2.5)" }, 5.89);
+      tl.to("#f08-btnB", { backgroundColor: "#3350dd", duration: 0.09, ease: "none" }, 5.8);
+      tl.to("#f08-btnB", { backgroundColor: "#4060ef", duration: 0.28, ease: "power1.out" }, 5.92);
+      tl.fromTo(
+        "#f08-pass",
+        { y: -30, scale: 1.18, opacity: 0, filter: "blur(7px)" },
+        { y: 0, scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.32, ease: "power4.out" },
+        6.02
+      );
+
+      /* 法規依據 waterfall-entry：binary opacity（tl.set）＋由下而上收攏、加速重疊 */
+      var F = 1 / 60;
+      var w0 = 6.5;
+      tl.set("#f08-b1", { opacity: 1, y: 62 }, w0);
+      tl.to("#f08-b1", { y: 0, duration: 0.18, ease: "power4.out" }, w0);
+      var w1 = w0 + 0.18 + 2 * F;
+      tl.set("#f08-b2", { opacity: 1, y: 48 }, w1);
+      tl.to("#f08-b2", { y: 0, duration: 0.15, ease: "power4.out" }, w1);
+      var w2 = w1 + 0.15 - F;
+      tl.set("#f08-b3", { opacity: 1, y: 44 }, w2);
+      tl.to("#f08-b3", { y: 0, duration: 0.14, ease: "power4.out" }, w2);
+      var w3 = w2 + 0.14 - F;
+      tl.set("#f08-b4", { opacity: 1, y: 42 }, w3);
+      tl.to("#f08-b4", { y: 0, duration: 0.13, ease: "power4.out" }, w3);
+
+      /* -- Scene 6 (8.05s)：字卡「擋下時，法條攤在眼前」slam -- */
+      tl.fromTo(
+        "#f08-capB",
+        { scale: 1.45, opacity: 0, filter: "blur(12px)" },
+        { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.5, ease: "power4.out" },
+        8.05
+      );
+      tl.fromTo("#f08-capB .f08-cap-bar", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.4, ease: "power3.out", transformOrigin: "0% 50%" }, 8.42);
+
+      /* 尾段安靜推近，鏡頭不死（結束時速度歸零，等硬切） */
+      tl.to("#f08-zoom-outer", { scale: 1.025, duration: 3.5, ease: "sine.inOut" }, 6.1);
+
+      window.__timelines["08-cap2-swap"] = tl;
+    })();
+  </script>
+</template>

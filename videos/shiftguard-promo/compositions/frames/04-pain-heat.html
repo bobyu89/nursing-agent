@@ -1,0 +1,269 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+@font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+@font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+#root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+    }
+    .clip {
+      position: absolute;
+      inset: 0;
+    }
+    .ph04-bg {
+      background: #101b30;
+    }
+    .ph04-cam {
+      position: absolute;
+      inset: 0;
+      transform-origin: 52% 45%;
+      will-change: transform;
+    }
+    .ph04-card {
+      position: absolute;
+      left: 150px;
+      top: 140px;
+      width: 816px;
+      background: #0d1727;
+      border: 1px solid rgba(154, 168, 194, 0.16);
+      border-radius: 18px;
+      padding: 44px;
+      will-change: transform;
+    }
+    .ph04-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 26px;
+    }
+    .ph04-card-title {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: #9aa8c2;
+    }
+    .ph04-legend {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ph04-legend i {
+      display: block;
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+    }
+    .ph04-lg-t {
+      font-size: 20px;
+      font-weight: 500;
+      color: #9aa8c2;
+    }
+    .ph04-sw0 { background: #1a2740; }
+    .ph04-sw1 { background: #223354; }
+    .ph04-sw2 { background: #6a4a12; }
+    .ph04-sw3 { background: #93600a; }
+    .ph04-sw4 { background: #c92c21; }
+    .ph04-grid {
+      display: grid;
+      grid-template-columns: 56px repeat(7, 86px);
+      gap: 10px;
+      align-items: center;
+    }
+    .ph04-day {
+      height: 38px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 6px;
+      font-size: 26px;
+      font-weight: 600;
+      color: #9aa8c2;
+    }
+    .ph04-week {
+      font-size: 24px;
+      font-weight: 600;
+      color: #9aa8c2;
+      text-align: center;
+    }
+    .ph04-cell {
+      position: relative;
+      width: 86px;
+      height: 86px;
+      will-change: transform;
+    }
+    .ph04-fill {
+      position: absolute;
+      inset: 0;
+      border-radius: 10px;
+      will-change: transform;
+    }
+    .ph04-l0 .ph04-fill { background: #1a2740; border: 1px solid rgba(154, 168, 194, 0.1); }
+    .ph04-l1 .ph04-fill { background: #223354; border: 1px solid rgba(154, 168, 194, 0.1); }
+    .ph04-l2 .ph04-fill { background: #6a4a12; }
+    .ph04-l3 .ph04-fill { background: #93600a; }
+    .ph04-l4 .ph04-fill { background: #93600a; }
+    .ph04-verdict {
+      position: absolute;
+      left: 1020px;
+      top: 376px;
+      width: 810px;
+      text-align: center;
+      font-size: 140px;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      line-height: 1;
+      color: #f3f5fa;
+      will-change: transform, filter;
+    }
+  </style>
+
+  <div data-hf-id="hf-wrt7" id="root" data-composition-id="04-pain-heat" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-eavz" id="f04-clip" class="clip ph04-bg" data-start="0" data-duration="5.5" data-track-index="0"></div>
+
+    <div data-hf-id="hf-18sf" id="f04-clip-2" class="clip" data-start="0" data-duration="5.5" data-track-index="1">
+      <div data-hf-id="hf-1vwq" class="ph04-cam" id="ph04-cam">
+        <div data-hf-id="hf-twjg" class="ph04-card" id="ph04-card">
+          <div data-hf-id="hf-47nq" class="ph04-card-head">
+            <div data-hf-id="hf-atkd" class="ph04-card-title">夜班密度</div>
+            <div data-hf-id="hf-43t2" class="ph04-legend">
+              <span data-hf-id="hf-crdo" class="ph04-lg-t">低</span>
+              <i data-hf-id="hf-t969" class="ph04-sw0"></i><i data-hf-id="hf-shig" class="ph04-sw1"></i><i data-hf-id="hf-15eb" class="ph04-sw2"></i><i data-hf-id="hf-x7aa" class="ph04-sw3"></i><i data-hf-id="hf-gn6d" class="ph04-sw4"></i>
+              <span data-hf-id="hf-2f2e" class="ph04-lg-t">高</span>
+            </div>
+          </div>
+          <div data-hf-id="hf-ilkt" class="ph04-grid">
+            <div data-hf-id="hf-zixq" class="ph04-corner"></div>
+            <div data-hf-id="hf-adof" class="ph04-day">一</div>
+            <div data-hf-id="hf-rpmz" class="ph04-day">二</div>
+            <div data-hf-id="hf-7lj8" class="ph04-day">三</div>
+            <div data-hf-id="hf-bmfu" class="ph04-day">四</div>
+            <div data-hf-id="hf-oj6r" class="ph04-day">五</div>
+            <div data-hf-id="hf-by6w" class="ph04-day">六</div>
+            <div data-hf-id="hf-8r7k" class="ph04-day">日</div>
+
+            <div data-hf-id="hf-e4wp" class="ph04-week">W1</div>
+            <div data-hf-id="hf-cs7d" class="ph04-cell ph04-l1"><i data-hf-id="hf-gx2q" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-c0jk" class="ph04-cell ph04-l0"><i data-hf-id="hf-gw8m" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-p0ot" class="ph04-cell ph04-l1"><i data-hf-id="hf-hajn" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-q7lw" class="ph04-cell ph04-l1"><i data-hf-id="hf-houo" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-01iw" class="ph04-cell ph04-l0"><i data-hf-id="hf-ewph" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-gqbe" class="ph04-cell ph04-l2"><i data-hf-id="hf-fb0i" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-ptav" class="ph04-cell ph04-l1"><i data-hf-id="hf-fpbj" class="ph04-fill"></i></div>
+
+            <div data-hf-id="hf-fbts" class="ph04-week">W2</div>
+            <div data-hf-id="hf-yult" class="ph04-cell ph04-l0"><i data-hf-id="hf-g3mk" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-r07y" class="ph04-cell ph04-l1"><i data-hf-id="hf-dbhd" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-qlwx" class="ph04-cell ph04-l1"><i data-hf-id="hf-dpse" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-htr2" class="ph04-cell ph04-l2"><i data-hf-id="hf-0rxu" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-rsu0" class="ph04-cell ph04-l1"><i data-hf-id="hf-0dmt" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-i823" class="ph04-cell ph04-l2"><i data-hf-id="hf-1kjw" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-imd4" class="ph04-cell ph04-l2"><i data-hf-id="hf-168v" class="ph04-fill"></i></div>
+
+            <div data-hf-id="hf-exir" class="ph04-week">W3</div>
+            <div data-hf-id="hf-reiz" class="ph04-cell ph04-l1"><i data-hf-id="hf-2d5y" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-slg2" class="ph04-cell ph04-l1"><i data-hf-id="hf-1yux" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-fu7x" class="ph04-cell ph04-l2"><i data-hf-id="hf-35s0" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-g8iy" class="ph04-cell ph04-l2"><i data-hf-id="hf-2rgz" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-koff" class="ph04-cell ph04-l3"><i data-hf-id="hf-xlhm" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-c922" class="ph04-cell ph04-l4 ph04-hot"><i data-hf-id="hf-x76l" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-gmtz" class="ph04-cell ph04-l2"><i data-hf-id="hf-00a1" class="ph04-fill"></i></div>
+
+            <div data-hf-id="hf-cxzm" class="ph04-week">W4</div>
+            <div data-hf-id="hf-h150" class="ph04-cell ph04-l2"><i data-hf-id="hf-0el2" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-klw9" class="ph04-cell ph04-l2"><i data-hf-id="hf-0sw3" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-zurv" class="ph04-cell ph04-l3"><i data-hf-id="hf-1774" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-zggu" class="ph04-cell ph04-l3"><i data-hf-id="hf-yf1x" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-3ym6" class="ph04-cell ph04-l4 ph04-hot"><i data-hf-id="hf-ytcy" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-4cx7" class="ph04-cell ph04-l4 ph04-hot"><i data-hf-id="hf-z7nz" class="ph04-fill"></i></div>
+            <div data-hf-id="hf-4r88" class="ph04-cell ph04-l4 ph04-hot"><i data-hf-id="hf-zlz0" class="ph04-fill"></i></div>
+          </div>
+        </div>
+
+        <div data-hf-id="hf-oc99" class="ph04-verdict" id="ph04-verdict">風險沒人算</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+      var D = 5.5;
+
+      // dataviz-countup signature: slow continuous camera push under the instrument
+      tl.fromTo("#ph04-cam", { scale: 1 }, { scale: 1.05, duration: D, ease: "none" }, 0);
+
+      // Scene 1 — the instrument establishes (VO: 連續上了幾天)
+      tl.fromTo(
+        "#ph04-card",
+        { opacity: 0, y: 16, scale: 0.965 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: "power3.out" },
+        0.06
+      );
+      document.querySelectorAll(".ph04-day").forEach(function (el, i) {
+        tl.fromTo(
+          el,
+          { opacity: 0, y: -12 },
+          { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" },
+          0.18 + i * 0.035
+        );
+      });
+      document.querySelectorAll(".ph04-week").forEach(function (el, i) {
+        tl.fromTo(
+          el,
+          { opacity: 0, x: -14 },
+          { opacity: 1, x: 0, duration: 0.3, ease: "power2.out" },
+          0.32 + i * 7 * 0.06
+        );
+      });
+
+      // cells light up one by one, week after week (spring-pop stagger, row-major = chronological)
+      document.querySelectorAll(".ph04-cell").forEach(function (el, i) {
+        tl.fromTo(
+          el,
+          { scale: 0, opacity: 0 },
+          { scale: 1, opacity: 1, duration: 0.3, ease: "power3.out" },
+          0.38 + i * 0.06
+        );
+      });
+
+      // Scene 2 — the night-shift hot zone burns warn → danger (VO: 夜班排得多密)
+      var fills = document.querySelectorAll(".ph04-hot .ph04-fill");
+      fills.forEach(function (f, j) {
+        tl.to(f, { backgroundColor: "#c92c21", duration: 0.5, ease: "power2.inOut" }, 2.4 + j * 0.09);
+      });
+
+      // burning pulse — sine-wave-loop yoyo form, finite repeats, staggered periods
+      var half = [0.34, 0.35, 0.3, 0.32];
+      fills.forEach(function (f, j) {
+        tl.fromTo(
+          f,
+          { scale: 1 },
+          {
+            scale: j % 2 ? 1.05 : 1.06,
+            duration: half[j],
+            ease: "sine.inOut",
+            yoyo: true,
+            repeat: 5
+          },
+          3.0 + j * 0.06
+        );
+      });
+
+      // Scene 3 — 字卡 slam (kinetic-beat-slam; VO: 沒有人真的算過)
+      tl.fromTo(
+        "#ph04-verdict",
+        { scale: 1.5, filter: "blur(16px)", opacity: 0 },
+        { scale: 1, filter: "blur(0px)", opacity: 1, duration: 0.45, ease: "power4.out" },
+        2.55
+      );
+
+      window.__timelines["04-pain-heat"] = tl;
+    })();
+  </script>
+</template>

@@ -1,0 +1,132 @@
+<template>
+  <div data-hf-id="hf-fzku" id="root" data-composition-id="13-core-line" data-width="1920" data-height="1080">
+    <!-- Full-bleed light canvas (track 0) -->
+    <div data-hf-id="hf-tdlp" id="f13-clip" class="clip f13cl-bg" data-start="0" data-duration="5" data-track-index="0"></div>
+
+    <!-- Hero stage (track 1) — huge whitespace, two-line core statement only -->
+    <div data-hf-id="hf-zt9m" id="f13-clip-2" class="clip f13cl-stage" data-start="0" data-duration="5" data-track-index="1">
+      <div data-hf-id="hf-g3os" class="f13cl-hero">
+        <div data-hf-id="hf-ryhm" class="f13cl-line">
+          <span data-hf-id="hf-31cj" class="f13cl-w" id="f13cl-w1">班表</span><span data-hf-id="hf-by2a" class="f13cl-w" id="f13cl-w2">照顧好</span><span data-hf-id="hf-tzn3" class="f13cl-w f13cl-comma" id="f13cl-w3">，</span>
+        </div>
+        <div data-hf-id="hf-8ghq" class="f13cl-line">
+          <span data-hf-id="hf-uu03" class="f13cl-w" id="f13cl-w4">人</span><span data-hf-id="hf-l9f5" class="f13cl-w" id="f13cl-w5">就</span><span data-hf-id="hf-bdb9" class="f13cl-mkwrap"><span data-hf-id="hf-wodm" class="f13cl-mkbar" id="f13cl-hl"></span><span data-hf-id="hf-c5yl" class="f13cl-w f13cl-acc" id="f13cl-f1">留</span><span data-hf-id="hf-5ume" class="f13cl-w f13cl-acc" id="f13cl-f2">得</span><span data-hf-id="hf-w6ft" class="f13cl-w f13cl-acc" id="f13cl-f3">住</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+@font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+@font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+#root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+    }
+    .clip {
+      position: absolute;
+      inset: 0;
+    }
+    .f13cl-bg {
+      background: #f3f5fa;
+    }
+    .f13cl-stage {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .f13cl-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 40px;
+      margin-bottom: 120px;
+    }
+    .f13cl-line {
+      font-size: 96px;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      line-height: 1.18;
+      color: #16233a;
+      white-space: nowrap;
+    }
+    .f13cl-w {
+      display: inline-block;
+      opacity: 0;
+      position: relative;
+      z-index: 1;
+    }
+    .f13cl-comma {
+      margin-right: -0.5em;
+    }
+    .f13cl-acc {
+      color: #4060ef;
+    }
+    .f13cl-mkwrap {
+      position: relative;
+      display: inline-block;
+    }
+    .f13cl-mkbar {
+      position: absolute;
+      inset: 8px -16px 2px -16px;
+      background: rgba(64, 96, 239, 0.16);
+      border-radius: 10px;
+      transform: scaleX(0);
+      transform-origin: left center;
+      z-index: 0;
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+      var F = 1 / 60;
+
+      // waterfall-entry: binary opacity via tl.set + whip from below, power4.out,
+      // overlapping wave, weights vary, final word split into fragments.
+      function wave(sel, at, y, dur) {
+        tl.set(sel, { opacity: 1, y: y }, at);
+        tl.to(sel, { y: 0, duration: dur, ease: "power4.out" }, at);
+      }
+
+      // Wave 1 — line 1 「班表照顧好，」 (VO: 班表照顧好)
+      var t0 = 0.15;                //  班表 — anchor: furthest travel, longest settle
+      wave("#f13cl-w1", t0, 80, 0.18);
+      var t1 = t0 + 0.18 + 2 * F;   //  照顧好 — normal word
+      wave("#f13cl-w2", t1, 48, 0.15);
+      var t2 = t1 + 0.15 - F;       //  ， — punctuation snaps in tight
+      wave("#f13cl-w3", t2, 38, 0.12);
+
+      // Deliberate gap, then Wave 2 — line 2 「人就留得住」 (VO: 人就留得住)
+      var t3 = 1.0;                 //  人 — second-wave anchor
+      wave("#f13cl-w4", t3, 62, 0.17);
+      var t4 = t3 + 0.17 - F;       //  就 — light
+      wave("#f13cl-w5", t4, 44, 0.13);
+      var t5 = t4 + 0.13 - 2 * F;   //  留 — climax fragments: extra travel, tightest overlap
+      wave("#f13cl-f1", t5, 74, 0.16);
+      var t6 = t5 + 0.14 - F;       //  得
+      wave("#f13cl-f2", t6, 74, 0.15);
+      var t7 = t6 + 0.13 - 2 * F;   //  住 — settles ~1.61s
+      wave("#f13cl-f3", t7, 76, 0.14);
+
+      // css-marker-patterns (highlight mode): accent marker sweeps behind 「留得住」
+      tl.fromTo(
+        "#f13cl-hl",
+        { scaleX: 0 },
+        { scaleX: 1, duration: 0.55, ease: "power2.out" },
+        1.78
+      );
+
+      // Long still hold — 2.33s → 5.0s (the breather is the deliverable).
+      tl.to({}, { duration: 2.67 }, 2.33);
+
+      window.__timelines["13-core-line"] = tl;
+    })();
+  </script>
+</template>

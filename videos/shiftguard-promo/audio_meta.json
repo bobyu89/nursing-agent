@@ -1,0 +1,101 @@
+{
+  "tts_provider": "kokoro",
+  "voice_id": "zf_xiaobei",
+  "bgm": null,
+  "bgm_pending": false,
+  "bgm_provider": null,
+  "bgm_pid": null,
+  "bgm_log": null,
+  "bgm_mode": null,
+  "bgm_target_duration_s": null,
+  "bgm_seed_duration_s": null,
+  "bgm_loop_count": null,
+  "voices": [
+    {
+      "id": "f01",
+      "path": "assets/voice/f01.wav",
+      "duration_s": 4.864,
+      "words": []
+    },
+    {
+      "id": "f02",
+      "path": "assets/voice/f02.wav",
+      "duration_s": 1.984,
+      "words": []
+    },
+    {
+      "id": "f03",
+      "path": "assets/voice/f03.wav",
+      "duration_s": 2.005,
+      "words": []
+    },
+    {
+      "id": "f04",
+      "path": "assets/voice/f04.wav",
+      "duration_s": 4.821,
+      "words": []
+    },
+    {
+      "id": "f05",
+      "path": "assets/voice/f05.wav",
+      "duration_s": 1.792,
+      "words": []
+    },
+    {
+      "id": "f06",
+      "path": "assets/voice/f06.wav",
+      "duration_s": 2.795,
+      "words": []
+    },
+    {
+      "id": "f07",
+      "path": "assets/voice/f07.wav",
+      "duration_s": 9.472,
+      "words": []
+    },
+    {
+      "id": "f08",
+      "path": "assets/voice/f08.wav",
+      "duration_s": 5.589,
+      "words": []
+    },
+    {
+      "id": "f09",
+      "path": "assets/voice/f09.wav",
+      "duration_s": 5.376,
+      "words": []
+    },
+    {
+      "id": "f10",
+      "path": "assets/voice/f10.wav",
+      "duration_s": 5.803,
+      "words": []
+    },
+    {
+      "id": "f11",
+      "path": "assets/voice/f11.wav",
+      "duration_s": 4.501,
+      "words": []
+    },
+    {
+      "id": "f12",
+      "path": "assets/voice/f12.wav",
+      "duration_s": 2.667,
+      "words": []
+    },
+    {
+      "id": "f13",
+      "path": "assets/voice/f13.wav",
+      "duration_s": 2.539,
+      "words": []
+    },
+    {
+      "id": "f14",
+      "path": "assets/voice/f14.wav",
+      "duration_s": 3.179,
+      "words": []
+    }
+  ],
+  "sfx": [],
+  "total_duration_s": 57.387
+}

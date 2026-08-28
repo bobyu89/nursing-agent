@@ -1,0 +1,631 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+@font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+@font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+/* ============ 09-cap3-dash — 能力三：主任的儀表板 ============ */
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      color: #16233a;
+      -webkit-font-smoothing: antialiased;
+    }
+    #f09-bg,
+    #f09-main {
+      position: absolute;
+      inset: 0;
+    }
+    #f09-bg {
+      background: #f3f5fa;
+    }
+    #f09-main {
+      overflow: hidden;
+    }
+
+    /* ---- virtual camera (coordinate-target-zoom: outer scales, inner translates) ---- */
+    #f09-zoom-outer {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+      will-change: transform;
+    }
+    #f09-zoom-inner {
+      position: absolute;
+      inset: 0;
+      will-change: transform;
+    }
+
+    /* ---- dashboard frame (mock recreation, no traffic lights) ---- */
+    #f09-window {
+      position: absolute;
+      left: 340px;
+      top: 130px;
+      width: 1240px;
+      height: 650px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow:
+        0 24px 48px rgba(22, 35, 58, 0.08),
+        0 2px 8px rgba(22, 35, 58, 0.05);
+      overflow: hidden;
+    }
+    .f09-toolbar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      height: 46px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e4e9f1;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+    }
+    .f09-pill {
+      width: 300px;
+      height: 20px;
+      border-radius: 10px;
+      background: #eef2f7;
+      border: 1px solid #e4e9f1;
+    }
+    .f09-demo-tag {
+      margin-left: auto;
+      font-size: 17px;
+      letter-spacing: 0.08em;
+      color: #5c6b85;
+      background: #f8fafc;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      padding: 2px 14px;
+      line-height: 24px;
+    }
+    .f09-sidebar {
+      position: absolute;
+      left: 0;
+      top: 46px;
+      bottom: 0;
+      width: 68px;
+      background: #f8fafc;
+      border-right: 1px solid #eef2f7;
+    }
+    .f09-side-item {
+      position: absolute;
+      left: 24px;
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: #eef2f7;
+    }
+    .f09-side-item.f09-active {
+      background: #edf1fe;
+      border: 1px solid rgba(64, 96, 239, 0.55);
+    }
+    .f09-screen {
+      position: absolute;
+      left: 68px;
+      top: 46px;
+      right: 0;
+      bottom: 0;
+    }
+    .f09-phase {
+      position: absolute;
+      inset: 0;
+    }
+    #f09-phaseB {
+      opacity: 0;
+    }
+
+    /* ---- phase A：今日戰情板 ---- */
+    .f09-board-title {
+      position: absolute;
+      left: 36px;
+      top: 34px;
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      opacity: 0;
+    }
+    #f09-note {
+      position: absolute;
+      right: 36px;
+      top: 52px;
+      font-size: 20px;
+      font-weight: 500;
+      color: #5c6b85;
+      letter-spacing: 0.04em;
+      opacity: 0;
+    }
+    .f09-hairline {
+      position: absolute;
+      left: 36px;
+      right: 36px;
+      top: 100px;
+      height: 1px;
+      background: #e4e9f1;
+      opacity: 0;
+    }
+    .f09-kpi {
+      position: absolute;
+      top: 118px;
+      width: 350px;
+      height: 190px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow: 0 10px 26px rgba(22, 35, 58, 0.05);
+      padding: 22px 26px;
+      opacity: 0;
+    }
+    #f09-k1 {
+      left: 36px;
+    }
+    #f09-k2 {
+      left: 411px;
+    }
+    #f09-k3 {
+      left: 786px;
+    }
+    .f09-kpi-label {
+      font-size: 20px;
+      font-weight: 600;
+      color: #47566f;
+      letter-spacing: 0.05em;
+    }
+    .f09-kpi-value {
+      margin-top: 10px;
+      font-size: 62px;
+      font-weight: 800;
+      line-height: 1.05;
+      font-variant-numeric: tabular-nums;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .f09-v-danger {
+      color: #c92c21;
+    }
+    .f09-v-warn {
+      color: #93600a;
+    }
+    .f09-kpi-unit {
+      font-size: 26px;
+      font-weight: 700;
+      color: #47566f;
+    }
+    .f09-kpi-sub {
+      margin-top: 12px;
+      font-size: 18px;
+      color: #5c6b85;
+      font-variant-numeric: tabular-nums;
+    }
+    .f09-shift-rows {
+      margin-top: 12px;
+    }
+    .f09-shift-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 0;
+      font-size: 20px;
+    }
+    .f09-shift-row + .f09-shift-row {
+      border-top: 1px solid #eef2f7;
+    }
+    .f09-shift-name {
+      color: #47566f;
+      font-weight: 500;
+    }
+    .f09-st-ok {
+      color: #117a58;
+      font-weight: 700;
+    }
+    .f09-st-gap {
+      color: #c92c21;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    #f09-gap-title {
+      position: absolute;
+      left: 36px;
+      top: 344px;
+      font-size: 20px;
+      font-weight: 700;
+      color: #47566f;
+      letter-spacing: 0.06em;
+      opacity: 0;
+    }
+    #f09-gap-row {
+      position: absolute;
+      left: 36px;
+      top: 380px;
+      width: 1100px;
+      height: 68px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(22, 35, 58, 0.04);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 26px;
+      opacity: 0;
+    }
+    .f09-gap-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #c92c21;
+      flex: none;
+    }
+    .f09-gap-text {
+      font-size: 21px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .f09-gap-chip {
+      margin-left: auto;
+      padding: 4px 14px;
+      border-radius: 8px;
+      background: #fdecea;
+      color: #c92c21;
+      font-size: 19px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---- phase B：留任雷達 ---- */
+    #f09-dim-chip {
+      position: absolute;
+      left: 214px;
+      top: 42px;
+      height: 32px;
+      line-height: 32px;
+      padding: 0 14px;
+      border-radius: 999px;
+      background: #edf1fe;
+      color: #4060ef;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      opacity: 0;
+    }
+    .f09-table {
+      position: absolute;
+      left: 36px;
+      top: 118px;
+      width: 1100px;
+    }
+    .f09-thead,
+    .f09-tr {
+      display: grid;
+      grid-template-columns: 180px repeat(5, 184px);
+      align-items: center;
+      opacity: 0;
+    }
+    .f09-thead {
+      height: 44px;
+      font-size: 18px;
+      font-weight: 600;
+      color: #5c6b85;
+      letter-spacing: 0.08em;
+      border-bottom: 1px solid #e4e9f1;
+    }
+    .f09-tr {
+      height: 62px;
+      border-bottom: 1px solid #eef2f7;
+      border-radius: 8px;
+    }
+    .f09-name {
+      font-size: 20px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      padding-left: 4px;
+    }
+    .f09-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 19px;
+      color: #47566f;
+      font-weight: 500;
+    }
+    .f09-dotwrap {
+      position: relative;
+      width: 10px;
+      height: 10px;
+      flex: none;
+    }
+    .f09-dot {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+    }
+    .f09-dot-ok {
+      background: #117a58;
+    }
+    .f09-dot-warn {
+      background: #93600a;
+    }
+    #f09-warn-ring {
+      position: absolute;
+      left: -7px;
+      top: -7px;
+      width: 24px;
+      height: 24px;
+      border: 2px solid #93600a;
+      border-radius: 50%;
+      opacity: 0;
+    }
+    .f09-hi {
+      color: #93600a;
+      font-weight: 800;
+    }
+
+    /* ---- overlay: section label + 字卡 ---- */
+    #f09-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+    }
+    #f09-toplabel {
+      position: absolute;
+      left: 96px;
+      top: 58px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      color: #47566f;
+      opacity: 0;
+    }
+    .f09-tick {
+      width: 8px;
+      height: 24px;
+      border-radius: 3px;
+      background: #4060ef;
+      flex: none;
+    }
+    #f09-cap {
+      position: absolute;
+      left: 96px;
+      top: 786px;
+      display: inline-block;
+      opacity: 0;
+    }
+    .f09-cap-text {
+      position: relative;
+      z-index: 1;
+      font-size: 76px;
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      color: #16233a;
+      line-height: 1.05;
+    }
+    .f09-cap-bar {
+      position: absolute;
+      left: -4px;
+      right: -10px;
+      bottom: -12px;
+      height: 14px;
+      border-radius: 3px;
+      background: #4060ef;
+      opacity: 0;
+    }
+  </style>
+
+  <div data-hf-id="hf-bv9g" id="root" data-composition-id="09-cap3-dash" data-duration="9.6" data-width="1920" data-height="1080">
+    <!-- full-bleed ground -->
+    <div data-hf-id="hf-ww4s" id="f09-bg" class="clip" data-start="0" data-duration="9.6" data-track-index="0"></div>
+
+    <div data-hf-id="hf-kgzv" id="f09-main" class="clip" data-start="0" data-duration="9.6" data-track-index="1">
+      <div data-hf-id="hf-r9b7" id="f09-zoom-outer" data-layout-allow-overflow="">
+        <div data-hf-id="hf-909v" id="f09-zoom-inner">
+          <div data-hf-id="hf-8bbp" id="f09-window">
+            <div data-hf-id="hf-4afd" class="f09-toolbar">
+              <span data-hf-id="hf-7m44" class="f09-pill"></span>
+              <span data-hf-id="hf-rkc5" class="f09-demo-tag">示範資料</span>
+            </div>
+            <div data-hf-id="hf-ao7g" class="f09-sidebar">
+              <span data-hf-id="hf-8oy8" class="f09-side-item" style="top: 18px"></span>
+              <span data-hf-id="hf-y2ig" class="f09-side-item f09-active" style="top: 56px"></span>
+              <span data-hf-id="hf-2hsk" class="f09-side-item" style="top: 94px"></span>
+              <span data-hf-id="hf-o0fv" class="f09-side-item" style="top: 132px"></span>
+            </div>
+
+            <div data-hf-id="hf-kynw" class="f09-screen">
+              <!-- ============ PHASE A：今日戰情板 ============ -->
+              <div data-hf-id="hf-417x" class="f09-phase" id="f09-phaseA">
+                <div data-hf-id="hf-b08z" class="f09-board-title" id="f09-titleA">今日戰情板</div>
+                <div data-hf-id="hf-xoze" id="f09-note">——給護理部主任</div>
+                <div data-hf-id="hf-ag65" class="f09-hairline" id="f09-hairA"></div>
+
+                <div data-hf-id="hf-cgmg" class="f09-kpi" id="f09-k1">
+                  <div data-hf-id="hf-08i9" class="f09-kpi-label">今日缺口</div>
+                  <div data-hf-id="hf-prtb" class="f09-kpi-value f09-v-danger">1</div>
+                  <div data-hf-id="hf-cc3y" class="f09-kpi-sub">8/29 小夜｜3A 病房</div>
+                </div>
+                <div data-hf-id="hf-l4ib" class="f09-kpi" id="f09-k2">
+                  <div data-hf-id="hf-zdzl" class="f09-kpi-label">三班補足率</div>
+                  <div data-hf-id="hf-ykaa" class="f09-shift-rows">
+                    <div data-hf-id="hf-prk3" class="f09-shift-row">
+                      <span data-hf-id="hf-tcyj" class="f09-shift-name">白班</span><span data-hf-id="hf-gp99" class="f09-st-ok">補齊</span>
+                    </div>
+                    <div data-hf-id="hf-hjk3" class="f09-shift-row">
+                      <span data-hf-id="hf-5x42" class="f09-shift-name">小夜</span><span data-hf-id="hf-4fls" class="f09-st-gap">缺 1</span>
+                    </div>
+                    <div data-hf-id="hf-h592" class="f09-shift-row">
+                      <span data-hf-id="hf-a7pm" class="f09-shift-name">大夜</span><span data-hf-id="hf-l2b5" class="f09-st-ok">補齊</span>
+                    </div>
+                  </div>
+                </div>
+                <div data-hf-id="hf-h6ea" class="f09-kpi" id="f09-k3">
+                  <div data-hf-id="hf-ziwq" class="f09-kpi-label">高負荷提醒</div>
+                  <div data-hf-id="hf-n2uc" class="f09-kpi-value f09-v-warn">1<span data-hf-id="hf-vah2" class="f09-kpi-unit">人</span></div>
+                </div>
+
+                <div data-hf-id="hf-uwca" id="f09-gap-title">缺口列表</div>
+                <div data-hf-id="hf-0ckw" id="f09-gap-row">
+                  <span data-hf-id="hf-zyoh" class="f09-gap-dot"></span>
+                  <span data-hf-id="hf-1n44" class="f09-gap-text">8/29 小夜｜3A 病房</span>
+                  <span data-hf-id="hf-awaz" class="f09-gap-chip">缺 1</span>
+                </div>
+              </div>
+
+              <!-- ============ PHASE B：留任雷達 ============ -->
+              <div data-hf-id="hf-7zby" class="f09-phase" id="f09-phaseB">
+                <div data-hf-id="hf-j7h4" class="f09-board-title" id="f09-titleB">留任雷達</div>
+                <div data-hf-id="hf-2nji" id="f09-dim-chip">五維負荷</div>
+                <div data-hf-id="hf-eea6" class="f09-hairline" id="f09-hairB"></div>
+
+                <div data-hf-id="hf-7spg" class="f09-table">
+                  <div data-hf-id="hf-dkaq" class="f09-thead" id="f09-thead">
+                    <span data-hf-id="hf-nhk0">人員</span><span data-hf-id="hf-otvu">工時</span><span data-hf-id="hf-kace">夜班</span><span data-hf-id="hf-znvi">連續</span><span data-hf-id="hf-49qt">假日</span><span data-hf-id="hf-35jl">代班</span>
+                  </div>
+                  <div data-hf-id="hf-m5n7" class="f09-tr" id="f09-r1">
+                    <span data-hf-id="hf-amq6" class="f09-name">N-01</span>
+                    <span data-hf-id="hf-d6ui" class="f09-cell"><span data-hf-id="hf-toga" class="f09-dotwrap"><span data-hf-id="hf-34w2" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-6zse" class="f09-cell"><span data-hf-id="hf-ze1a" class="f09-dotwrap"><span data-hf-id="hf-6pd2" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-7e3f" class="f09-cell"><span data-hf-id="hf-zscb" class="f09-dotwrap"><span data-hf-id="hf-73o3" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-7seg" class="f09-cell"><span data-hf-id="hf-06nc" class="f09-dotwrap"><span data-hf-id="hf-7hz4" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-5099" class="f09-cell"><span data-hf-id="hf-xei5" class="f09-dotwrap"><span data-hf-id="hf-4ptx" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                  </div>
+                  <div data-hf-id="hf-dhrc" class="f09-tr" id="f09-r2">
+                    <span data-hf-id="hf-b117" class="f09-name">N-02</span>
+                    <span data-hf-id="hf-5eka" class="f09-cell"><span data-hf-id="hf-xst6" class="f09-dotwrap"><span data-hf-id="hf-544y" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-5svb" class="f09-cell"><span data-hf-id="hf-y747" class="f09-dotwrap"><span data-hf-id="hf-5ifz" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-676c" class="f09-cell"><span data-hf-id="hf-ylf8" class="f09-dotwrap"><span data-hf-id="hf-5wr0" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-9rxl" class="f09-cell"><span data-hf-id="hf-266h" class="f09-dotwrap"><span data-hf-id="hf-34lt" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-a68m" class="f09-cell"><span data-hf-id="hf-2khi" class="f09-dotwrap"><span data-hf-id="hf-3iwu" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                  </div>
+                  <div data-hf-id="hf-e9f5" class="f09-tr" id="f09-r3">
+                    <span data-hf-id="hf-bfc8" class="f09-name">N-03</span>
+                    <span data-hf-id="hf-n7w1" class="f09-cell"><span data-hf-id="hf-9y3e" class="f09-dotwrap"><span data-hf-id="hf-h7gc" class="f09-dot f09-dot-warn" id="f09-warn-dot"></span><span data-hf-id="hf-05o5" id="f09-warn-ring"></span></span><span data-hf-id="hf-0w9n" class="f09-hi">偏高</span></span>
+                    <span data-hf-id="hf-oam2" class="f09-cell"><span data-hf-id="hf-9jsd" class="f09-dotwrap"><span data-hf-id="hf-xlnm" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-nwb1" class="f09-cell"><span data-hf-id="hf-aqpg" class="f09-dotwrap"><span data-hf-id="hf-x7cl" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-p384" class="f09-cell"><span data-hf-id="hf-acef" class="f09-dotwrap"><span data-hf-id="hf-ye9o" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-oox3" class="f09-cell"><span data-hf-id="hf-bjbi" class="f09-dotwrap"><span data-hf-id="hf-xzyn" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                  </div>
+                  <div data-hf-id="hf-5lja" class="f09-tr" id="f09-r4">
+                    <span data-hf-id="hf-8n71" class="f09-name">N-04</span>
+                    <span data-hf-id="hf-pvu6" class="f09-cell"><span data-hf-id="hf-b50h" class="f09-dotwrap"><span data-hf-id="hf-z6vq" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-phj5" class="f09-cell"><span data-hf-id="hf-cbxk" class="f09-dotwrap"><span data-hf-id="hf-yskp" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-qog8" class="f09-cell"><span data-hf-id="hf-bxmj" class="f09-dotwrap"><span data-hf-id="hf-zzhs" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-qa57" class="f09-cell"><span data-hf-id="hf-d4jm" class="f09-dotwrap"><span data-hf-id="hf-zl6r" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-rh2a" class="f09-cell"><span data-hf-id="hf-cq8l" class="f09-dotwrap"><span data-hf-id="hf-uf7e" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                  </div>
+                  <div data-hf-id="hf-9jnb" class="f09-tr" id="f09-r5">
+                    <span data-hf-id="hf-91i2" class="f09-name">N-05</span>
+                    <span data-hf-id="hf-r2r9" class="f09-cell"><span data-hf-id="hf-o1n5" class="f09-dotwrap"><span data-hf-id="hf-u0wd" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-niy9" class="f09-cell"><span data-hf-id="hf-ofy6" class="f09-dotwrap"><span data-hf-id="hf-wtzt" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-nx9a" class="f09-cell"><span data-hf-id="hf-ou97" class="f09-dotwrap"><span data-hf-id="hf-x8au" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-obkb" class="f09-cell"><span data-hf-id="hf-p8k8" class="f09-dotwrap"><span data-hf-id="hf-xmlv" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                    <span data-hf-id="hf-opvc" class="f09-cell"><span data-hf-id="hf-mgf1" class="f09-dotwrap"><span data-hf-id="hf-y0ww" class="f09-dot f09-dot-ok"></span></span>正常</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- overlay above camera -->
+      <div data-hf-id="hf-4nlj" id="f09-overlay">
+        <div data-hf-id="hf-ww2v" id="f09-toplabel"><span data-hf-id="hf-fvqi" class="f09-tick"></span>能力三・今日戰情板</div>
+        <div data-hf-id="hf-6ubz" id="f09-cap">
+          <span data-hf-id="hf-p1va" class="f09-cap-text">留任雷達</span>
+          <span data-hf-id="hf-zqcn" class="f09-cap-bar"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      /* -- Scene 1 (0–1.5s)：儀表板外框落定、標題與抬頭小字 -- */
+      tl.fromTo("#f09-window", { y: 56, opacity: 0, scale: 0.985 }, { y: 0, opacity: 1, scale: 1, duration: 0.55, ease: "power3.out" }, 0);
+      tl.fromTo("#f09-toplabel", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power2.out" }, 0.12);
+      tl.fromTo("#f09-titleA", { y: 22, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.58);
+      tl.fromTo("#f09-hairA", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.5, ease: "power2.out", transformOrigin: "0% 50%" }, 0.66);
+      tl.fromTo("#f09-note", { x: -14, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45, ease: "power2.out" }, 0.88);
+
+      /* -- Scene 2 (1.6–2.9s)：KPI 卡與缺口列表跟著旁白進場 -- */
+      tl.fromTo("#f09-k1", { y: 34, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 1.65);
+      tl.fromTo("#f09-gap-title", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power2.out" }, 1.98);
+      tl.fromTo("#f09-gap-row", { x: -26, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 2.1);
+      tl.fromTo("#f09-k2", { y: 34, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 2.38);
+      tl.fromTo("#f09-k3", { y: 34, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 2.64);
+
+      /* -- Scene 3 (3.0–4.8s)：輕推近掃過 KPI 列（coordinate-target-zoom＋緩慢橫掃）
+            KPI 列中心 (994,389)，offset=(34,-151) → 基準 counter=(-34,151)；
+            先瞄列左段 (counter x=64)，橫掃至右段 (counter x=-132)，scale 1.16 -- */
+      tl.to("#f09-zoom-outer", { scale: 1.16, duration: 1.1, ease: "power3.inOut" }, 3.0);
+      tl.to("#f09-zoom-inner", { x: 64, y: 151, duration: 1.1, ease: "power3.inOut" }, 3.0);
+      tl.to("#f09-zoom-inner", { x: -132, duration: 0.7, ease: "sine.inOut" }, 4.1);
+
+      /* -- Scene 4 (4.8–5.6s)：拉回 ＋ 相位軟切 A→B -- */
+      tl.to("#f09-zoom-outer", { scale: 1, duration: 0.7, ease: "power2.inOut" }, 4.8);
+      tl.to("#f09-zoom-inner", { x: 0, y: 0, duration: 0.7, ease: "power2.inOut" }, 4.8);
+      tl.to("#f09-phaseA", { opacity: 0, duration: 0.4, ease: "power1.inOut" }, 4.98);
+      tl.fromTo("#f09-phaseB", { opacity: 0, scale: 1.015 }, { opacity: 1, scale: 1, duration: 0.45, ease: "power2.out" }, 5.08);
+      tl.fromTo("#f09-titleB", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.32, ease: "power3.out" }, 5.45);
+      tl.fromTo("#f09-hairB", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.45, ease: "power2.out", transformOrigin: "0% 50%" }, 5.55);
+      tl.fromTo("#f09-dim-chip", { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: "back.out(1.8)" }, 5.58);
+
+      /* -- Scene 5 (5.7–6.7s)：雷達列 waterfall-entry cascade（binary opacity、由下而上、加速重疊） -- */
+      var F = 1 / 60;
+      var t0 = 5.72;
+      tl.set("#f09-thead", { opacity: 1, y: 56 }, t0);
+      tl.to("#f09-thead", { y: 0, duration: 0.18, ease: "power4.out" }, t0);
+      var t1 = t0 + 0.18 + 2 * F;
+      tl.set("#f09-r1", { opacity: 1, y: 46 }, t1);
+      tl.to("#f09-r1", { y: 0, duration: 0.15, ease: "power4.out" }, t1);
+      var t2 = t1 + 0.15 - F;
+      tl.set("#f09-r2", { opacity: 1, y: 44 }, t2);
+      tl.to("#f09-r2", { y: 0, duration: 0.14, ease: "power4.out" }, t2);
+      var t3 = t2 + 0.14 - F;
+      tl.set("#f09-r3", { opacity: 1, y: 44 }, t3);
+      tl.to("#f09-r3", { y: 0, duration: 0.14, ease: "power4.out" }, t3);
+      var t4 = t3 + 0.14 - F;
+      tl.set("#f09-r4", { opacity: 1, y: 42 }, t4);
+      tl.to("#f09-r4", { y: 0, duration: 0.13, ease: "power4.out" }, t4);
+      var t5 = t4 + 0.13 - F;
+      tl.set("#f09-r5", { opacity: 1, y: 42 }, t5);
+      tl.to("#f09-r5", { y: 0, duration: 0.13, ease: "power4.out" }, t5);
+
+      /* -- Scene 6 (7.1–7.9s)：N-03 高負荷列單次 pulse（sine 單循環，僅此一顆 warn 點） -- */
+      tl.to("#f09-warn-dot", { scale: 1.9, duration: 0.38, ease: "sine.inOut", yoyo: true, repeat: 1, transformOrigin: "50% 50%" }, 7.15);
+      tl.fromTo(
+        "#f09-warn-ring",
+        { scale: 0.5, opacity: 0.6 },
+        { scale: 2.2, opacity: 0, duration: 0.8, ease: "power2.out", transformOrigin: "50% 50%" },
+        7.15
+      );
+      tl.to("#f09-r3", { backgroundColor: "rgba(147,96,10,0.07)", duration: 0.4, ease: "sine.inOut", yoyo: true, repeat: 1 }, 7.12);
+
+      /* -- Scene 7 (7.85s)：字卡「留任雷達」slam（kinetic-beat-slam） -- */
+      tl.fromTo(
+        "#f09-cap",
+        { scale: 1.5, opacity: 0, filter: "blur(14px)" },
+        { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.5, ease: "power4.out" },
+        7.85
+      );
+      tl.fromTo("#f09-cap .f09-cap-bar", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.4, ease: "power3.out", transformOrigin: "0% 50%" }, 8.22);
+
+      /* 尾段安靜推近，鏡頭不死（結束時速度歸零，等硬切） */
+      tl.to("#f09-zoom-outer", { scale: 1.022, duration: 3.9, ease: "sine.inOut" }, 5.7);
+
+      window.__timelines["09-cap3-dash"] = tl;
+    })();
+  </script>
+</template>

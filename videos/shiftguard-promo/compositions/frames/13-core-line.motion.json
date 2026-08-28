@@ -1,0 +1,7 @@
+{
+  "scene": "13-core-line",
+  "duration_s": 5.0,
+  "rules": ["waterfall-entry", "css-marker-patterns"],
+  "exit": { "vector": "none — settled still hold from 2.33s, 0 px/s at last frame", "still_moving": false },
+  "entry": { "vector": "none at t=0 (empty canvas; first cascade word whips up at 0.15s), 0 px/s", "from_rest": true }
+}

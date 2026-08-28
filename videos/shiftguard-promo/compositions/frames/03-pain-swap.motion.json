@@ -1,0 +1,13 @@
+{
+  "scene": "03-pain-swap",
+  "duration_s": 3.8,
+  "rules": ["waterfall-entry", "scale-swap-transition", "kinetic-beat-slam"],
+  "exit": {
+    "vector": "slow push-in (stage scale 1→1.028, linear) ≈ 7px/s outward at frame edges; ？ breath tween ends at rest exactly at 3.8s",
+    "still_moving": true
+  },
+  "entry": {
+    "vector": "none at t=0 (dark canvas; roster card fade-up starts 0.08s, row waterfall from 0.15s)",
+    "from_rest": true
+  }
+}

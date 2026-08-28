@@ -1,0 +1,491 @@
+<template>
+  <div data-hf-id="hf-qwcz" id="root" data-composition-id="07-cap1-line" data-width="1920" data-height="1080">
+    <!-- track 0: full-bleed light canvas -->
+    <div data-hf-id="hf-auqk" id="f07-bg" class="clip" data-start="0" data-duration="10.2" data-track-index="0"></div>
+
+    <!-- track 1: camera layer carrying the LINE recreation panel -->
+    <div data-hf-id="hf-foqd" id="f07-cam" class="clip" data-start="0" data-duration="10.2" data-track-index="1">
+      <div data-hf-id="hf-dzt1" id="f07-camzoom">
+        <div data-hf-id="hf-55sf" id="f07-panel">
+          <!-- Phase A1: user bubble, typed character-by-character -->
+          <div data-hf-id="hf-yvtq" id="f07-user">
+            <span data-hf-id="hf-r5m0" id="f07-typed"></span><span data-hf-id="hf-txei" id="f07-cursor"></span>
+          </div>
+
+          <!-- bot "typing" dots (dies the instant the ack card lands) -->
+          <div data-hf-id="hf-ylnf" id="f07-dots">
+            <i data-hf-id="hf-zr3r" class="f07-dot"></i><i data-hf-id="hf-l2pj" class="f07-dot"></i><i data-hf-id="hf-koei" class="f07-dot"></i>
+          </div>
+
+          <!-- Phase A2: bot ack card, rows light up one by one -->
+          <div data-hf-id="hf-q7ra" id="f07-ack">
+            <div data-hf-id="hf-sjqd" class="f07-ack-title">【班守 ShiftGuard】已收到缺班通報，解析如下：</div>
+            <div data-hf-id="hf-9bk9" class="f07-ack-rows">
+              <div data-hf-id="hf-ylgt" class="f07-arow"><span data-hf-id="hf-4xjf" class="f07-abar"></span><span data-hf-id="hf-76xy" class="f07-atext">・日期：8/29（六）</span></div>
+              <div data-hf-id="hf-ypk1" class="f07-arow"><span data-hf-id="hf-1r8r" class="f07-abar"></span><span data-hf-id="hf-zmmk" class="f07-atext">・班別：小夜（15:00–23:00）</span></div>
+              <div data-hf-id="hf-zwh4" class="f07-arow"><span data-hf-id="hf-1cxq" class="f07-abar"></span><span data-hf-id="hf-3s25" class="f07-atext">・單位：3A 病房</span></div>
+            </div>
+          </div>
+
+          <!-- Phase B: suggestion card, ranked rows cascade -->
+          <div data-hf-id="hf-qpu2" id="f07-sug">
+            <div data-hf-id="hf-icv5" class="f07-sug-head">【替補建議】8/29（六）小夜｜3A 病房</div>
+            <div data-hf-id="hf-3d4x" class="f07-sug-sub">需求：護理師以上</div>
+            <div data-hf-id="hf-7sll" class="f07-sug-rows">
+              <div data-hf-id="hf-60t7" class="f07-srow">
+                <div data-hf-id="hf-mxhn" class="f07-srow-main">
+                  <span data-hf-id="hf-5eh8" class="f07-chip">1</span>
+                  <span data-hf-id="hf-gjhm" class="f07-sid">N-02</span>
+                  <span data-hf-id="hf-l4fz" class="f07-score">18／20 分</span>
+                </div>
+                <div data-hf-id="hf-dqsp" class="f07-sreason">意願班別相符・班距充足</div>
+              </div>
+              <div data-hf-id="hf-qspn" class="f07-srow">
+                <div data-hf-id="hf-kcq3" class="f07-srow-main">
+                  <span data-hf-id="hf-47k5" class="f07-chip">2</span>
+                  <span data-hf-id="hf-g56l" class="f07-sid">N-03</span>
+                  <span data-hf-id="hf-g86t" class="f07-score">16／20 分</span>
+                </div>
+                <div data-hf-id="hf-5ayi" class="f07-sreason">熟悉單位・證照效期齊</div>
+              </div>
+              <div data-hf-id="hf-qeem" class="f07-srow">
+                <div data-hf-id="hf-jyf2" class="f07-srow-main">
+                  <span data-hf-id="hf-4lv6" class="f07-chip">3</span>
+                  <span data-hf-id="hf-gxsn" class="f07-sid">N-01</span>
+                  <span data-hf-id="hf-s14e" class="f07-score">15／20 分</span>
+                </div>
+                <div data-hf-id="hf-m2gb" class="f07-sreason">資深 AHN・近 30 天代班 4 次</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- track 2: flat UI layer — corner labels + overlay kicker -->
+    <div data-hf-id="hf-6z5h" id="f07-ui" class="clip" data-start="0" data-duration="10.2" data-track-index="2">
+      <div data-hf-id="hf-l6uh" id="f07-tag"><i data-hf-id="hf-crbj" id="f07-tag-dot"></i><span data-hf-id="hf-hw8f">能力一・快速通報</span></div>
+      <div data-hf-id="hf-76wx" id="f07-midnight">護理長的凌晨</div>
+
+      <div data-hf-id="hf-8tp0" id="f07-kicker">
+        <div data-hf-id="hf-dokv" id="f07-kickline">
+          <span data-hf-id="hf-k5zu" class="f07-kick-t">合格替補，前</span><span data-hf-id="hf-m89i" id="f07-kick3">3</span><span data-hf-id="hf-tujp" class="f07-kick-t">名</span>
+        </div>
+        <div data-hf-id="hf-1ycv" id="f07-under"></div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+@font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+@font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+#root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    #root,
+    #root * {
+      box-sizing: border-box;
+    }
+    .clip {
+      position: absolute;
+      inset: 0;
+    }
+    #f07-bg {
+      background: #f3f5fa;
+    }
+    #f07-camzoom {
+      position: absolute;
+      inset: 0;
+      transform-origin: 480px 620px;
+      will-change: transform;
+    }
+
+    /* ---- LINE recreation panel (design.md Components: 米白對話區、右綠左白、無狀態列、無頭像、無 emoji) ---- */
+    #f07-panel {
+      position: absolute;
+      left: 170px;
+      top: 120px;
+      width: 620px;
+      height: 690px;
+      background: #efe9e2;
+      border: 1px solid rgba(22, 35, 58, 0.1);
+      border-radius: 18px;
+      box-shadow: 0 10px 30px rgba(22, 35, 58, 0.06);
+      will-change: transform;
+    }
+
+    /* user bubble — LINE green, white ink (擬真，非品牌色) */
+    #f07-user {
+      position: absolute;
+      top: 26px;
+      right: 26px;
+      width: 46px;
+      overflow: hidden;
+      padding: 13px 16px;
+      background: #06c755;
+      color: #ffffff;
+      font-size: 27px;
+      font-weight: 500;
+      line-height: 36px;
+      border-radius: 18px 18px 6px 18px;
+      white-space: nowrap;
+      transform-origin: 100% 100%;
+      will-change: transform;
+    }
+    #f07-typed {
+      display: inline-block;
+      min-width: 2px;
+    }
+    #f07-cursor {
+      display: inline-block;
+      width: 3px;
+      height: 27px;
+      margin-left: 3px;
+      vertical-align: -3px;
+      background: rgba(255, 255, 255, 0.95);
+      opacity: 0;
+    }
+
+    /* bot typing dots bubble */
+    #f07-dots {
+      position: absolute;
+      top: 106px;
+      left: 26px;
+      width: 96px;
+      height: 52px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 18px 18px 18px 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      transform-origin: 0% 50%;
+      will-change: transform;
+    }
+    .f07-dot {
+      display: block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #5c6b85;
+    }
+
+    /* bot cards — white, ink text, hairline, very light shadow */
+    #f07-ack,
+    #f07-sug {
+      position: absolute;
+      left: 26px;
+      width: 568px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 6px 18px 18px 18px;
+      box-shadow: 0 6px 18px rgba(22, 35, 58, 0.05);
+      transform-origin: 0% 0%;
+      will-change: transform;
+      color: #16233a;
+    }
+    #f07-ack {
+      top: 106px;
+      padding: 18px 20px;
+    }
+    .f07-ack-title {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.45;
+      color: #16233a;
+    }
+    .f07-ack-rows {
+      margin-top: 10px;
+    }
+    .f07-arow {
+      position: relative;
+      margin-top: 4px;
+      padding: 4px 8px;
+      font-size: 23px;
+      font-weight: 500;
+      line-height: 30px;
+      color: #16233a;
+      font-variant-numeric: tabular-nums;
+    }
+    .f07-abar {
+      position: absolute;
+      inset: 0;
+      background: #edf1fe;
+      border-radius: 6px;
+      transform-origin: 0% 50%;
+      z-index: 0;
+    }
+    .f07-atext {
+      position: relative;
+      z-index: 1;
+    }
+
+    #f07-sug {
+      top: 308px;
+      padding: 20px;
+    }
+    .f07-sug-head {
+      font-size: 24px;
+      font-weight: 800;
+      line-height: 1.4;
+      color: #16233a;
+    }
+    .f07-sug-sub {
+      margin-top: 6px;
+      font-size: 19px;
+      font-weight: 500;
+      color: #47566f;
+    }
+    .f07-sug-rows {
+      margin-top: 14px;
+    }
+    .f07-srow {
+      margin-top: 10px;
+      will-change: transform;
+    }
+    .f07-srow:first-child {
+      margin-top: 0;
+    }
+    .f07-srow-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .f07-chip {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      will-change: transform;
+    }
+    .f07-sid {
+      font-size: 23px;
+      font-weight: 800;
+      color: #16233a;
+      letter-spacing: 0.02em;
+    }
+    .f07-score {
+      margin-left: auto;
+      font-size: 21px;
+      font-weight: 700;
+      color: #16233a;
+      font-variant-numeric: tabular-nums;
+    }
+    .f07-sreason {
+      margin: 5px 0 0 42px;
+      font-size: 18px;
+      font-weight: 500;
+      color: #47566f;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---- flat UI layer ---- */
+    #f07-tag {
+      position: absolute;
+      left: 72px;
+      top: 52px;
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 24px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      box-shadow: 0 4px 14px rgba(22, 35, 58, 0.05);
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: #16233a;
+      will-change: transform;
+    }
+    #f07-tag-dot {
+      display: block;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #4060ef;
+    }
+    #f07-midnight {
+      position: absolute;
+      right: 72px;
+      top: 62px;
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      color: #5c6b85;
+    }
+
+    /* overlay 字卡 — kinetic slam */
+    #f07-kicker {
+      position: absolute;
+      left: 880px;
+      top: 340px;
+      width: 900px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transform-origin: 50% 50%;
+      will-change: transform, filter;
+    }
+    #f07-kickline {
+      display: flex;
+      align-items: baseline;
+      white-space: nowrap;
+    }
+    .f07-kick-t {
+      font-size: 88px;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      color: #16233a;
+    }
+    #f07-kick3 {
+      font-size: 150px;
+      font-weight: 800;
+      line-height: 0.9;
+      color: #4060ef;
+      margin: 0 18px;
+      font-variant-numeric: tabular-nums;
+    }
+    #f07-under {
+      margin-top: 20px;
+      width: 560px;
+      height: 10px;
+      border-radius: 5px;
+      background: #4060ef;
+      transform-origin: 0% 50%;
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+      window.__timelines["07-cap1-line"] = tl;
+
+      /* ============ Phase A1 (0.0–2.4s) — panel + typed user bubble ============ */
+      /* VO: 「護理師在 LINE 說一句話」 — SFX typewriter tick lands at 0.4 local */
+
+      tl.fromTo("#f07-panel", { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" }, 0);
+      tl.fromTo("#f07-tag", { x: -18, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 0.15);
+      tl.fromTo("#f07-midnight", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 0.35);
+
+      tl.fromTo(
+        "#f07-user",
+        { scale: 0.7, opacity: 0 },
+        { scale: 1, opacity: 1, duration: 0.45, ease: "power3.out" },
+        0.3
+      );
+
+      /* discrete-text-sequence — keystroke clusters + word-break pauses. Authored as
+         1ms micro-tweens (NOT zero-duration sets, which a suppressed-events seek can
+         skip; not onUpdate callbacks, which a suppressed-events seek never fires):
+         property rendering is seek-mode-proof. The bubble width steps with each state
+         so it grows leftward from the LINE right edge as the text is typed. */
+      var SEQ = [
+        { t: 0.4, text: "我" },
+        { t: 0.58, text: "我明" },
+        { t: 0.72, text: "我明天" },
+        { t: 1.1, text: "我明天小" },
+        { t: 1.24, text: "我明天小夜" },
+        { t: 1.6, text: "我明天小夜沒" },
+        { t: 1.74, text: "我明天小夜沒辦" },
+        { t: 1.86, text: "我明天小夜沒辦法" },
+        { t: 2.0, text: "我明天小夜沒辦法上" },
+        { t: 2.12, text: "我明天小夜沒辦法上班" }
+      ];
+      var typedEl = document.getElementById("f07-typed");
+      SEQ.forEach(function (s) {
+        tl.to(typedEl, { textContent: s.text, duration: 0.001, ease: "none" }, s.t);
+        tl.to("#f07-user", { width: 27 * s.text.length + 44, duration: 0.001, ease: "none" }, s.t);
+      });
+
+      /* cursor blink — deterministic square wave as render-driven micro-tweens */
+      var BLINK = [
+        [0.38, 1], [0.68, 0], [0.98, 1], [1.28, 0],
+        [1.58, 1], [1.88, 0], [2.18, 1], [2.32, 0]
+      ];
+      BLINK.forEach(function (b) {
+        tl.to("#f07-cursor", { opacity: b[1], duration: 0.001, ease: "none" }, b[0]);
+      });
+
+      /* send beat — tiny pulse from the bubble corner */
+      tl.to("#f07-user", { scale: 1.03, duration: 0.09, yoyo: true, repeat: 1, ease: "sine.inOut" }, 2.36);
+
+      /* ============ Phase A2 (2.45–4.9s) — dots, then ack card rows light up ============ */
+      /* VO: 「系統聽懂」 */
+
+      tl.fromTo("#f07-dots", { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: "power3.out" }, 2.45);
+      var dots = gsap.utils.toArray(".f07-dot");
+      dots.forEach(function (d, i) {
+        tl.to(d, { y: -5, duration: 0.15, ease: "sine.inOut", yoyo: true, repeat: 2 }, 2.52 + i * 0.08);
+      });
+      /* the pulse dies the instant the result lands */
+      tl.to("#f07-dots", { scale: 0.85, opacity: 0, duration: 0.16, ease: "power2.in" }, 2.94);
+
+      tl.fromTo(
+        "#f07-ack",
+        { scale: 0.92, y: 10, opacity: 0 },
+        { scale: 1, y: 0, opacity: 1, duration: 0.5, ease: "power3.out" },
+        3.0
+      );
+
+      /* rows light up one by one — arrival + accent-tint flash that fades */
+      var arows = gsap.utils.toArray(".f07-arow");
+      var abars = gsap.utils.toArray(".f07-abar");
+      var ROW_AT = [3.55, 4.05, 4.55];
+      arows.forEach(function (row, i) {
+        tl.fromTo(row.querySelector(".f07-atext"), { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.35, ease: "power3.out" }, ROW_AT[i]);
+        tl.fromTo(abars[i], { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.22, ease: "power2.out" }, ROW_AT[i]);
+        tl.to(abars[i], { opacity: 0, duration: 0.5, ease: "power2.out" }, ROW_AT[i] + 0.55);
+      });
+
+      /* ============ Phase B (6.0–10.2s) — suggestion card + camera payoff ============ */
+      /* VO: 「合格的替補前三名，直接送回來」 — SFX message pop lands at 6.0 local */
+
+      tl.fromTo(
+        "#f07-sug",
+        { scale: 0.9, y: 18, opacity: 0 },
+        { scale: 1, y: 0, opacity: 1, duration: 0.55, ease: "power3.out" },
+        6.0
+      );
+      var srows = gsap.utils.toArray(".f07-srow");
+      srows.forEach(function (row, i) {
+        tl.fromTo(row, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 6.38 + i * 0.22);
+      });
+
+      /* ONE camera move — payoff push-in toward the suggestion card, easing to a micro-drift */
+      tl.fromTo("#f07-camzoom", { scale: 1 }, { scale: 1.05, duration: 1.6, ease: "power2.inOut" }, 6.0);
+      tl.to("#f07-camzoom", { scale: 1.062, duration: 2.6, ease: "none" }, 7.6);
+
+      /* kinetic-beat-slam 字卡 — scale + blur slam, the「3」carries the accent */
+      tl.fromTo(
+        "#f07-kicker",
+        { scale: 1.45, opacity: 0, filter: "blur(14px)" },
+        { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.55, ease: "power4.out" },
+        7.3
+      );
+      tl.fromTo("#f07-under", { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: "power2.out" }, 7.85);
+
+      /* late beat — chips count off 1·2·3 on VO「一個一個」 */
+      var chips = gsap.utils.toArray(".f07-chip");
+      chips.forEach(function (c, i) {
+        tl.to(c, { scale: 1.16, duration: 0.12, yoyo: true, repeat: 1, ease: "sine.inOut" }, 8.5 + i * 0.22);
+      });
+    })();
+  </script>
+</template>

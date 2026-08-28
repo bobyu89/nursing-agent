@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "preferences": {
+    "flow": {
+      "value": "automation",
+      "confirmed_in": [
+        "shiftguard-promo"
+      ],
+      "updated_at": "2026-08-28T12:07:03.654Z"
+    },
+    "storyboard": {
+      "value": "no",
+      "confirmed_in": [
+        "shiftguard-promo"
+      ],
+      "updated_at": "2026-08-28T12:07:03.759Z"
+    },
+    "aspect": {
+      "value": "1920x1080",
+      "confirmed_in": [
+        "shiftguard-promo"
+      ],
+      "updated_at": "2026-08-28T12:07:03.868Z"
+    },
+    "language": {
+      "value": "zh-TW",
+      "confirmed_in": [
+        "shiftguard-promo"
+      ],
+      "updated_at": "2026-08-28T12:07:03.976Z"
+    },
+    "destination": {
+      "value": "embed",
+      "confirmed_in": [
+        "shiftguard-promo"
+      ],
+      "updated_at": "2026-08-28T12:07:04.102Z"
+    }
+  },
+  "sightings": {}
+}

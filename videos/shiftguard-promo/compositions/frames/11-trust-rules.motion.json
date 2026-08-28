@@ -1,0 +1,13 @@
+{
+  "scene": "11-trust-rules",
+  "duration_s": 5.2,
+  "rules": ["viewport-change", "sine-wave-loop", "kinetic-beat-slam"],
+  "exit": {
+    "vector": "handbook list content translating up at 156.7px/s (constant, ease none, 760px over 0.35-5.2s) inside a static browser frame until the cut; frame chrome and 字卡 static",
+    "still_moving": true
+  },
+  "entry": {
+    "vector": "browser card rising, initial ~250px/s upward (y 46→0, power3.out, 0.02–0.57s) while fading 0→1; list scroll engages at 0.35s",
+    "from_rest": false
+  }
+}

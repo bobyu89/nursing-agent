@@ -1,0 +1,179 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+@font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+@font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+#root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+    }
+    .clip {
+      position: absolute;
+      inset: 0;
+    }
+    .ps06-bg {
+      background: #f3f5fa;
+    }
+    .ps06-axis {
+      position: absolute;
+      left: 240px;
+      top: 396px;
+      width: 1440px;
+      height: 148px;
+    }
+    .ps06-axis line {
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+    }
+    #ps06-rail {
+      stroke: rgba(92, 107, 133, 0.5);
+    }
+    #ps06-tick-l {
+      stroke: #5c6b85;
+    }
+    #ps06-tick-r {
+      stroke: #4060ef;
+    }
+    .ps06-pole {
+      position: absolute;
+      top: 516px;
+      width: 280px;
+      text-align: center;
+      line-height: 1;
+    }
+    #ps06-left {
+      left: 148px;
+      font-size: 54px;
+      font-weight: 700;
+      color: #5c6b85;
+    }
+    #ps06-right {
+      left: 1492px;
+      font-size: 60px;
+      font-weight: 800;
+      color: #4060ef;
+      will-change: transform;
+    }
+    .ps06-traveler {
+      position: absolute;
+      left: 274px;
+      top: 384px;
+      width: 28px;
+      height: 100px;
+      transform-origin: 50% 86px;
+      will-change: transform;
+    }
+    #ps06-dot {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #4060ef;
+      will-change: transform;
+    }
+    .ps06-pill {
+      position: absolute;
+      bottom: 46px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 38px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      padding: 10px 26px 12px;
+      border-radius: 999px;
+      white-space: nowrap;
+      line-height: 1;
+    }
+  </style>
+
+  <div data-hf-id="hf-wq2v" id="root" data-composition-id="06-position" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-4cdo" id="f06-clip" class="clip ps06-bg" data-start="0" data-duration="4" data-track-index="0"></div>
+
+    <div data-hf-id="hf-k5wn" id="f06-clip-2" class="clip" data-start="0" data-duration="4" data-track-index="1">
+      <svg data-hf-id="hf-o02x" class="ps06-axis" viewBox="0 0 1440 148" xmlns="http://www.w3.org/2000/svg">
+        <line data-hf-id="hf-au9v" id="ps06-rail" x1="48" y1="74" x2="1392" y2="74" />
+        <line data-hf-id="hf-3i6w" id="ps06-tick-l" x1="48" y1="60" x2="48" y2="88" />
+        <line data-hf-id="hf-m5rq" id="ps06-tick-r" x1="1392" y1="60" x2="1392" y2="88" />
+      </svg>
+
+      <div data-hf-id="hf-7zga" class="ps06-pole" id="ps06-left">人情</div>
+      <div data-hf-id="hf-4n2j" class="ps06-pole" id="ps06-right">治理</div>
+
+      <div data-hf-id="hf-7xdo" class="ps06-traveler" id="ps06-traveler">
+        <div data-hf-id="hf-9bhi" class="ps06-pill">班守</div>
+        <div data-hf-id="hf-7csu" id="ps06-dot"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      // svg-path-draw setup — measured lengths, never guessed
+      ["ps06-rail", "ps06-tick-l", "ps06-tick-r"].forEach(function (id) {
+        var p = document.getElementById(id);
+        var len = p.getTotalLength();
+        p.style.strokeDasharray = String(len);
+        p.style.strokeDashoffset = String(len);
+      });
+
+      // Scene 1 — the spectrum axis draws left → right (VO: 把排班)
+      tl.to("#ps06-rail", { strokeDashoffset: 0, duration: 0.6, ease: "power2.out" }, 0.32);
+      tl.to("#ps06-tick-l", { strokeDashoffset: 0, duration: 0.18, ease: "power2.out" }, 0.36);
+      tl.to("#ps06-tick-r", { strokeDashoffset: 0, duration: 0.18, ease: "power2.out" }, 0.86);
+
+      // poles fade up as the pen passes them
+      tl.fromTo(
+        "#ps06-left",
+        { opacity: 0, y: 12 },
+        { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" },
+        0.55
+      );
+      tl.fromTo(
+        "#ps06-right",
+        { opacity: 0, y: 12 },
+        { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" },
+        0.92
+      );
+
+      // 班守 traveler pops at the 人情 end, anchored to the rail point (VO: 從人情)
+      tl.fromTo(
+        "#ps06-traveler",
+        { scale: 0, opacity: 0 },
+        { scale: 1, opacity: 1, duration: 0.5, ease: "power3.out" },
+        1.02
+      );
+
+      // the ONE move — nudge-curve slide to 85%: ramp / burst / long tail (VO: 變成)
+      tl.to("#ps06-traveler", { x: 114, duration: 0.259, ease: "power3.in" }, 1.62);
+      tl.to("#ps06-traveler", { x: 856, duration: 0.235, ease: "none" }, 1.88);
+      tl.to("#ps06-traveler", { x: 1142, duration: 0.805, ease: "power4.out" }, 2.115);
+
+      // 人情 fades as the marker leaves it
+      tl.to("#ps06-left", { opacity: 0.35, duration: 0.7, ease: "power2.inOut" }, 1.7);
+
+      // arrival (VO: 治理) — 治理 pulses, dot lands with a small bump; then allocated stillness
+      tl.fromTo(
+        "#ps06-right",
+        { scale: 1 },
+        { scale: 1.09, duration: 0.28, ease: "sine.inOut", yoyo: true, repeat: 3 },
+        2.66
+      );
+      tl.to("#ps06-dot", { scale: 1.25, duration: 0.14, ease: "power2.out" }, 2.88);
+      tl.to("#ps06-dot", { scale: 1, duration: 0.24, ease: "power2.inOut" }, 3.02);
+
+      window.__timelines["06-position"] = tl;
+    })();
+  </script>
+</template>

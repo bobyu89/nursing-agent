@@ -1,0 +1,13 @@
+{
+  "scene": "02-pain-line",
+  "duration_s": 4,
+  "rules": ["spring-pop-entrance", "css-marker-patterns"],
+  "exit": {
+    "vector": "slow push-in (stage scale 1→1.03, linear) ≈ 7px/s outward at frame edges; chat panel y-drift ends at ≈ 0px/s (sine.inOut settle at 4.0s)",
+    "still_moving": true
+  },
+  "entry": {
+    "vector": "none at t=0 (dark canvas; chat panel fade-up starts 0.12s, first bubble pop 0.40s on the sfx beat)",
+    "from_rest": true
+  }
+}

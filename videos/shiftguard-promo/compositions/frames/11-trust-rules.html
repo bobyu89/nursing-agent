@@ -1,0 +1,295 @@
+<template>
+  <div data-hf-id="hf-40ax" id="root" data-composition-id="11-trust-rules" data-width="1920" data-height="1080" data-duration="5.2">
+    <style>
+      @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+@font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+@font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+/* 11-trust-rules — 亮場：規則手冊勻速捲讀（transcript-scroll adapt，無 pivot）
+         Fonts per dispatch: system CJK stack, no webfont download. */
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+        color: #16233a;
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+      .f11tr-bg {
+        background: #f3f5fa;
+      }
+
+      /* ---- 字卡（左欄） ---- */
+      .f11tr-title {
+        position: absolute;
+        left: 140px;
+        top: 420px;
+        font-size: 106px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        line-height: 1.15;
+        color: #16233a;
+        white-space: nowrap;
+      }
+      #f11tr-t-lead,
+      #f11tr-t-accent {
+        display: inline-block;
+        will-change: transform, filter, opacity;
+      }
+      #f11tr-t-accent {
+        color: #4060ef;
+      }
+      #f11tr-under {
+        position: absolute;
+        left: 677px;
+        top: 556px;
+        width: 212px;
+        height: 10px;
+        border-radius: 5px;
+        background: #4060ef;
+        transform-origin: left center;
+        will-change: transform;
+      }
+
+      /* ---- 極簡瀏覽器外框（無紅綠燈） ---- */
+      .f11tr-browser {
+        position: absolute;
+        left: 1000px;
+        top: 120px;
+        width: 800px;
+        height: 760px;
+        background: #ffffff;
+        border: 1px solid #e4e9f1;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(22, 35, 58, 0.05);
+        overflow: hidden;
+        will-change: transform, opacity;
+      }
+      .f11tr-toolbar {
+        height: 56px;
+        background: #f8fafc;
+        border-bottom: 1px solid #e4e9f1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 20px;
+      }
+      .f11tr-addr {
+        height: 32px;
+        padding: 0 26px;
+        background: #ffffff;
+        border: 1px solid #e4e9f1;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        font-size: 17px;
+        letter-spacing: 0.06em;
+        color: #5c6b85;
+      }
+      .f11tr-viewport {
+        position: absolute;
+        top: 57px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        overflow: hidden;
+      }
+      .f11tr-scroll {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 8px 32px 140px;
+        will-change: transform;
+      }
+      .f11tr-pagehead {
+        height: 75px;
+        padding: 20px 0 18px;
+        line-height: 36px;
+        font-size: 27px;
+        font-weight: 700;
+        color: #16233a;
+        border-bottom: 1px solid #e4e9f1;
+        box-sizing: border-box;
+      }
+
+      /* ---- 規則列 ---- */
+      .f11tr-row {
+        box-sizing: border-box;
+        height: 118px;
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        border-bottom: 1px solid #eef2f7;
+        border-radius: 10px;
+        background-color: rgba(64, 96, 239, 0);
+      }
+      .f11tr-row.f11tr-tall {
+        height: 148px;
+      }
+      .f11tr-chip {
+        flex: 0 0 auto;
+        min-width: 88px;
+        height: 44px;
+        padding: 0 14px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #edf1fe;
+        color: #4060ef;
+        border-radius: 8px;
+        font-size: 21px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+      .f11tr-name {
+        font-size: 30px;
+        font-weight: 600;
+        line-height: 38px;
+        color: #16233a;
+      }
+      .f11tr-basis {
+        margin-top: 5px;
+        font-size: 19px;
+        line-height: 26px;
+        font-weight: 400;
+        color: #5c6b85;
+      }
+      #f11tr-row-h10 {
+        will-change: transform;
+      }
+    </style>
+
+    <div data-hf-id="hf-xmzk" id="f11-clip" class="clip f11tr-bg" data-start="0" data-duration="5.2" data-track-index="0"></div>
+
+    <div data-hf-id="hf-vdtn" class="clip" data-start="0" data-duration="5.2" data-track-index="1" id="f11tr-stage">
+      <!-- 字卡：勞基法規則內建 -->
+      <div data-hf-id="hf-jg2b" class="f11tr-title"><span data-hf-id="hf-t1rr" id="f11tr-t-lead">勞基法規則</span><span data-hf-id="hf-5jzf" id="f11tr-t-accent">內建</span></div>
+      <div data-hf-id="hf-2gws" id="f11tr-under"></div>
+
+      <!-- 規則手冊 mock（規劃錄屏未到位 → 依真實條文復刻） -->
+      <div data-hf-id="hf-hkq0" class="f11tr-browser" id="f11tr-browser">
+        <div data-hf-id="hf-xkio" class="f11tr-toolbar">
+          <div data-hf-id="hf-fv3r" class="f11tr-addr" data-layout-allow-overlap="">規則手冊</div>
+        </div>
+        <div data-hf-id="hf-dl6p" class="f11tr-viewport">
+          <div data-hf-id="hf-cmqj" class="f11tr-scroll" id="f11tr-scroll" data-layout-allow-overflow="">
+            <div data-hf-id="hf-tg27" class="f11tr-pagehead">規則手冊</div>
+            <div data-hf-id="hf-whux" class="f11tr-row">
+              <div data-hf-id="hf-mc2a" class="f11tr-chip">H1</div>
+              <div data-hf-id="hf-yeow"><div data-hf-id="hf-7diq" class="f11tr-name">職務與資格符合</div></div>
+            </div>
+            <div data-hf-id="hf-38f1" class="f11tr-row">
+              <div data-hf-id="hf-mqdb" class="f11tr-chip">H2</div>
+              <div data-hf-id="hf-y7yw"><div data-hf-id="hf-5jid" class="f11tr-name">當日未排其他班別</div></div>
+            </div>
+            <div data-hf-id="hf-4fc4" class="f11tr-row">
+              <div data-hf-id="hf-n4oc" class="f11tr-chip">H3</div>
+              <div data-hf-id="hf-x11t"><div data-hf-id="hf-5er7" class="f11tr-name">非請假／不可排班狀態</div></div>
+            </div>
+            <div data-hf-id="hf-4113" class="f11tr-row">
+              <div data-hf-id="hf-nizd" class="f11tr-chip">H4</div>
+              <div data-hf-id="hf-xfcu"><div data-hf-id="hf-tau5" class="f11tr-name">班間休息時間充足</div></div>
+            </div>
+            <div data-hf-id="hf-57y6" class="f11tr-row">
+              <div data-hf-id="hf-nxae" class="f11tr-chip">H5</div>
+              <div data-hf-id="hf-w8fr"><div data-hf-id="hf-bwer" class="f11tr-name">連續上班天數上限</div></div>
+            </div>
+            <div data-hf-id="hf-4tn5" class="f11tr-row">
+              <div data-hf-id="hf-oblf" class="f11tr-chip">H6</div>
+              <div data-hf-id="hf-wmqs"><div data-hf-id="hf-e79u" class="f11tr-name">週工時絕對上限</div></div>
+            </div>
+            <div data-hf-id="hf-hso9" class="f11tr-row f11tr-tall">
+              <div data-hf-id="hf-opwg" class="f11tr-chip">H7</div>
+              <div data-hf-id="hf-vftp">
+                <div data-hf-id="hf-xqk2" class="f11tr-name">雙週例假保障（四週彈性工時）</div>
+                <div data-hf-id="hf-x9kn" class="f11tr-basis">勞動基準法第 36 條第 2 項第 3 款</div>
+              </div>
+            </div>
+            <div data-hf-id="hf-60k8" class="f11tr-row">
+              <div data-hf-id="hf-irb1" class="f11tr-chip">H8</div>
+              <div data-hf-id="hf-vu4q"><div data-hf-id="hf-vqc2" class="f11tr-name">四週正常工時總量</div></div>
+            </div>
+            <div data-hf-id="hf-5m97" class="f11tr-row">
+              <div data-hf-id="hf-j5m2" class="f11tr-chip">H9</div>
+              <div data-hf-id="hf-1043"><div data-hf-id="hf-h8p0" class="f11tr-name">四週例假與休息日總量</div></div>
+            </div>
+            <div data-hf-id="hf-no7g" class="f11tr-row f11tr-tall" id="f11tr-row-h10">
+              <div data-hf-id="hf-7bpi" class="f11tr-chip">H10</div>
+              <div data-hf-id="hf-1ef4">
+                <div data-hf-id="hf-qbs7" class="f11tr-name">個人限制班別（母性保護等）</div>
+                <div data-hf-id="hf-6zpt" class="f11tr-basis">勞動基準法第 49 條</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+
+        // Phase 1 (0.0–0.6s) — 手冊卡進場（hero visible from frame 1）
+        tl.fromTo(
+          "#f11tr-browser",
+          { opacity: 0, y: 46 },
+          { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" },
+          0.02
+        );
+
+        // Phase 1→3 (0.35–5.2s) — viewport-change（pan 形）：內容在靜止外框下等速上移，
+        // 勻速（ease none, 760px / 4.85s ≈ 156.7px/s），一路捲到底、不停格。
+        tl.fromTo(
+          "#f11tr-scroll",
+          { y: 0 },
+          { y: -760, duration: 4.85, ease: "none" },
+          0.35
+        );
+
+        // Phase 2 (1.45–3.0s) — 字卡 kinetic-beat-slam：一條節拍格線、逐拍相異進場
+        var PULSE = 0.6;
+        var BEATS = [1.45, 1.45 + PULSE, 1.45 + PULSE * 2];
+        tl.fromTo(
+          "#f11tr-t-lead",
+          { scale: 1.5, opacity: 0, filter: "blur(16px)" },
+          { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.5, ease: "power4.out" },
+          BEATS[0]
+        );
+        tl.fromTo(
+          "#f11tr-t-accent",
+          { x: -170, opacity: 0 },
+          { x: 0, opacity: 1, duration: 0.4, ease: "expo.out" },
+          BEATS[1]
+        );
+        tl.fromTo(
+          "#f11tr-under",
+          { scaleX: 0 },
+          { scaleX: 1, duration: 0.35, ease: "power3.out" },
+          BEATS[2]
+        );
+
+        // Phase 3 (4.3–5.0s) — H10 經過時輕 pulse（sine-wave-loop yoyo 形，有限次），捲動不停。
+        // 156.7px/s 下 H10（內容偏移 1175）於 3.36s 入視窗、4.31s 全見，pulse 峰值 4.65s。
+        tl.to(
+          "#f11tr-row-h10",
+          { scale: 1.028, duration: 0.35, ease: "sine.inOut", yoyo: true, repeat: 1 },
+          4.3
+        );
+        tl.to(
+          "#f11tr-row-h10",
+          { backgroundColor: "rgba(64,96,239,0.07)", duration: 0.35, ease: "sine.inOut", yoyo: true, repeat: 1 },
+          4.3
+        );
+
+        window.__timelines["11-trust-rules"] = tl;
+      })();
+    </script>
+  </div>
+</template>

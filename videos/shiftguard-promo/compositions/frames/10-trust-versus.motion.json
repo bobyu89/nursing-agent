@@ -1,0 +1,18 @@
+{
+  "scene": "10-trust-versus",
+  "duration_s": 6.4,
+  "rules": [
+    "split-tilt-cards",
+    "css-marker-patterns",
+    "spring-pop-entrance",
+    "sine-wave-loop"
+  ],
+  "exit": {
+    "vector": "counter-phase idle bob (one full 2.4s sine cycle, 4.0-6.4s) closing exactly at the cut, ~0 px/s at the final frame",
+    "still_moving": false
+  },
+  "entry": {
+    "vector": "static at frame 1 (0 px/s); hairline draw begins 0.08s, cards fly in from x ±360px at 0.15/0.4s",
+    "from_rest": true
+  }
+}
