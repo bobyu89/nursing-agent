@@ -1,0 +1,135 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+    @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+    @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+    /* ============ 12-ch4 — 章節卡・護理部主任（2.6s titlecard-reveal） ============ */
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      color: #16233a;
+      -webkit-font-smoothing: antialiased;
+    }
+    #f12-bg,
+    #f12-main {
+      position: absolute;
+      inset: 0;
+    }
+    #f12-bg {
+      background: #f3f5fa;
+    }
+    #f12-stage {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 44%;
+      will-change: transform;
+    }
+    #f12-col {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 17%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #f12-code {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      opacity: 0;
+    }
+    .f12-code-line {
+      width: 72px;
+      height: 1px;
+      background: #e4e9f1;
+    }
+    .f12-code-num {
+      font-size: 27px;
+      font-weight: 800;
+      letter-spacing: 0.35em;
+      text-indent: 0.35em;
+      color: #4060ef;
+      font-variant-numeric: tabular-nums;
+    }
+    #f12-title {
+      margin-top: 34px;
+      font-size: 72px;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      color: #16233a;
+      line-height: 1.1;
+      opacity: 0;
+    }
+    #f12-bar {
+      margin-top: 34px;
+      width: 76px;
+      height: 7px;
+      border-radius: 3px;
+      background: #4060ef;
+      opacity: 0;
+    }
+    #f12-sub {
+      margin-top: 30px;
+      font-size: 30px;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-indent: 0.18em;
+      color: #47566f;
+      opacity: 0;
+    }
+  </style>
+
+  <div id="root" data-composition-id="12-ch4" data-duration="2.6" data-width="1920" data-height="1080">
+    <!-- full-bleed ground -->
+    <div id="f12-bg" class="clip" data-start="0" data-duration="2.6" data-track-index="0"></div>
+
+    <div id="f12-main" class="clip" data-start="0" data-duration="2.6" data-track-index="1">
+      <div id="f12-stage">
+        <div id="f12-col">
+          <div id="f12-code">
+            <span class="f12-code-line"></span>
+            <span class="f12-code-num">04</span>
+            <span class="f12-code-line"></span>
+          </div>
+          <div id="f12-title">第四章・護理部主任</div>
+          <div id="f12-bar"></div>
+          <div id="f12-sub">看得見的治理</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+      var F = 1 / 60;
+
+      /* waterfall-entry：由下而上、二值 opacity、權重差速、間距遞減 */
+      var t0 = 0.12; /* 章節碼（輕） */
+      tl.set("#f12-code", { opacity: 1, y: 44 }, t0);
+      tl.to("#f12-code", { y: 0, duration: 0.13, ease: "power4.out" }, t0);
+      var t1 = t0 + 0.13 + 2 * F; /* 大字（錨、最重、travel 最遠） */
+      tl.set("#f12-title", { opacity: 1, y: 80 }, t1);
+      tl.to("#f12-title", { y: 0, duration: 0.18, ease: "power4.out" }, t1);
+      var t2 = t1 + 0.18 - F; /* accent bar（輕、1 幀重疊） */
+      tl.set("#f12-bar", { opacity: 1, y: 50 }, t2);
+      tl.to("#f12-bar", { y: 0, duration: 0.13, ease: "power4.out" }, t2);
+      var t3 = t2 + 0.13 - F; /* 副標（收尾 snap） */
+      tl.set("#f12-sub", { opacity: 1, y: 46 }, t3);
+      tl.to("#f12-sub", { y: 0, duration: 0.13, ease: "power4.out" }, t3);
+
+      /* 落定後的配給靜止：僅一個極緩慢 scale 漂移，sine.out 收速趨零等硬切 */
+      tl.to("#f12-stage", { scale: 1.014, duration: 2.1, ease: "sine.out" }, 0.5);
+
+      window.__timelines["12-ch4"] = tl;
+    })();
+  </script>
+</template>

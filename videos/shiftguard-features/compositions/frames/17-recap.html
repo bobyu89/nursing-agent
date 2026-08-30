@@ -1,0 +1,207 @@
+<template>
+  <div id="root" data-composition-id="17-recap" data-width="1920" data-height="1080" data-duration="7">
+    <style>
+      @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+      @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+      @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+      /* 17-recap — 十任務回顧牆：十張任務卡兩波（各五張、每波 stagger ≤0.5s）
+         自組裝成 5×2 牆；綠 ✓ 為 SVG 描邊（ok #117a58）；字卡「十個任務・一天的治理」。 */
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+        color: #16233a;
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+      .f17rw-bg {
+        background: #f3f5fa;
+      }
+
+      /* ---- 字卡（上方置中） ---- */
+      .f17rw-title {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 150px;
+        text-align: center;
+        font-size: 84px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        line-height: 1.15;
+        color: #16233a;
+        white-space: nowrap;
+      }
+      #f17rw-t-a,
+      #f17rw-t-dot,
+      #f17rw-t-b {
+        display: inline-block;
+        opacity: 0;
+        will-change: transform, opacity;
+      }
+      #f17rw-t-dot {
+        color: #5c6b85;
+      }
+      #f17rw-t-b {
+        color: #4060ef;
+      }
+
+      /* ---- 5×2 任務卡牆 ---- */
+      #f17rw-grid {
+        position: absolute;
+        left: 158px;
+        top: 430px;
+        width: 1604px;
+        display: grid;
+        grid-template-columns: repeat(5, 300px);
+        grid-auto-rows: 170px;
+        gap: 26px;
+        will-change: transform;
+      }
+      .f17rw-card {
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 26px;
+        background: #ffffff;
+        border: 1px solid #e4e9f1;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(22, 35, 58, 0.05);
+        opacity: 0;
+        transform-origin: 50% 50%;
+        will-change: transform, opacity;
+      }
+      .f17rw-check {
+        flex: 0 0 auto;
+        width: 44px;
+        height: 44px;
+      }
+      .f17rw-name {
+        font-size: 30px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: #16233a;
+        line-height: 1.2;
+        white-space: nowrap;
+      }
+    </style>
+
+    <div id="f17rw-clip-bg" class="clip f17rw-bg" data-start="0" data-duration="7" data-track-index="0"></div>
+
+    <div id="f17rw-clip-stage" class="clip" data-start="0" data-duration="7" data-track-index="1">
+      <div class="f17rw-title"><span id="f17rw-t-a">十個任務</span><span id="f17rw-t-dot">・</span><span id="f17rw-t-b">一天的治理</span></div>
+
+      <div id="f17rw-grid">
+        <div class="f17rw-card" id="f17rw-card-1">
+          <svg class="f17rw-check" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#e6f6ef"></circle><polyline points="12,23 19,30 32,15" fill="none" stroke="#117a58" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+          <div class="f17rw-name">回報缺班</div>
+        </div>
+        <div class="f17rw-card" id="f17rw-card-2">
+          <svg class="f17rw-check" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#e6f6ef"></circle><polyline points="12,23 19,30 32,15" fill="none" stroke="#117a58" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+          <div class="f17rw-name">發起換班</div>
+        </div>
+        <div class="f17rw-card" id="f17rw-card-3">
+          <svg class="f17rw-check" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#e6f6ef"></circle><polyline points="12,23 19,30 32,15" fill="none" stroke="#117a58" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+          <div class="f17rw-name">生成週班表</div>
+        </div>
+        <div class="f17rw-card" id="f17rw-card-4">
+          <svg class="f17rw-check" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#e6f6ef"></circle><polyline points="12,23 19,30 32,15" fill="none" stroke="#117a58" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+          <div class="f17rw-name">補一個缺口</div>
+        </div>
+        <div class="f17rw-card" id="f17rw-card-5">
+          <svg class="f17rw-check" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#e6f6ef"></circle><polyline points="12,23 19,30 32,15" fill="none" stroke="#117a58" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+          <div class="f17rw-name">簽核換班單</div>
+        </div>
+        <div class="f17rw-card" id="f17rw-card-6">
+          <svg class="f17rw-check" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#e6f6ef"></circle><polyline points="12,23 19,30 32,15" fill="none" stroke="#117a58" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+          <div class="f17rw-name">看今日戰情</div>
+        </div>
+        <div class="f17rw-card" id="f17rw-card-7">
+          <svg class="f17rw-check" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#e6f6ef"></circle><polyline points="12,23 19,30 32,15" fill="none" stroke="#117a58" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+          <div class="f17rw-name">跨單位借人</div>
+        </div>
+        <div class="f17rw-card" id="f17rw-card-8">
+          <svg class="f17rw-check" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#e6f6ef"></circle><polyline points="12,23 19,30 32,15" fill="none" stroke="#117a58" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+          <div class="f17rw-name">盤留任風險</div>
+        </div>
+        <div class="f17rw-card" id="f17rw-card-9">
+          <svg class="f17rw-check" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#e6f6ef"></circle><polyline points="12,23 19,30 32,15" fill="none" stroke="#117a58" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+          <div class="f17rw-name">護病比重算</div>
+        </div>
+        <div class="f17rw-card" id="f17rw-card-10">
+          <svg class="f17rw-check" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#e6f6ef"></circle><polyline points="12,23 19,30 32,15" fill="none" stroke="#117a58" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+          <div class="f17rw-name">政策沙盤</div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+        var F = 1 / 60;
+
+        // Phase 1 (0.30–1.17) — 第一波五卡 spring-pop（stagger 0.08 × 5 = 0.32s ≤ 0.5s 波上限）
+        var W1 = 0.3;
+        var STG = 0.08;
+        var POP = 0.55;
+        var i;
+        for (i = 1; i <= 5; i++) {
+          tl.fromTo(
+            "#f17rw-card-" + i,
+            { scale: 0, opacity: 0, y: 18 },
+            { scale: 1, opacity: 1, y: 0, duration: POP, ease: "power3.out" },
+            W1 + (i - 1) * STG
+          );
+        }
+
+        // Phase 2 (1.90–2.38) — 字卡 waterfall（VO「就是護理部的一天」）
+        tl.set("#f17rw-t-a", { opacity: 1, y: 70 }, 1.9);
+        tl.to("#f17rw-t-a", { y: 0, duration: 0.18, ease: "power4.out" }, 1.9);
+        var tDot = 1.9 + 0.18 + 2 * F;
+        tl.set("#f17rw-t-dot", { opacity: 1, y: 36 }, tDot);
+        tl.to("#f17rw-t-dot", { y: 0, duration: 0.12, ease: "power4.out" }, tDot);
+        var tB = tDot + 0.12 - F;
+        tl.set("#f17rw-t-b", { opacity: 1, y: 55 }, tB);
+        tl.to("#f17rw-t-b", { y: 0, duration: 0.16, ease: "power4.out" }, tB);
+
+        // Phase 3 (2.8–7.0) — 牆體微呼吸：整面 grid 容器 ±4px sine 浮動
+        //（有界 phase proxy，ease none，純時間函數，seek-safe；alive but resting）
+        var grid = document.getElementById("f17rw-grid");
+        var ph = { p: 0 };
+        tl.to(
+          ph,
+          {
+            p: Math.PI * 3,
+            duration: 4.2,
+            ease: "none",
+            onUpdate: function () {
+              grid.style.transform =
+                "translate3d(0," + (Math.sin(ph.p) * 4).toFixed(2) + "px,0)";
+            },
+          },
+          2.8
+        );
+
+        // Phase 4 (4.50–5.37) — 第二波五卡 spring-pop，牆於 ~5.4s 補完，之後 hold
+        var W2 = 4.5;
+        for (i = 6; i <= 10; i++) {
+          tl.fromTo(
+            "#f17rw-card-" + i,
+            { scale: 0, opacity: 0, y: 18 },
+            { scale: 1, opacity: 1, y: 0, duration: POP, ease: "power3.out" },
+            W2 + (i - 6) * STG
+          );
+        }
+
+        window.__timelines["17-recap"] = tl;
+      })();
+    </script>
+  </div>
+</template>

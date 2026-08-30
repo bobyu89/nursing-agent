@@ -1,0 +1,131 @@
+<template>
+  <div id="root" data-composition-id="18-oneliner" data-width="1920" data-height="1080" data-duration="3">
+    <style>
+      @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+      @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+      @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+      /* 18-oneliner — 治理一句（無聲字卡）：
+         「數字歸規則引擎，」「AI 只聽懂人話」——規則引擎 accent＋marker 橫掃；
+         waterfall 進場後靜止 hold。 */
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+        color: #16233a;
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+      .f18ol-bg {
+        background: #f3f5fa;
+      }
+
+      .f18ol-card {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 368px;
+        text-align: center;
+      }
+      .f18ol-line {
+        display: block;
+        font-size: 116px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        line-height: 1.32;
+        color: #16233a;
+        white-space: nowrap;
+      }
+      .f18ol-w {
+        display: inline-block;
+        opacity: 0;
+        will-change: transform, opacity;
+      }
+      #f18ol-w5 {
+        margin-right: 0.22em;
+      }
+
+      /* marker 橫掃：規則引擎（accent 字＋微透靛藍 marker 帶） */
+      .f18ol-mwrap {
+        position: relative;
+      }
+      #f18ol-marker {
+        position: absolute;
+        top: 14px;
+        bottom: 10px;
+        left: -14px;
+        right: -14px;
+        background: rgba(64, 96, 239, 0.16);
+        border-radius: 10px;
+        transform: scaleX(0);
+        transform-origin: left center;
+        z-index: 0;
+        will-change: transform;
+      }
+      .f18ol-mtext {
+        position: relative;
+        z-index: 1;
+        color: #4060ef;
+      }
+    </style>
+
+    <div id="f18ol-clip-bg" class="clip f18ol-bg" data-start="0" data-duration="3" data-track-index="0"></div>
+
+    <div id="f18ol-clip-stage" class="clip" data-start="0" data-duration="3" data-track-index="1">
+      <div class="f18ol-card">
+        <div class="f18ol-line"><span class="f18ol-w" id="f18ol-w1">數字</span><span class="f18ol-w" id="f18ol-w2">歸</span><span class="f18ol-w f18ol-mwrap" id="f18ol-w3"><span id="f18ol-marker"></span><span class="f18ol-mtext">規則引擎</span></span><span class="f18ol-w" id="f18ol-w4">，</span></div>
+        <div class="f18ol-line"><span class="f18ol-w" id="f18ol-w5">AI</span><span class="f18ol-w" id="f18ol-w6">只聽懂</span><span class="f18ol-w" id="f18ol-w7">人</span><span class="f18ol-w" id="f18ol-w8">話</span></div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+        var F = 1 / 60;
+
+        // Phase 1 (0.12–1.28) — waterfall-entry：逐塊自下方 whip、重字走遠、
+        // 末字「人話」拆成兩碎片收尾（無聲幀，節拍即拍點）。
+        var t1 = 0.12; // 數字（anchor）
+        tl.set("#f18ol-w1", { opacity: 1, y: 80 }, t1);
+        tl.to("#f18ol-w1", { y: 0, duration: 0.18, ease: "power4.out" }, t1);
+        var t2 = t1 + 0.18 + 2 * F; // 歸
+        tl.set("#f18ol-w2", { opacity: 1, y: 45 }, t2);
+        tl.to("#f18ol-w2", { y: 0, duration: 0.15, ease: "power4.out" }, t2);
+        var t3 = t2 + 0.15 - F; // 規則引擎（anchor/heavy）
+        tl.set("#f18ol-w3", { opacity: 1, y: 75 }, t3);
+        tl.to("#f18ol-w3", { y: 0, duration: 0.18, ease: "power4.out" }, t3);
+        var t4 = t3 + 0.18 - F; // ，（light）
+        tl.set("#f18ol-w4", { opacity: 1, y: 40 }, t4);
+        tl.to("#f18ol-w4", { y: 0, duration: 0.12, ease: "power4.out" }, t4);
+        var t5 = t4 + 0.12 - F; // AI
+        tl.set("#f18ol-w5", { opacity: 1, y: 60 }, t5);
+        tl.to("#f18ol-w5", { y: 0, duration: 0.16, ease: "power4.out" }, t5);
+        var t6 = t5 + 0.16 - F; // 只聽懂
+        tl.set("#f18ol-w6", { opacity: 1, y: 48 }, t6);
+        tl.to("#f18ol-w6", { y: 0, duration: 0.15, ease: "power4.out" }, t6);
+        var t7 = t6 + 0.15 - F; // 人（碎片，travel 遠）
+        tl.set("#f18ol-w7", { opacity: 1, y: 70 }, t7);
+        tl.to("#f18ol-w7", { y: 0, duration: 0.16, ease: "power4.out" }, t7);
+        var t8 = t7 + 0.14 - F; // 話（碎片，最後一擊）
+        tl.set("#f18ol-w8", { opacity: 1, y: 70 }, t8);
+        tl.to("#f18ol-w8", { y: 0, duration: 0.15, ease: "power4.out" }, t8);
+
+        // Phase 2 (1.38–1.83) — css-marker-patterns（highlight sweep）：
+        // marker 帶自左向右掃過「規則引擎」，之後全卡靜止 hold 至 cut。
+        tl.fromTo(
+          "#f18ol-marker",
+          { scaleX: 0 },
+          { scaleX: 1, duration: 0.45, ease: "power2.out" },
+          1.38
+        );
+
+        window.__timelines["18-oneliner"] = tl;
+      })();
+    </script>
+  </div>
+</template>

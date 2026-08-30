@@ -1,0 +1,7 @@
+{
+  "scene": "12-ch4",
+  "duration_s": 2.6,
+  "rules": ["waterfall-entry"],
+  "exit": { "vector": "scale drift 1.0→1.014 on sine.out ends at 2.6 with ~0 px/s (settled, waiting for hard cut)", "still_moving": false },
+  "entry": { "vector": "none (static ground; first cascade element whips up from +44px at 0.12s)", "from_rest": true }
+}

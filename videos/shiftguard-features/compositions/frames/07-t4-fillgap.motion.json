@@ -1,0 +1,7 @@
+{
+  "scene": "07-t4-fillgap",
+  "duration_s": 13.0,
+  "rules": ["cursor-click-ripple", "waterfall-entry", "spring-pop-entrance", "coordinate-target-zoom"],
+  "exit": { "vector": "audit close-up zoom (outer scale 1.015→1.24, inner translate -400/+79) completes at 12.45s; 0 px/s static hold to 13.0", "still_moving": false },
+  "entry": { "vector": "static first frame (base drift starts at 0 velocity); window rises 40px over 0.5s from 0.02s", "from_rest": true }
+}

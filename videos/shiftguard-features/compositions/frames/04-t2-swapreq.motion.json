@@ -1,0 +1,7 @@
+{
+  "scene": "04-t2-swapreq",
+  "duration_s": 6.0,
+  "rules": ["cursor-click-ripple", "spring-pop-entrance", "svg-path-draw"],
+  "exit": { "vector": "0 px/s — payoff push (scale 1→1.035) settled at 5.7s, static hold through the last frame", "still_moving": false },
+  "entry": { "vector": "browser frame rising up ~145 px/s (power3.out entrance onset at t=0, from y+24)", "from_rest": false }
+}

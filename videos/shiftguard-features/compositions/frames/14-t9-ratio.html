@@ -1,0 +1,716 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+    @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+    @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+    /* ============ 14-t9-ratio — 任務⑨用法定護病比重算需求（12.0s） ============ */
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      color: #16233a;
+      -webkit-font-smoothing: antialiased;
+    }
+    #f14-bg,
+    #f14-main {
+      position: absolute;
+      inset: 0;
+    }
+    #f14-bg {
+      background: #f3f5fa;
+    }
+    #f14-main {
+      overflow: hidden;
+    }
+
+    /* ---- virtual camera (coordinate-target-zoom: outer scales, inner translates) ---- */
+    #f14-zoom-outer {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+      will-change: transform;
+    }
+    #f14-zoom-inner {
+      position: absolute;
+      inset: 0;
+      will-change: transform;
+    }
+
+    /* ---- platform window (mock recreation, no traffic lights) ---- */
+    #f14-window {
+      position: absolute;
+      left: 350px;
+      top: 150px;
+      width: 1240px;
+      height: 600px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow:
+        0 24px 48px rgba(22, 35, 58, 0.08),
+        0 2px 8px rgba(22, 35, 58, 0.05);
+      overflow: hidden;
+      opacity: 0;
+    }
+    .f14-toolbar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      height: 46px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e4e9f1;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      z-index: 3;
+    }
+    .f14-pill {
+      width: 300px;
+      height: 20px;
+      border-radius: 10px;
+      background: #eef2f7;
+      border: 1px solid #e4e9f1;
+    }
+    .f14-demo-tag {
+      margin-left: auto;
+      font-size: 17px;
+      letter-spacing: 0.08em;
+      color: #5c6b85;
+      background: #f8fafc;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      padding: 2px 14px;
+      line-height: 24px;
+    }
+    .f14-sidebar {
+      position: absolute;
+      left: 0;
+      top: 46px;
+      bottom: 0;
+      width: 68px;
+      background: #f8fafc;
+      border-right: 1px solid #eef2f7;
+      z-index: 2;
+    }
+    .f14-side-item {
+      position: absolute;
+      left: 24px;
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: #eef2f7;
+    }
+    .f14-side-item.f14-active {
+      background: #edf1fe;
+      border: 1px solid rgba(64, 96, 239, 0.55);
+    }
+
+    /* ---- formula chip ---- */
+    #f14-formula {
+      position: absolute;
+      left: 100px;
+      top: 62px;
+      height: 42px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 22px;
+      border-radius: 999px;
+      background: #edf1fe;
+      border: 1px solid rgba(64, 96, 239, 0.35);
+      color: #3350dd;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      font-variant-numeric: tabular-nums;
+      opacity: 0;
+    }
+
+    /* ---- ratio table ---- */
+    #f14-thead,
+    #f14-row {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+    }
+    .f14-h {
+      position: absolute;
+      font-size: 17px;
+      font-weight: 600;
+      color: #5c6b85;
+      letter-spacing: 0.05em;
+      line-height: 28px;
+      white-space: nowrap;
+    }
+    .f14-h-c {
+      text-align: center;
+    }
+    #f14-h-group {
+      left: 820px;
+      top: 128px;
+      width: 388px;
+      text-align: center;
+      letter-spacing: 0.14em;
+    }
+    #f14-h-grouprule {
+      position: absolute;
+      left: 836px;
+      top: 160px;
+      width: 356px;
+      height: 1px;
+      background: #e4e9f1;
+    }
+    #f14-h-unit { left: 100px; top: 168px; }
+    #f14-h-bed { left: 270px; top: 168px; }
+    #f14-h-ratio { left: 500px; top: 168px; }
+    #f14-h-d1 { left: 820px; top: 168px; width: 128px; }
+    #f14-h-d2 { left: 950px; top: 168px; width: 128px; }
+    #f14-h-d3 { left: 1080px; top: 168px; width: 128px; }
+    #f14-headrule {
+      position: absolute;
+      left: 100px;
+      top: 204px;
+      width: 1108px;
+      height: 2px;
+      background: #dfe5ee;
+    }
+    #f14-unit {
+      position: absolute;
+      left: 100px;
+      top: 214px;
+      height: 76px;
+      line-height: 76px;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      font-variant-numeric: tabular-nums;
+    }
+    #f14-bedbox {
+      position: absolute;
+      left: 270px;
+      top: 228px;
+      width: 96px;
+      height: 48px;
+      background: #ffffff;
+      border: 1.5px solid #cfd8e6;
+      border-radius: 8px;
+    }
+    #f14-bedtext {
+      position: absolute;
+      left: 14px;
+      top: 0;
+      line-height: 46px;
+      font-size: 26px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      min-width: 34px;
+    }
+    #f14-caret {
+      position: absolute;
+      left: 43px;
+      top: 11px;
+      width: 2.5px;
+      height: 26px;
+      border-radius: 1px;
+      background: #3350dd;
+      opacity: 0;
+    }
+    #f14-ratio {
+      position: absolute;
+      left: 500px;
+      top: 214px;
+      height: 76px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .f14-ratio-tag {
+      font-size: 15px;
+      font-weight: 600;
+      color: #47566f;
+      background: #f8fafc;
+      border: 1px solid #e4e9f1;
+      border-radius: 6px;
+      padding: 2px 9px;
+      letter-spacing: 0.06em;
+    }
+    .f14-ratio-num {
+      font-size: 22px;
+      font-weight: 700;
+      color: #16233a;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+    }
+    .f14-d {
+      position: absolute;
+      top: 228px;
+      width: 54px;
+      height: 48px;
+      background: #f8fafc;
+      border: 1.5px solid #e4e9f1;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #f14-d1 { left: 857px; }
+    #f14-d2 { left: 987px; }
+    #f14-d3 { left: 1117px; }
+    .f14-dn {
+      display: inline-block;
+      font-size: 27px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      min-width: 18px;
+      text-align: center;
+      transform-origin: 50% 50%;
+    }
+    #f14-rowrule {
+      position: absolute;
+      left: 100px;
+      top: 292px;
+      width: 1108px;
+      height: 1px;
+      background: #eef2f7;
+    }
+
+    /* ---- skeleton rows (texture only, no data) ---- */
+    .f14-skel {
+      position: absolute;
+      left: 100px;
+      width: 1108px;
+      height: 36px;
+      opacity: 0;
+    }
+    #f14-skel1 { top: 310px; }
+    #f14-skel2 { top: 360px; }
+    .f14-skb {
+      position: absolute;
+      top: 10px;
+      height: 16px;
+      border-radius: 8px;
+      background: #eef2f7;
+    }
+
+    /* ---- apply button + ripples ---- */
+    #f14-btn {
+      position: absolute;
+      left: 100px;
+      top: 424px;
+      width: 380px;
+      height: 56px;
+      border-radius: 12px;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 23px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-indent: 0.18em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+    }
+    .f14-rip {
+      position: absolute;
+      border-radius: 50%;
+      border: 2.5px solid #4060ef;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 4;
+    }
+    #f14-rip-cell {
+      left: 278px;
+      top: 212px;
+      width: 80px;
+      height: 80px;
+    }
+    #f14-rip-btn {
+      left: 230px;
+      top: 392px;
+      width: 120px;
+      height: 120px;
+    }
+
+    /* ---- done card (green ✓ completion) ---- */
+    #f14-done {
+      position: absolute;
+      left: 640px;
+      top: 400px;
+      width: 476px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-left: 6px solid #117a58;
+      border-radius: 12px;
+      box-shadow: 0 14px 34px rgba(22, 35, 58, 0.09);
+      padding: 24px 26px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      opacity: 0;
+      z-index: 5;
+    }
+    .f14-done-ico {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #e6f6ef;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+    }
+    .f14-done-title {
+      font-size: 25px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #117a58;
+      white-space: nowrap;
+    }
+    .f14-done-sub {
+      font-size: 18px;
+      font-weight: 600;
+      color: #5c6b85;
+      letter-spacing: 0.04em;
+    }
+
+    /* ---- cursor ---- */
+    #f14-cursor {
+      position: absolute;
+      left: 1480px;
+      top: 800px;
+      width: 30px;
+      height: 32px;
+      z-index: 50;
+      pointer-events: none;
+    }
+
+    /* ---- overlay: task card + step chips ---- */
+    #f14-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+    }
+    #f14-tasklabel {
+      position: absolute;
+      left: 96px;
+      top: 52px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 24px 0 16px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow: 0 6px 16px rgba(22, 35, 58, 0.07);
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #16233a;
+      opacity: 0;
+    }
+    .f14-tick {
+      width: 8px;
+      height: 26px;
+      border-radius: 3px;
+      background: #4060ef;
+      flex: none;
+    }
+    .f14-chip {
+      position: absolute;
+      left: 96px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px 0 8px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      box-shadow: 0 4px 12px rgba(22, 35, 58, 0.07);
+      opacity: 0;
+    }
+    #f14-chip1 { top: 552px; }
+    #f14-chip2 { top: 604px; }
+    #f14-chip3 { top: 656px; }
+    #f14-chipd { top: 708px; }
+    .f14-chip-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
+    #f14-chipd .f14-chip-num {
+      background: #117a58;
+    }
+    .f14-chip-text {
+      font-size: 20px;
+      font-weight: 600;
+      color: #16233a;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+  </style>
+
+  <div id="root" data-composition-id="14-t9-ratio" data-duration="12" data-width="1920" data-height="1080">
+    <!-- full-bleed ground -->
+    <div id="f14-bg" class="clip" data-start="0" data-duration="12" data-track-index="0"></div>
+
+    <div id="f14-main" class="clip" data-start="0" data-duration="12" data-track-index="1">
+      <div id="f14-zoom-outer" data-layout-allow-overflow="">
+        <div id="f14-zoom-inner">
+          <div id="f14-window">
+            <div class="f14-toolbar">
+              <span class="f14-pill"></span>
+              <span class="f14-demo-tag">示範資料</span>
+            </div>
+            <div class="f14-sidebar">
+              <span class="f14-side-item" style="top: 18px"></span>
+              <span class="f14-side-item" style="top: 56px"></span>
+              <span class="f14-side-item f14-active" style="top: 94px"></span>
+              <span class="f14-side-item" style="top: 132px"></span>
+            </div>
+
+            <!-- formula chip：需求 ＝ ⌈占床 ÷ 三班護病比⌉ -->
+            <div id="f14-formula">需求 ＝ ⌈占床 ÷ 三班護病比⌉</div>
+
+            <!-- table header -->
+            <div id="f14-thead">
+              <div class="f14-h" id="f14-h-group">各班需求</div>
+              <div id="f14-h-grouprule"></div>
+              <div class="f14-h" id="f14-h-unit">單位</div>
+              <div class="f14-h" id="f14-h-bed">占床（可改）</div>
+              <div class="f14-h" id="f14-h-ratio">適用比率</div>
+              <div class="f14-h f14-h-c" id="f14-h-d1">白班</div>
+              <div class="f14-h f14-h-c" id="f14-h-d2">小夜</div>
+              <div class="f14-h f14-h-c" id="f14-h-d3">大夜</div>
+              <div id="f14-headrule"></div>
+            </div>
+
+            <!-- data row MED-3A -->
+            <div id="f14-row">
+              <div id="f14-unit">MED-3A</div>
+              <div id="f14-bedbox">
+                <span id="f14-bedtext">10</span>
+                <span id="f14-caret"></span>
+              </div>
+              <div id="f14-ratio">
+                <span class="f14-ratio-tag">醫學中心</span>
+                <span class="f14-ratio-num">6／9／11</span>
+              </div>
+              <div class="f14-d" id="f14-d1"><span class="f14-dn" id="f14-d1n">2</span></div>
+              <div class="f14-d" id="f14-d2"><span class="f14-dn" id="f14-d2n">2</span></div>
+              <div class="f14-d" id="f14-d3"><span class="f14-dn" id="f14-d3n">1</span></div>
+              <div id="f14-rowrule"></div>
+            </div>
+
+            <!-- skeleton rows -->
+            <div class="f14-skel" id="f14-skel1">
+              <span class="f14-skb" style="left: 0; width: 130px"></span>
+              <span class="f14-skb" style="left: 170px; width: 64px"></span>
+              <span class="f14-skb" style="left: 400px; width: 190px"></span>
+              <span class="f14-skb" style="left: 771px; width: 26px"></span>
+              <span class="f14-skb" style="left: 901px; width: 26px"></span>
+              <span class="f14-skb" style="left: 1031px; width: 26px"></span>
+            </div>
+            <div class="f14-skel" id="f14-skel2">
+              <span class="f14-skb" style="left: 0; width: 108px"></span>
+              <span class="f14-skb" style="left: 170px; width: 64px"></span>
+              <span class="f14-skb" style="left: 400px; width: 154px"></span>
+              <span class="f14-skb" style="left: 771px; width: 26px"></span>
+              <span class="f14-skb" style="left: 901px; width: 26px"></span>
+              <span class="f14-skb" style="left: 1031px; width: 26px"></span>
+            </div>
+
+            <!-- apply -->
+            <div id="f14-btn">套用至全平台</div>
+            <div class="f14-rip" id="f14-rip-cell"></div>
+            <div class="f14-rip" id="f14-rip-btn"></div>
+
+            <!-- ✓ done card -->
+            <div id="f14-done">
+              <span class="f14-done-ico">
+                <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+                  <path d="M5.5 13.8l5 5L20.5 8" stroke="#117a58" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="f14-done-title">人力底線已更新<span class="f14-done-sub">（可還原）</span></span>
+            </div>
+          </div>
+
+          <!-- cursor rides inside the camera -->
+          <div id="f14-cursor">
+            <svg width="30" height="32" viewBox="0 0 24 26" fill="none">
+              <path d="M4.5 1.5v19.4l5-4.9 3 7.2 3.4-1.4-3-7.1h7.1z" fill="#16233a" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- overlay above camera -->
+      <div id="f14-overlay">
+        <div id="f14-tasklabel"><span class="f14-tick"></span>任務・護病比重算</div>
+
+        <div class="f14-chip" id="f14-chip1" data-layout-allow-overlap>
+          <span class="f14-chip-num" data-layout-allow-overlap>1</span><span class="f14-chip-text" data-layout-allow-overlap>輸入占床</span>
+        </div>
+        <div class="f14-chip" id="f14-chip2" data-layout-allow-overlap>
+          <span class="f14-chip-num" data-layout-allow-overlap>2</span><span class="f14-chip-text" data-layout-allow-overlap>需求即時算</span>
+        </div>
+        <div class="f14-chip" id="f14-chip3" data-layout-allow-overlap>
+          <span class="f14-chip-num" data-layout-allow-overlap>3</span><span class="f14-chip-text" data-layout-allow-overlap>套用</span>
+        </div>
+        <div class="f14-chip" id="f14-chipd" data-layout-allow-overlap>
+          <span class="f14-chip-num" data-layout-allow-overlap>
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
+              <path d="M4 10.6l4 4L16 6.4" stroke="#ffffff" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span><span class="f14-chip-text" data-layout-allow-overlap>已更新</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      /* -- Scene 1 (0–0.6s)：舞台落定——外框、任務卡、公式 chip、表格、按鈕、步驟① -- */
+      tl.fromTo("#f14-window", { y: 56, opacity: 0, scale: 0.985 }, { y: 0, opacity: 1, scale: 1, duration: 0.55, ease: "power3.out" }, 0);
+      tl.fromTo("#f14-tasklabel", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power2.out" }, 0.12);
+      tl.fromTo("#f14-formula", { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power2.out" }, 0.26);
+      tl.fromTo("#f14-thead", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power2.out" }, 0.3);
+      tl.fromTo("#f14-row", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.4);
+      tl.fromTo(["#f14-skel1", "#f14-skel2"], { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power1.out", stagger: 0.08 }, 0.48);
+      tl.fromTo("#f14-btn", { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power2.out" }, 0.52);
+      tl.fromTo("#f14-chip1", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.5);
+
+      /* -- Scene 2 (0.7–4.0s)：游標滑向占床欄、點入、caret 重打 10→1→12（discrete couple） -- */
+      /* cursor 起點 (1480,800) → 占床欄中心 (668,402) */
+      tl.to("#f14-cursor", { x: -812, y: -398, duration: 0.85, ease: "power2.inOut" }, 0.7);
+      tl.to("#f14-cursor", { scale: 0.86, duration: 0.09, ease: "power2.in", yoyo: true, repeat: 1, transformOrigin: "20% 8%" }, 1.72);
+      tl.fromTo("#f14-rip-cell", { scale: 0, opacity: 0.85 }, { scale: 2.1, opacity: 0, duration: 0.55, ease: "power2.out", immediateRender: false }, 1.76);
+      tl.to("#f14-bedbox", { borderColor: "#4060ef", backgroundColor: "#edf1fe", duration: 0.18, ease: "power1.out" }, 1.76);
+      /* 打字時滑鼠讓開欄位 */
+      tl.to("#f14-cursor", { x: -778, y: -356, duration: 0.3, ease: "power2.out" }, 1.95);
+
+      /* caret 顯隱（明確逐格切換，可任意 seek） */
+      tl.set("#f14-caret", { opacity: 1 }, 1.95);
+      tl.set("#f14-caret", { opacity: 0 }, 2.35);
+      tl.set("#f14-caret", { opacity: 1 }, 2.75);
+      tl.set("#f14-caret", { opacity: 0 }, 3.15);
+      tl.set("#f14-caret", { opacity: 1 }, 3.35);
+      tl.set("#f14-caret", { opacity: 0 }, 4.35);
+
+      /* 占床欄文字 driver：單一狀態陣列同時帶字串與 caret 位置（control-target-sync discrete） */
+      var f14Steps = [
+        { t: 0.0, text: "10", cx: 43 },
+        { t: 1.65, text: "1", cx: 28 },
+        { t: 2.15, text: "12", cx: 43 }
+      ];
+      var f14Drv = { t: 0 };
+      var f14Bed = document.getElementById("f14-bedtext");
+      var f14Caret = document.getElementById("f14-caret");
+      var f14Last = null;
+      tl.to(
+        f14Drv,
+        {
+          t: 2.4,
+          duration: 2.4,
+          ease: "none",
+          onUpdate: function () {
+            var s = f14Steps[0];
+            for (var i = f14Steps.length - 1; i >= 0; i--) {
+              if (f14Drv.t >= f14Steps[i].t) { s = f14Steps[i]; break; }
+            }
+            if (s !== f14Last) {
+              f14Bed.textContent = s.text;
+              f14Caret.style.left = s.cx + "px";
+              f14Last = s;
+            }
+          }
+        },
+        1.9
+      );
+
+      /* -- Scene 3 (4.05–5.0s)：couple beat——「12」落鍵同拍，需求逐格重算（counting-dynamic-scale） -- */
+      tl.to("#f14-formula", { scale: 1.06, duration: 0.22, ease: "sine.inOut", yoyo: true, repeat: 1, transformOrigin: "50% 50%" }, 4.05);
+      /* 白班 ⌈12/6⌉=2（值未變，重算閃示） */
+      tl.fromTo("#f14-d1n", { scale: 0.8 }, { scale: 1, duration: 0.45, ease: "power3.out" }, 4.05);
+      tl.to("#f14-d1", { backgroundColor: "#edf1fe", duration: 0.16, ease: "power1.out" }, 4.05);
+      tl.to("#f14-d1", { backgroundColor: "#f8fafc", duration: 0.5, ease: "power1.out" }, 4.35);
+      /* 小夜 ⌈12/9⌉=2 */
+      tl.fromTo("#f14-d2n", { scale: 0.8 }, { scale: 1, duration: 0.45, ease: "power3.out" }, 4.19);
+      tl.to("#f14-d2", { backgroundColor: "#edf1fe", duration: 0.16, ease: "power1.out" }, 4.19);
+      tl.to("#f14-d2", { backgroundColor: "#f8fafc", duration: 0.5, ease: "power1.out" }, 4.49);
+      /* 大夜 ⌈12/11⌉：1 → 2（proxy 計數＋同拍同 ease 放大） */
+      var f14N = { v: 1 };
+      var f14D3n = document.getElementById("f14-d3n");
+      tl.to(
+        f14N,
+        {
+          v: 2,
+          duration: 0.45,
+          ease: "power3.out",
+          onUpdate: function () { f14D3n.textContent = String(Math.round(f14N.v)); }
+        },
+        4.33
+      );
+      tl.fromTo("#f14-d3n", { scale: 0.55 }, { scale: 1, duration: 0.45, ease: "power3.out" }, 4.33);
+      tl.to("#f14-d3", { backgroundColor: "#edf1fe", borderColor: "#4060ef", duration: 0.2, ease: "power1.out" }, 4.33);
+      tl.to("#f14-d3n", { color: "#3350dd", duration: 0.2, ease: "none" }, 4.33);
+      tl.fromTo("#f14-chip2", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 4.2);
+      /* 欄位收焦（值已落定保持 12） */
+      tl.to("#f14-bedbox", { borderColor: "#cfd8e6", backgroundColor: "#ffffff", duration: 0.3, ease: "power1.out" }, 4.5);
+
+      /* -- Scene 3b (4.5–8.2s)：punch-in 收住整列（控制欄與需求格同框）＋微推 HOLD -- */
+      tl.to("#f14-zoom-outer", { scale: 1.24, duration: 1.0, ease: "power3.inOut" }, 4.5);
+      tl.to("#f14-zoom-inner", { x: -120, y: 95, duration: 1.0, ease: "power3.inOut" }, 4.5);
+      tl.to("#f14-zoom-outer", { scale: 1.262, duration: 2.6, ease: "sine.inOut" }, 5.65);
+      /* VO「各班底線直接算給你」：變動的大夜格輕脈衝 */
+      tl.to("#f14-d3", { scale: 1.1, duration: 0.3, ease: "sine.inOut", yoyo: true, repeat: 1, transformOrigin: "50% 50%" }, 5.9);
+
+      /* -- Scene 4 (8.3–9.9s)：拉回全景，游標滑向「套用至全平台」 -- */
+      tl.to("#f14-zoom-outer", { scale: 1, duration: 0.9, ease: "power2.inOut" }, 8.3);
+      tl.to("#f14-zoom-inner", { x: 0, y: 0, duration: 0.9, ease: "power2.inOut" }, 8.3);
+      /* → 按鈕中心 (640,602) */
+      tl.to("#f14-cursor", { x: -840, y: -198, duration: 1.0, ease: "power2.inOut" }, 8.6);
+      tl.fromTo("#f14-chip3", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 9.9);
+
+      /* -- Scene 5 (10.2s)：點擊套用（sfx click @10.2）——cursor-click-ripple -- */
+      tl.to("#f14-cursor", { scale: 0.86, duration: 0.09, ease: "power2.in", yoyo: true, repeat: 1, transformOrigin: "20% 8%" }, 10.2);
+      tl.to("#f14-btn", { scale: 0.955, duration: 0.09, ease: "power2.in" }, 10.2);
+      tl.to("#f14-btn", { scale: 1, duration: 0.24, ease: "back.out(3)" }, 10.29);
+      tl.to("#f14-btn", { backgroundColor: "#3350dd", duration: 0.09, ease: "none" }, 10.2);
+      tl.to("#f14-btn", { backgroundColor: "#4060ef", duration: 0.3, ease: "power1.out" }, 10.32);
+      tl.fromTo("#f14-rip-btn", { scale: 0, opacity: 0.95 }, { scale: 3.2, opacity: 0, duration: 0.65, ease: "power2.out", immediateRender: false }, 10.24);
+
+      /* -- Scene 6 (10.55–12.0s)：✓ 完成卡「人力底線已更新（可還原）」＋步驟✓，安靜微推收尾 -- */
+      tl.fromTo(
+        "#f14-done",
+        { y: -30, scale: 1.18, opacity: 0, filter: "blur(7px)" },
+        { y: 0, scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.34, ease: "power4.out" },
+        10.55
+      );
+      tl.fromTo("#f14-chipd", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 10.6);
+      tl.to("#f14-zoom-outer", { scale: 1.018, duration: 1.3, ease: "sine.inOut" }, 10.7);
+
+      window.__timelines["14-t9-ratio"] = tl;
+    })();
+  </script>
+</template>

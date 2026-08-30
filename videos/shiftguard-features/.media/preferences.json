@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "preferences": {
+    "flow": {
+      "value": "automation",
+      "confirmed_in": [
+        "shiftguard-features"
+      ],
+      "updated_at": "2026-08-30T07:31:30.092Z"
+    },
+    "storyboard": {
+      "value": "no",
+      "confirmed_in": [
+        "shiftguard-features"
+      ],
+      "updated_at": "2026-08-30T07:31:30.192Z"
+    },
+    "aspect": {
+      "value": "1920x1080",
+      "confirmed_in": [
+        "shiftguard-features"
+      ],
+      "updated_at": "2026-08-30T07:31:30.287Z"
+    },
+    "language": {
+      "value": "zh-TW",
+      "confirmed_in": [
+        "shiftguard-features"
+      ],
+      "updated_at": "2026-08-30T07:31:30.378Z"
+    },
+    "destination": {
+      "value": "embed",
+      "confirmed_in": [
+        "shiftguard-features"
+      ],
+      "updated_at": "2026-08-30T07:31:30.471Z"
+    },
+    "voice": {
+      "value": "zh-TW-HsiaoChenNeural",
+      "confirmed_in": [
+        "shiftguard-features"
+      ],
+      "updated_at": "2026-08-30T07:31:30.564Z"
+    }
+  },
+  "sightings": {}
+}

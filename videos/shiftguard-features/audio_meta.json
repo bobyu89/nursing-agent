@@ -1,0 +1,90 @@
+{
+  "voices": [
+    {
+      "id": "f01",
+      "duration_s": 8.4,
+      "path": "assets/voice/f01.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    },
+    {
+      "id": "f03",
+      "duration_s": 10.752,
+      "path": "assets/voice/f03.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    },
+    {
+      "id": "f04",
+      "duration_s": 4.968,
+      "path": "assets/voice/f04.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    },
+    {
+      "id": "f06",
+      "duration_s": 9,
+      "path": "assets/voice/f06.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    },
+    {
+      "id": "f07",
+      "duration_s": 12,
+      "path": "assets/voice/f07.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    },
+    {
+      "id": "f08",
+      "duration_s": 9.744,
+      "path": "assets/voice/f08.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    },
+    {
+      "id": "f09",
+      "duration_s": 5.16,
+      "path": "assets/voice/f09.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    },
+    {
+      "id": "f11",
+      "duration_s": 13.584,
+      "path": "assets/voice/f11.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    },
+    {
+      "id": "f13",
+      "duration_s": 9.528,
+      "path": "assets/voice/f13.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    },
+    {
+      "id": "f14",
+      "duration_s": 11.016,
+      "path": "assets/voice/f14.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    },
+    {
+      "id": "f15",
+      "duration_s": 10.032,
+      "path": "assets/voice/f15.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    },
+    {
+      "id": "f16",
+      "duration_s": 6.96,
+      "path": "assets/voice/f16.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    },
+    {
+      "id": "f17",
+      "duration_s": 3.648,
+      "path": "assets/voice/f17.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    },
+    {
+      "id": "f19",
+      "duration_s": 2.016,
+      "path": "assets/voice/f19.wav",
+      "voice": "zh-TW-HsiaoChenNeural"
+    }
+  ],
+  "tts_engine": "edge-tts zh-TW-HsiaoChenNeural",
+  "total_duration_s": 116.808
+}

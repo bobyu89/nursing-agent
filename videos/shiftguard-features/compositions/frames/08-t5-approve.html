@@ -1,0 +1,742 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+    @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+    @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+    /* ============ 08-t5-approve — 任務⑤簽核一張換班單（10.8s） ============ */
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      color: #16233a;
+      -webkit-font-smoothing: antialiased;
+    }
+    #f08a-bg,
+    #f08a-main {
+      position: absolute;
+      inset: 0;
+    }
+    #f08a-bg {
+      background: #f3f5fa;
+    }
+    #f08a-main {
+      overflow: hidden;
+    }
+
+    /* ---- virtual camera (coordinate-target-zoom: outer scales, inner translates) ---- */
+    #f08a-zoom-outer {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+      will-change: transform;
+    }
+    #f08a-zoom-inner {
+      position: absolute;
+      inset: 0;
+      will-change: transform;
+    }
+
+    /* ---- platform frame (mock recreation, no traffic lights) ---- */
+    #f08a-window {
+      position: absolute;
+      left: 340px;
+      top: 130px;
+      width: 1240px;
+      height: 650px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow:
+        0 24px 48px rgba(22, 35, 58, 0.08),
+        0 2px 8px rgba(22, 35, 58, 0.05);
+      overflow: hidden;
+    }
+    .f08a-toolbar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      height: 46px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e4e9f1;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+    }
+    .f08a-pill {
+      width: 300px;
+      height: 20px;
+      border-radius: 10px;
+      background: #eef2f7;
+      border: 1px solid #e4e9f1;
+    }
+    .f08a-demo-tag {
+      margin-left: auto;
+      font-size: 17px;
+      letter-spacing: 0.08em;
+      color: #5c6b85;
+      background: #f8fafc;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      padding: 2px 14px;
+      line-height: 24px;
+    }
+    .f08a-sidebar {
+      position: absolute;
+      left: 0;
+      top: 46px;
+      bottom: 0;
+      width: 68px;
+      background: #f8fafc;
+      border-right: 1px solid #eef2f7;
+    }
+    .f08a-side-item {
+      position: absolute;
+      left: 24px;
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: #eef2f7;
+    }
+    .f08a-side-item.f08a-active {
+      background: #edf1fe;
+      border: 1px solid rgba(64, 96, 239, 0.55);
+    }
+    .f08a-screen {
+      position: absolute;
+      left: 68px;
+      top: 46px;
+      right: 0;
+      bottom: 0;
+    }
+
+    /* ---- 簽核佇列（護理長視角） ---- */
+    #f08a-title {
+      position: absolute;
+      left: 36px;
+      top: 24px;
+      font-size: 34px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      opacity: 0;
+    }
+    #f08a-note {
+      position: absolute;
+      right: 36px;
+      top: 42px;
+      font-size: 20px;
+      font-weight: 500;
+      color: #5c6b85;
+      letter-spacing: 0.04em;
+      opacity: 0;
+    }
+    #f08a-hair {
+      position: absolute;
+      left: 36px;
+      right: 36px;
+      top: 88px;
+      height: 1px;
+      background: #e4e9f1;
+      opacity: 0;
+    }
+    #f08a-qrow {
+      position: absolute;
+      left: 36px;
+      top: 104px;
+      width: 1100px;
+      height: 68px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(22, 35, 58, 0.04);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 22px;
+      opacity: 0;
+    }
+    .f08a-qtext {
+      font-size: 22px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .f08a-swapdisc {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      box-shadow: 0 2px 6px rgba(22, 35, 58, 0.07);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+    }
+    .f08a-tagslot {
+      position: relative;
+      width: 104px;
+      height: 38px;
+      margin-left: auto;
+      flex: none;
+    }
+    .f08a-tag {
+      position: absolute;
+      inset: 0;
+      border-radius: 8px;
+      font-size: 19px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: 0.04em;
+    }
+    #f08a-tag-wait {
+      background: rgba(147, 96, 10, 0.08);
+      color: #93600a;
+      opacity: 0;
+    }
+    #f08a-tag-ok {
+      background: #e6f6ef;
+      color: #117a58;
+      opacity: 0;
+    }
+    #f08a-btn-pre {
+      width: 150px;
+      height: 44px;
+      border-radius: 10px;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      opacity: 0;
+    }
+    #f08a-ghost {
+      position: absolute;
+      left: 36px;
+      top: 186px;
+      width: 1100px;
+      height: 50px;
+      background: #ffffff;
+      border: 1px solid #eef2f7;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 22px;
+      opacity: 0;
+    }
+    .f08a-gbar {
+      height: 14px;
+      border-radius: 7px;
+      background: #eef2f7;
+    }
+    .f08a-gb1 { width: 240px; }
+    .f08a-gb2 { width: 120px; }
+    .f08a-gb3 { width: 70px; margin-left: auto; }
+
+    /* ---- 預檢結果：紅擋綠放並列 ---- */
+    .f08a-card {
+      position: absolute;
+      top: 258px;
+      width: 540px;
+      min-height: 200px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow: 0 14px 34px rgba(22, 35, 58, 0.09);
+      padding: 22px 28px 18px;
+      opacity: 0;
+    }
+    #f08a-red {
+      left: 36px;
+      border-left: 6px solid #c92c21;
+    }
+    #f08a-green {
+      left: 596px;
+      border-left: 6px solid #117a58;
+    }
+    .f08a-card-head {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .f08a-status-ico {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+    }
+    .f08a-ico-danger { background: #fdecea; }
+    .f08a-ico-ok { background: #e6f6ef; }
+    .f08a-red-title {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #c92c21;
+    }
+    .f08a-green-title {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #117a58;
+    }
+    #f08a-red-reason {
+      margin-top: 14px;
+      font-size: 21px;
+      line-height: 1.58;
+      color: #16233a;
+      opacity: 0;
+    }
+    .f08a-hchip {
+      display: inline-block;
+      padding: 1px 10px 2px;
+      margin-right: 10px;
+      border-radius: 6px;
+      background: #fdecea;
+      color: #c92c21;
+      font-weight: 800;
+      font-size: 18px;
+      vertical-align: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+    #f08a-red-basis {
+      margin-top: 13px;
+      padding-top: 11px;
+      border-top: 1px solid #eef2f7;
+      font-size: 18px;
+      color: #5c6b85;
+      letter-spacing: 0.02em;
+      opacity: 0;
+    }
+    .f08a-basis-list {
+      margin-top: 6px;
+    }
+    .f08a-bi {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 7px 0;
+      font-size: 20px;
+      color: #16233a;
+      opacity: 0;
+    }
+    .f08a-bi + .f08a-bi {
+      border-top: 1px solid #eef2f7;
+    }
+    .f08a-okchip {
+      display: inline-block;
+      padding: 1px 9px 2px;
+      border-radius: 6px;
+      background: #e6f6ef;
+      color: #117a58;
+      font-weight: 800;
+      font-size: 17px;
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---- 核准按鈕＋游標＋漣漪（皆在鏡頭空間內） ---- */
+    #f08a-approve {
+      position: absolute;
+      left: 936px;
+      top: 528px;
+      width: 200px;
+      height: 54px;
+      border-radius: 12px;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.28em;
+      text-indent: 0.28em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+    }
+    #f08a-cursor {
+      position: absolute;
+      left: 1104px;
+      top: 601px;
+      width: 28px;
+      height: 32px;
+      z-index: 20;
+      pointer-events: none;
+      opacity: 0;
+      filter: drop-shadow(0 2px 4px rgba(22, 35, 58, 0.28));
+    }
+    .f08a-ripple {
+      position: absolute;
+      left: 1054px;
+      top: 551px;
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      border: 2px solid #4060ef;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 18;
+    }
+
+    /* ---- overlay：任務卡＋左欄步驟籤＋完成卡 ---- */
+    #f08a-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+    }
+    #f08a-task {
+      position: absolute;
+      left: 96px;
+      top: 54px;
+      height: 58px;
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 24px 0 18px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 14px;
+      box-shadow: 0 6px 18px rgba(22, 35, 58, 0.07);
+      opacity: 0;
+    }
+    .f08a-tick {
+      width: 8px;
+      height: 26px;
+      border-radius: 3px;
+      background: #4060ef;
+      flex: none;
+    }
+    .f08a-task-text {
+      font-size: 23px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: #16233a;
+      white-space: nowrap;
+    }
+    .f08a-chip {
+      position: absolute;
+      left: 96px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px 0 8px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      box-shadow: 0 4px 12px rgba(22, 35, 58, 0.07);
+      opacity: 0;
+    }
+    #f08a-c1 { top: 548px; }
+    #f08a-c2 { top: 600px; }
+    #f08a-c3 { top: 652px; }
+    #f08a-c4 { top: 704px; }
+    .f08a-chip-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .f08a-chip-num.f08a-num-ok {
+      background: #117a58;
+    }
+    .f08a-chip-text {
+      font-size: 20px;
+      font-weight: 600;
+      color: #16233a;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    #f08a-done {
+      position: absolute;
+      left: 96px;
+      top: 782px;
+      display: inline-flex;
+      align-items: center;
+      gap: 16px;
+      padding: 17px 30px 17px 22px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-left: 6px solid #117a58;
+      border-radius: 14px;
+      box-shadow: 0 14px 34px rgba(22, 35, 58, 0.09);
+      opacity: 0;
+    }
+    .f08a-done-ico {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #e6f6ef;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+    }
+    .f08a-done-text {
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      color: #16233a;
+      white-space: nowrap;
+    }
+  </style>
+
+  <div id="root" data-composition-id="08-t5-approve" data-duration="10.8" data-width="1920" data-height="1080">
+    <!-- full-bleed ground -->
+    <div id="f08a-bg" class="clip" data-start="0" data-duration="10.8" data-track-index="0"></div>
+
+    <div id="f08a-main" class="clip" data-start="0" data-duration="10.8" data-track-index="1">
+      <div id="f08a-zoom-outer" data-layout-allow-overflow="">
+        <div id="f08a-zoom-inner">
+          <div id="f08a-window">
+            <div class="f08a-toolbar">
+              <span class="f08a-pill"></span>
+              <span class="f08a-demo-tag">示範資料</span>
+            </div>
+            <div class="f08a-sidebar">
+              <span class="f08a-side-item" style="top: 18px"></span>
+              <span class="f08a-side-item" style="top: 56px"></span>
+              <span class="f08a-side-item f08a-active" style="top: 94px"></span>
+              <span class="f08a-side-item" style="top: 132px"></span>
+            </div>
+
+            <div class="f08a-screen">
+              <div id="f08a-title">簽核佇列</div>
+              <div id="f08a-note">——護理長視角</div>
+              <div id="f08a-hair"></div>
+
+              <!-- 佇列列表：任務②那張換班單 -->
+              <div id="f08a-qrow">
+                <span class="f08a-qtext">N-02（8/31 小夜）</span>
+                <span class="f08a-swapdisc">
+                  <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
+                    <path d="M5 8.5h14M15.5 4.5 19.5 8.5l-4 4" stroke="#4060ef" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M21 17.5H7M10.5 13.5l-4 4 4 4" stroke="#4060ef" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </span>
+                <span class="f08a-qtext">N-03（9/2 白班）</span>
+                <span class="f08a-tagslot">
+                  <span class="f08a-tag" id="f08a-tag-wait">待簽核</span>
+                  <span class="f08a-tag" id="f08a-tag-ok">已核准</span>
+                </span>
+                <span id="f08a-btn-pre">帶入預檢</span>
+              </div>
+              <div id="f08a-ghost">
+                <span class="f08a-gbar f08a-gb1"></span>
+                <span class="f08a-gbar f08a-gb2"></span>
+                <span class="f08a-gbar f08a-gb3"></span>
+              </div>
+
+              <!-- 紅例：擋 -->
+              <div class="f08a-card" id="f08a-red">
+                <div class="f08a-card-head">
+                  <span class="f08a-status-ico f08a-ico-danger">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                      <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" stroke="#c92c21" stroke-width="3" stroke-linecap="round" />
+                    </svg>
+                  </span>
+                  <span class="f08a-red-title">換班不成立</span>
+                </div>
+                <div id="f08a-red-reason">
+                  <span class="f08a-hchip">H10</span>個人限制班別（母性保護）
+                </div>
+                <div id="f08a-red-basis">勞動基準法第 49 條</div>
+              </div>
+
+              <!-- 綠例：放 -->
+              <div class="f08a-card" id="f08a-green">
+                <div class="f08a-card-head">
+                  <span class="f08a-status-ico f08a-ico-ok">
+                    <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+                      <path d="M5.5 13.8l5 5L20.5 8" stroke="#117a58" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <span class="f08a-green-title">預檢通過</span>
+                </div>
+                <div class="f08a-basis-list">
+                  <div class="f08a-bi" id="f08a-b1">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <path d="M4 10.6l4 4L16 6.4" stroke="#117a58" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span class="f08a-okchip">H1</span>職務與資格符合
+                  </div>
+                  <div class="f08a-bi" id="f08a-b2">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <path d="M4 10.6l4 4L16 6.4" stroke="#117a58" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span class="f08a-okchip">H2</span>當日未排其他班別
+                  </div>
+                  <div class="f08a-bi" id="f08a-b3">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <path d="M4 10.6l4 4L16 6.4" stroke="#117a58" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span class="f08a-okchip">H4</span>班間休息時間充足
+                  </div>
+                  <div class="f08a-bi" id="f08a-b4">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <path d="M4 10.6l4 4L16 6.4" stroke="#117a58" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span class="f08a-okchip">H7</span>雙週例假保障
+                  </div>
+                </div>
+              </div>
+
+              <div id="f08a-approve">核准</div>
+            </div>
+
+            <!-- 游標與漣漪（window 內、隨鏡頭） -->
+            <span class="f08a-ripple" id="f08a-rip1"></span>
+            <span class="f08a-ripple" id="f08a-rip2"></span>
+            <div id="f08a-cursor">
+              <svg width="28" height="32" viewBox="0 0 28 32" fill="none">
+                <path d="M1.5 1.5v21.4l5.3-4.8 3.2 7.7 4-1.6-3.2-7.7h6.9z" fill="#ffffff" stroke="#16233a" stroke-width="1.6" stroke-linejoin="round" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- overlay above camera -->
+      <div id="f08a-overlay">
+        <div id="f08a-task" data-layout-allow-overlap><span class="f08a-tick"></span><span class="f08a-task-text" data-layout-allow-overlap>任務・簽核換班單</span></div>
+
+        <div class="f08a-chip" id="f08a-c1" data-layout-allow-overlap>
+          <span class="f08a-chip-num" data-layout-allow-overlap>1</span><span class="f08a-chip-text" data-layout-allow-overlap>打開佇列</span>
+        </div>
+        <div class="f08a-chip" id="f08a-c2" data-layout-allow-overlap>
+          <span class="f08a-chip-num" data-layout-allow-overlap>2</span><span class="f08a-chip-text" data-layout-allow-overlap>帶入預檢</span>
+        </div>
+        <div class="f08a-chip" id="f08a-c3" data-layout-allow-overlap>
+          <span class="f08a-chip-num" data-layout-allow-overlap>3</span><span class="f08a-chip-text" data-layout-allow-overlap>核准</span>
+        </div>
+        <div class="f08a-chip" id="f08a-c4" data-layout-allow-overlap>
+          <span class="f08a-chip-num f08a-num-ok" data-layout-allow-overlap>
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
+              <path d="M4 10.6l4 4L16 6.4" stroke="#ffffff" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span><span class="f08a-chip-text" data-layout-allow-overlap>同步</span>
+        </div>
+
+        <div id="f08a-done">
+          <span class="f08a-done-ico">
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+              <path d="M5.5 13.8l5 5L20.5 8" stroke="#117a58" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <span class="f08a-done-text">已核准・班表已同步</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      /* -- Scene 1 (0–1.0s)：佇列畫面落定、任務卡、步驟①（VO 0.3「換班單進佇列」） -- */
+      tl.fromTo("#f08a-window", { y: 56, opacity: 0, scale: 0.985 }, { y: 0, opacity: 1, scale: 1, duration: 0.55, ease: "power3.out" }, 0);
+      tl.fromTo("#f08a-task", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power2.out" }, 0.15);
+      tl.fromTo("#f08a-c1", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.5);
+      tl.fromTo("#f08a-title", { y: 22, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.55);
+      tl.fromTo("#f08a-hair", { scaleX: 0, opacity: 1 }, { scaleX: 1, opacity: 1, duration: 0.45, ease: "power2.out", transformOrigin: "0% 50%" }, 0.66);
+      tl.fromTo("#f08a-note", { x: -14, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power2.out" }, 0.82);
+
+      /* -- Scene 1b (1.0–2.0s)：任務②那張單進佇列，「待簽核」章蓋下 -- */
+      tl.fromTo("#f08a-qrow", { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.42, ease: "power3.out" }, 1.0);
+      tl.fromTo("#f08a-tag-wait", { scale: 1.5, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: "power3.out", transformOrigin: "50% 50%" }, 1.35);
+      tl.fromTo("#f08a-ghost", { y: 18, opacity: 0 }, { y: 0, opacity: 0.55, duration: 0.35, ease: "power2.out" }, 1.55);
+      tl.fromTo("#f08a-btn-pre", { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, 1.75);
+
+      /* -- Scene 2 (2.6s)：步驟②＋「帶入預檢」自動按下 -- */
+      tl.fromTo("#f08a-c2", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 2.6);
+      tl.to("#f08a-btn-pre", { scale: 0.95, duration: 0.09, ease: "power2.in", transformOrigin: "50% 50%" }, 2.6);
+      tl.to("#f08a-btn-pre", { scale: 1, duration: 0.22, ease: "back.out(3)" }, 2.69);
+      tl.to("#f08a-btn-pre", { backgroundColor: "#3350dd", duration: 0.09, ease: "none" }, 2.6);
+      tl.to("#f08a-btn-pre", { backgroundColor: "#4060ef", duration: 0.28, ease: "power1.out" }, 2.72);
+
+      /* -- Scene 3 (3.05–4.4s)：紅擋（3.05）綠放（3.95）並列快帶 -- */
+      tl.fromTo(
+        "#f08a-red",
+        { y: -40, scale: 1.24, opacity: 0, filter: "blur(8px)" },
+        { y: 0, scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.34, ease: "power4.out" },
+        3.05
+      );
+      tl.fromTo("#f08a-red-reason", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power2.out" }, 3.35);
+      tl.fromTo("#f08a-red-basis", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.28, ease: "power2.out" }, 3.6);
+      tl.fromTo(
+        "#f08a-green",
+        { y: -34, scale: 1.2, opacity: 0, filter: "blur(7px)" },
+        { y: 0, scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.32, ease: "power4.out" },
+        3.95
+      );
+
+      /* -- Scene 3b (4.45–7.3s)：預檢卡 punch-in（coordinate-target-zoom）＋讀卡 HOLD
+            卡片區塊中心 global (994,555)：screen 原點 (408,176)＋區塊 (36..1136, 258..500)；
+            offset=(34,15) → counter=(-34,-15)，scale 1.35（嵌套式 T=-offset，與 S 無關） -- */
+      tl.to("#f08a-zoom-outer", { scale: 1.35, duration: 1.0, ease: "power3.inOut" }, 4.45);
+      tl.to("#f08a-zoom-inner", { x: -34, y: -15, duration: 1.0, ease: "power3.inOut" }, 4.45);
+
+      /* -- Scene 4 (5.3–7.0s)：依據逐條（waterfall-entry：tl.set 二值 opacity＋下方鞭入、間距遞減）
+            VO「每一筆都附法條」 -- */
+      tl.set("#f08a-b1", { opacity: 1, y: 62 }, 5.3);
+      tl.to("#f08a-b1", { y: 0, duration: 0.18, ease: "power4.out" }, 5.3);
+      tl.set("#f08a-b2", { opacity: 1, y: 48 }, 5.85);
+      tl.to("#f08a-b2", { y: 0, duration: 0.15, ease: "power4.out" }, 5.85);
+      tl.set("#f08a-b3", { opacity: 1, y: 44 }, 6.3);
+      tl.to("#f08a-b3", { y: 0, duration: 0.14, ease: "power4.out" }, 6.3);
+      tl.set("#f08a-b4", { opacity: 1, y: 42 }, 6.65);
+      tl.to("#f08a-b4", { y: 0, duration: 0.13, ease: "power4.out" }, 6.65);
+      /* 紅例法條一次輕脈衝，讀卡期間畫面不死 */
+      tl.to("#f08a-red-basis", { scale: 1.05, duration: 0.28, ease: "sine.inOut", yoyo: true, repeat: 1, transformOrigin: "0% 50%" }, 7.0);
+
+      /* -- Scene 5 (7.3–8.6s)：拉回全景、核准鈕亮起、游標入場（VO「你只要按下核准」） -- */
+      tl.to("#f08a-zoom-outer", { scale: 1, duration: 0.8, ease: "power2.inOut" }, 7.3);
+      tl.to("#f08a-zoom-inner", { x: 0, y: 0, duration: 0.8, ease: "power2.inOut" }, 7.3);
+      tl.fromTo("#f08a-approve", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power3.out" }, 7.55);
+      tl.set("#f08a-cursor", { x: 130, y: 96, opacity: 1 }, 7.95);
+      tl.to("#f08a-cursor", { x: 0, y: 0, duration: 0.65, ease: "power3.out" }, 7.95);
+      tl.fromTo("#f08a-c3", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 8.5);
+
+      /* -- Scene 6 (8.71–9.4s)：點擊「核准」（cursor-click-ripple；下壓觸底 8.8 = SFX click）→ 章翻面 -- */
+      tl.to("#f08a-cursor", { scale: 0.85, duration: 0.09, ease: "power2.in", yoyo: true, repeat: 1, transformOrigin: "18% 12%" }, 8.71);
+      tl.to("#f08a-approve", { scale: 0.95, duration: 0.09, ease: "power2.in", yoyo: true, repeat: 1, transformOrigin: "50% 50%" }, 8.71);
+      tl.to("#f08a-approve", { backgroundColor: "#3350dd", duration: 0.09, ease: "none" }, 8.71);
+      tl.to("#f08a-approve", { backgroundColor: "#4060ef", duration: 0.25, ease: "power1.out" }, 8.84);
+      tl.fromTo("#f08a-rip1", { scale: 0, opacity: 0.85 }, { scale: 4.2, opacity: 0, duration: 0.65, ease: "power2.out", immediateRender: false, transformOrigin: "50% 50%" }, 8.79);
+      tl.fromTo("#f08a-rip2", { scale: 0, opacity: 0.7 }, { scale: 4.2, opacity: 0, duration: 0.65, ease: "power2.out", immediateRender: false, transformOrigin: "50% 50%" }, 8.88);
+      tl.to("#f08a-tag-wait", { scale: 0.75, opacity: 0, duration: 0.2, ease: "power2.in", transformOrigin: "50% 50%" }, 9.0);
+      tl.fromTo("#f08a-tag-ok", { scale: 0.55, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.32, ease: "back.out(2.4)", transformOrigin: "50% 50%" }, 9.06);
+
+      /* -- Scene 7 (9.4s)：✓同步籤＋完成卡「已核准・班表已同步」 -- */
+      tl.fromTo("#f08a-c4", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 9.4);
+      tl.fromTo("#f08a-done", { y: 24, scale: 0.97, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.45, ease: "power3.out" }, 9.4);
+
+      /* 尾段安靜推近至 10.8（結束時速度歸零，等硬切） */
+      tl.to("#f08a-zoom-outer", { scale: 1.016, duration: 1.25, ease: "sine.inOut" }, 9.55);
+
+      window.__timelines["08-t5-approve"] = tl;
+    })();
+  </script>
+</template>

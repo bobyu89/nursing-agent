@@ -1,0 +1,663 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+    @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+    @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+    /* ============ 07-t4-fillgap — 任務④補一個缺口（cursor-ui-demo 四步 + 留痕特寫, 13.0s） ============ */
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      color: #16233a;
+      -webkit-font-smoothing: antialiased;
+    }
+    .clip {
+      position: absolute;
+      inset: 0;
+    }
+    #f07-bg {
+      background: #f3f5fa;
+    }
+
+    /* ---- virtual camera（coordinate-target-zoom：外層 scale、內層 translate） ---- */
+    #f07-zoomo {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+      will-change: transform;
+    }
+    #f07-zoomi {
+      position: absolute;
+      inset: 0;
+      will-change: transform;
+    }
+
+    /* ---- browser / platform frame ---- */
+    #f07-window {
+      position: absolute;
+      left: 500px;
+      top: 96px;
+      width: 1200px;
+      height: 704px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow:
+        0 24px 48px rgba(22, 35, 58, 0.08),
+        0 2px 8px rgba(22, 35, 58, 0.05);
+      overflow: hidden;
+      opacity: 0;
+    }
+    .f07-toolbar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      height: 46px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e4e9f1;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+    }
+    .f07-pill {
+      width: 300px;
+      height: 20px;
+      border-radius: 10px;
+      background: #eef2f7;
+      border: 1px solid #e4e9f1;
+    }
+    .f07-demo-tag {
+      margin-left: auto;
+      font-size: 17px;
+      letter-spacing: 0.08em;
+      color: #5c6b85;
+      background: #f8fafc;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      padding: 2px 14px;
+      line-height: 24px;
+    }
+    .f07-sidebar {
+      position: absolute;
+      left: 0;
+      top: 46px;
+      bottom: 0;
+      width: 68px;
+      background: #f8fafc;
+      border-right: 1px solid #eef2f7;
+    }
+    .f07-side-item {
+      position: absolute;
+      left: 24px;
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: #eef2f7;
+    }
+    .f07-side-item.f07-active {
+      background: #edf1fe;
+      border: 1px solid rgba(64, 96, 239, 0.55);
+    }
+    #f07-wstitle {
+      position: absolute;
+      left: 100px;
+      top: 72px;
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: #16233a;
+    }
+    #f07-divider {
+      position: absolute;
+      left: 512px;
+      top: 132px;
+      width: 1px;
+      height: 508px;
+      background: #eef2f7;
+      opacity: 0;
+    }
+
+    /* ---- 左欄：指定缺口 ---- */
+    .f07-flabel {
+      position: absolute;
+      left: 100px;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      color: #5c6b85;
+      opacity: 0;
+    }
+    #f07-lb-date {
+      top: 132px;
+    }
+    #f07-lb-shift {
+      top: 246px;
+    }
+    .f07-opt {
+      position: absolute;
+      height: 50px;
+      border-radius: 10px;
+      background: #f8fafc;
+      border: 1px solid #e4e9f1;
+      color: #47566f;
+      font-size: 20px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      opacity: 0;
+    }
+    #f07-d1 { left: 100px; top: 162px; width: 128px; }
+    #f07-d2 { left: 240px; top: 162px; width: 128px; }
+    #f07-d3 { left: 380px; top: 162px; width: 128px; }
+    #f07-s1 { left: 100px; top: 276px; width: 100px; }
+    #f07-s2 { left: 212px; top: 276px; width: 100px; }
+    #f07-s3 { left: 324px; top: 276px; width: 100px; }
+
+    /* ---- 右欄：建議人選 ---- */
+    #f07-lb-sug {
+      position: absolute;
+      left: 552px;
+      top: 132px;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      color: #5c6b85;
+      opacity: 0;
+    }
+    #f07-empty {
+      position: absolute;
+      left: 552px;
+      top: 162px;
+      width: 616px;
+      height: 282px;
+      border: 1px dashed #e4e9f1;
+      border-radius: 12px;
+      opacity: 0;
+    }
+    .f07-row {
+      position: absolute;
+      left: 552px;
+      width: 616px;
+      height: 88px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(22, 35, 58, 0.04);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 20px;
+      opacity: 0;
+      transform-origin: 50% 50%;
+    }
+    #f07-row1 { top: 166px; }
+    #f07-row2 { top: 264px; }
+    #f07-row3 { top: 362px; }
+    .f07-rank {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: #edf1fe;
+      color: #4060ef;
+      font-size: 20px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .f07-rowmain {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .f07-rowtop {
+      display: flex;
+      align-items: baseline;
+    }
+    .f07-rname {
+      font-size: 22px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .f07-rscore {
+      margin-left: auto;
+      font-size: 20px;
+      font-weight: 700;
+      color: #16233a;
+      font-variant-numeric: tabular-nums;
+    }
+    .f07-rbasis {
+      font-size: 17px;
+      color: #5c6b85;
+      letter-spacing: 0.01em;
+    }
+    .f07-bt {
+      position: relative;
+      display: inline-block;
+    }
+    .f07-bl {
+      position: absolute;
+      left: -2px;
+      right: -2px;
+      bottom: -3px;
+      height: 3px;
+      border-radius: 2px;
+      background: #4060ef;
+      opacity: 0;
+      transform-origin: 0 50%;
+    }
+    #f07-confirm {
+      position: absolute;
+      left: 868px;
+      top: 478px;
+      width: 300px;
+      height: 56px;
+      border-radius: 10px;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-indent: 0.22em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+    }
+
+    /* ---- ✓ 完成卡＋留痕一行 ---- */
+    #f07-donecard {
+      position: absolute;
+      left: 560px;
+      top: 258px;
+      width: 600px;
+      height: 148px;
+      background: #e6f6ef;
+      border: 1px solid rgba(17, 122, 88, 0.35);
+      border-radius: 12px;
+      box-shadow: 0 14px 34px rgba(22, 35, 58, 0.12);
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 0 28px;
+      opacity: 0;
+      transform-origin: 50% 50%;
+      z-index: 4;
+    }
+    .f07-donedisc {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #117a58;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+    }
+    .f07-done-title {
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #117a58;
+    }
+    #f07-audit {
+      position: absolute;
+      left: 560px;
+      top: 420px;
+      width: 600px;
+      height: 52px;
+      background: #f8fafc;
+      border: 1px solid #e4e9f1;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      font-size: 20px;
+      color: #47566f;
+      letter-spacing: 0.02em;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      opacity: 0;
+      z-index: 4;
+    }
+
+    /* ---- cursor + ripples ---- */
+    #f07-cursor {
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: 9;
+      opacity: 0;
+      transform-origin: 4px 4px;
+      pointer-events: none;
+    }
+    .f07-rip {
+      position: absolute;
+      border-radius: 50%;
+      border: 2.5px solid rgba(64, 96, 239, 0.55);
+      opacity: 0;
+      z-index: 6;
+      pointer-events: none;
+    }
+    #f07-rip1 { left: 759px; top: 238px; width: 90px; height: 90px; }
+    #f07-rip2 { left: 1305px; top: 251px; width: 110px; height: 110px; }
+    #f07-rip3 { left: 1468px; top: 552px; width: 100px; height: 100px; }
+
+    /* ---- overlay：任務卡＋步驟籤 ---- */
+    #f07-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 12;
+      pointer-events: none;
+    }
+    #f07-taskcard {
+      position: absolute;
+      left: 96px;
+      top: 64px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 24px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow: 0 6px 18px rgba(22, 35, 58, 0.08);
+      opacity: 0;
+    }
+    .f07-ttick {
+      width: 8px;
+      height: 26px;
+      border-radius: 3px;
+      background: #4060ef;
+      flex: none;
+    }
+    .f07-ttext {
+      font-size: 25px;
+      font-weight: 700;
+      color: #16233a;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+    .f07-chip {
+      position: absolute;
+      left: 96px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px 0 8px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      box-shadow: 0 4px 12px rgba(22, 35, 58, 0.07);
+      opacity: 0;
+    }
+    #f07-chip1 { top: 496px; }
+    #f07-chip2 { top: 548px; }
+    #f07-chip3 { top: 600px; }
+    #f07-chip4 { top: 652px; }
+    #f07-chip5 {
+      top: 704px;
+      background: #e6f6ef;
+      border-color: rgba(17, 122, 88, 0.3);
+    }
+    .f07-chip-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
+    #f07-chip5 .f07-chip-num {
+      background: #117a58;
+    }
+    .f07-chip-text {
+      font-size: 20px;
+      font-weight: 600;
+      color: #16233a;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    #f07-chip5 .f07-chip-text {
+      color: #117a58;
+      font-weight: 700;
+    }
+  </style>
+
+  <div id="root" data-composition-id="07-t4-fillgap" data-duration="13" data-width="1920" data-height="1080">
+    <!-- full-bleed ground -->
+    <div id="f07-bg" class="clip" data-start="0" data-duration="13" data-track-index="0"></div>
+
+    <div id="f07-main" class="clip" data-start="0" data-duration="13" data-track-index="1">
+      <div id="f07-zoomo" data-layout-allow-overflow="">
+        <div id="f07-zoomi">
+          <div id="f07-window">
+            <div class="f07-toolbar">
+              <span class="f07-pill"></span>
+              <span class="f07-demo-tag">示範資料</span>
+            </div>
+            <div class="f07-sidebar">
+              <span class="f07-side-item" style="top: 18px"></span>
+              <span class="f07-side-item f07-active" style="top: 56px"></span>
+              <span class="f07-side-item" style="top: 94px"></span>
+              <span class="f07-side-item" style="top: 132px"></span>
+            </div>
+
+            <div id="f07-wstitle">補缺口</div>
+            <div id="f07-divider"></div>
+
+            <!-- 左欄：指定缺口 -->
+            <div class="f07-flabel" id="f07-lb-date">日期</div>
+            <div class="f07-opt" id="f07-d1">8/28（五）</div>
+            <div class="f07-opt" id="f07-d2">8/29（六）</div>
+            <div class="f07-opt" id="f07-d3">8/30（日）</div>
+            <div class="f07-flabel" id="f07-lb-shift">班別</div>
+            <div class="f07-opt" id="f07-s1">白班</div>
+            <div class="f07-opt" id="f07-s2">小夜</div>
+            <div class="f07-opt" id="f07-s3">大夜</div>
+
+            <!-- 右欄：建議人選（數字排序章，非獎牌） -->
+            <div id="f07-lb-sug">建議人選</div>
+            <div id="f07-empty"></div>
+            <div class="f07-row" id="f07-row1" data-layout-allow-overlap="">
+              <span class="f07-rank" id="f07-rank1">1</span>
+              <div class="f07-rowmain">
+                <div class="f07-rowtop"><span class="f07-rname">N-02</span><span class="f07-rscore">18／20 分</span></div>
+                <div class="f07-rbasis"><span class="f07-bt">意願班別相符・班距充足<span class="f07-bl" id="f07-bl1"></span></span></div>
+              </div>
+            </div>
+            <div class="f07-row" id="f07-row2" data-layout-allow-overlap="">
+              <span class="f07-rank" id="f07-rank2">2</span>
+              <div class="f07-rowmain">
+                <div class="f07-rowtop"><span class="f07-rname">N-03</span><span class="f07-rscore">16／20 分</span></div>
+                <div class="f07-rbasis"><span class="f07-bt">熟悉單位・證照效期齊<span class="f07-bl" id="f07-bl2"></span></span></div>
+              </div>
+            </div>
+            <div class="f07-row" id="f07-row3" data-layout-allow-overlap="">
+              <span class="f07-rank" id="f07-rank3">3</span>
+              <div class="f07-rowmain">
+                <div class="f07-rowtop"><span class="f07-rname">N-01</span><span class="f07-rscore">15／20 分</span></div>
+                <div class="f07-rbasis"><span class="f07-bt">資深 AHN・近 30 天代班 4 次<span class="f07-bl" id="f07-bl3"></span></span></div>
+              </div>
+            </div>
+            <div id="f07-confirm">正式確認</div>
+
+            <!-- ✓ 完成卡＋留痕一行入帳 -->
+            <div id="f07-donecard" data-layout-allow-overlap="">
+              <span class="f07-donedisc" data-layout-allow-overlap>
+                <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+                  <path d="M5.5 13.8l5 5L20.5 8" stroke="#ffffff" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="f07-done-title" data-layout-allow-overlap>已指派・決策已留痕</span>
+            </div>
+            <div id="f07-audit" data-layout-allow-overlap="">2026-08-29 ・ 指派 N-02 ・ 依據已存檔</div>
+          </div>
+
+          <!-- ripples + cursor（與 UI 同座標系，跟著鏡頭） -->
+          <div class="f07-rip" id="f07-rip1" data-layout-allow-overlap=""></div>
+          <div class="f07-rip" id="f07-rip2" data-layout-allow-overlap=""></div>
+          <div class="f07-rip" id="f07-rip3" data-layout-allow-overlap=""></div>
+          <div id="f07-cursor" data-layout-allow-overlap="">
+            <svg width="30" height="32" viewBox="0 0 30 32">
+              <path d="M3 1.5 L3 25 L9.2 19.4 L13 28.4 L17.3 26.5 L13.4 17.7 L21.5 17.2 Z" fill="#16233a" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- overlay above camera -->
+      <div id="f07-overlay">
+        <div id="f07-taskcard"><span class="f07-ttick"></span><span class="f07-ttext">任務・補一個缺口</span></div>
+
+        <div class="f07-chip" id="f07-chip1" data-layout-allow-overlap="">
+          <span class="f07-chip-num" data-layout-allow-overlap="">1</span><span class="f07-chip-text" data-layout-allow-overlap="">指定缺口</span>
+        </div>
+        <div class="f07-chip" id="f07-chip2" data-layout-allow-overlap="">
+          <span class="f07-chip-num" data-layout-allow-overlap="">2</span><span class="f07-chip-text" data-layout-allow-overlap="">看建議</span>
+        </div>
+        <div class="f07-chip" id="f07-chip3" data-layout-allow-overlap="">
+          <span class="f07-chip-num" data-layout-allow-overlap="">3</span><span class="f07-chip-text" data-layout-allow-overlap="">選人</span>
+        </div>
+        <div class="f07-chip" id="f07-chip4" data-layout-allow-overlap="">
+          <span class="f07-chip-num" data-layout-allow-overlap="">4</span><span class="f07-chip-text" data-layout-allow-overlap="">正式確認</span>
+        </div>
+        <div class="f07-chip" id="f07-chip5" data-layout-allow-overlap="">
+          <span class="f07-chip-num" data-layout-allow-overlap="">
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
+              <path d="M4 10.6l4 4L16 6.4" stroke="#ffffff" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span><span class="f07-chip-text" data-layout-allow-overlap="">留痕</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      /* 底層極緩推近（11s 內歸零速度），特寫 zoom 由 11.35 起接手 */
+      tl.to("#f07-zoomo", { scale: 1.015, duration: 11, ease: "sine.inOut" }, 0);
+
+      /* -- Scene 1 (0–1.0s)：面板落定＋左欄 waterfall＋步驟①「指定缺口」 -- */
+      tl.fromTo("#f07-window", { y: 40, opacity: 0, scale: 0.988 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "power3.out" }, 0.02);
+      tl.fromTo("#f07-taskcard", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power2.out" }, 0.1);
+      tl.set("#f07-lb-date", { opacity: 1, y: 18 }, 0.34);
+      tl.to("#f07-lb-date", { y: 0, duration: 0.11, ease: "power4.out" }, 0.34);
+      tl.set("#f07-d1", { opacity: 1, y: 34 }, 0.44);
+      tl.to("#f07-d1", { y: 0, duration: 0.14, ease: "power4.out" }, 0.44);
+      tl.set("#f07-d2", { opacity: 1, y: 32 }, 0.55);
+      tl.to("#f07-d2", { y: 0, duration: 0.13, ease: "power4.out" }, 0.55);
+      tl.set("#f07-d3", { opacity: 1, y: 30 }, 0.65);
+      tl.to("#f07-d3", { y: 0, duration: 0.13, ease: "power4.out" }, 0.65);
+      tl.set("#f07-lb-shift", { opacity: 1, y: 18 }, 0.72);
+      tl.to("#f07-lb-shift", { y: 0, duration: 0.11, ease: "power4.out" }, 0.72);
+      tl.set("#f07-s1", { opacity: 1, y: 30 }, 0.8);
+      tl.to("#f07-s1", { y: 0, duration: 0.13, ease: "power4.out" }, 0.8);
+      tl.set("#f07-s2", { opacity: 1, y: 28 }, 0.88);
+      tl.to("#f07-s2", { y: 0, duration: 0.12, ease: "power4.out" }, 0.88);
+      tl.set("#f07-s3", { opacity: 1, y: 28 }, 0.95);
+      tl.to("#f07-s3", { y: 0, duration: 0.12, ease: "power4.out" }, 0.95);
+      tl.fromTo("#f07-divider", { scaleY: 0, opacity: 1 }, { scaleY: 1, opacity: 1, duration: 0.45, ease: "power2.out", transformOrigin: "50% 0%" }, 0.5);
+      tl.set("#f07-lb-sug", { opacity: 1, y: 20 }, 0.55);
+      tl.to("#f07-lb-sug", { y: 0, duration: 0.12, ease: "power4.out" }, 0.55);
+      tl.fromTo("#f07-empty", { opacity: 0 }, { opacity: 0.7, duration: 0.35, ease: "power1.out" }, 0.6);
+      tl.fromTo("#f07-chip1", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.5);
+
+      /* -- 游標：點日期 8/29（六）（sfx click @1.0 local）→ 點班別 小夜 -- */
+      tl.set("#f07-cursor", { opacity: 1 }, 0.42);
+      tl.fromTo("#f07-cursor", { x: 1720, y: 700 }, { x: 804, y: 283, duration: 0.52, ease: "power2.inOut" }, 0.45);
+      tl.to("#f07-cursor", { scale: 0.85, duration: 0.08, ease: "power2.in" }, 1.0);
+      tl.to("#f07-cursor", { scale: 1, duration: 0.16, ease: "power2.out" }, 1.08);
+      tl.to("#f07-d2", { scale: 0.95, duration: 0.08, ease: "power2.in" }, 1.0);
+      tl.to("#f07-d2", { scale: 1, duration: 0.2, ease: "back.out(2)" }, 1.08);
+      tl.set("#f07-rip1", { opacity: 1, scale: 0.2 }, 1.02);
+      tl.to("#f07-rip1", { scale: 2.8, duration: 0.55, ease: "power2.out" }, 1.02);
+      tl.to("#f07-rip1", { opacity: 0, duration: 0.45, ease: "power1.in" }, 1.12);
+      tl.set("#f07-d2", { backgroundColor: "#edf1fe", borderColor: "rgba(64,96,239,0.55)", color: "#3350dd" }, 1.06);
+
+      tl.to("#f07-cursor", { x: 762, y: 397, duration: 0.5, ease: "power2.inOut" }, 1.5);
+      tl.to("#f07-cursor", { scale: 0.85, duration: 0.08, ease: "power2.in" }, 2.1);
+      tl.to("#f07-cursor", { scale: 1, duration: 0.16, ease: "power2.out" }, 2.18);
+      tl.to("#f07-s2", { scale: 0.95, duration: 0.08, ease: "power2.in" }, 2.1);
+      tl.to("#f07-s2", { scale: 1, duration: 0.2, ease: "back.out(2)" }, 2.18);
+      tl.set("#f07-s2", { backgroundColor: "#edf1fe", borderColor: "rgba(64,96,239,0.55)", color: "#3350dd" }, 2.16);
+      tl.to("#f07-cursor", { x: 1280, y: 560, duration: 0.6, ease: "power2.inOut" }, 2.5);
+
+      /* -- Scene 2 (3.4–4.8s)：步驟②「看建議」——空態退場，三列建議 waterfall（數字章） -- */
+      tl.fromTo("#f07-chip2", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 3.4);
+      tl.to("#f07-empty", { opacity: 0, duration: 0.18, ease: "power1.in" }, 3.28);
+      tl.set("#f07-row1", { opacity: 1, y: 64 }, 3.45);
+      tl.to("#f07-row1", { y: 0, duration: 0.18, ease: "power4.out" }, 3.45);
+      tl.set("#f07-row2", { opacity: 1, y: 56 }, 3.78);
+      tl.to("#f07-row2", { y: 0, duration: 0.16, ease: "power4.out" }, 3.78);
+      tl.set("#f07-row3", { opacity: 1, y: 50 }, 4.06);
+      tl.to("#f07-row3", { y: 0, duration: 0.15, ease: "power4.out" }, 4.06);
+      tl.fromTo("#f07-confirm", { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, 4.45);
+
+      /* 「依據寫在臉上」——三列依據底線逐列掃過 */
+      tl.fromTo("#f07-bl1", { scaleX: 0, opacity: 0.85 }, { scaleX: 1, duration: 0.3, ease: "power2.out" }, 5.85);
+      tl.fromTo("#f07-bl2", { scaleX: 0, opacity: 0.85 }, { scaleX: 1, duration: 0.3, ease: "power2.out" }, 6.1);
+      tl.fromTo("#f07-bl3", { scaleX: 0, opacity: 0.85 }, { scaleX: 1, duration: 0.3, ease: "power2.out" }, 6.35);
+
+      /* -- Scene 3 (6.5–8.2s)：步驟③「選人」——游標點第一名，列進入 select 態 -- */
+      tl.to("#f07-cursor", { x: 1360, y: 306, duration: 0.55, ease: "power2.inOut" }, 6.5);
+      tl.fromTo("#f07-chip3", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 7.2);
+      tl.to("#f07-cursor", { scale: 0.85, duration: 0.08, ease: "power2.in" }, 7.2);
+      tl.to("#f07-cursor", { scale: 1, duration: 0.16, ease: "power2.out" }, 7.28);
+      tl.to("#f07-row1", { scale: 0.985, duration: 0.09, ease: "power2.in" }, 7.2);
+      tl.to("#f07-row1", { scale: 1, duration: 0.2, ease: "back.out(2)" }, 7.29);
+      tl.set("#f07-rip2", { opacity: 1, scale: 0.2 }, 7.22);
+      tl.to("#f07-rip2", { scale: 2.8, duration: 0.55, ease: "power2.out" }, 7.22);
+      tl.to("#f07-rip2", { opacity: 0, duration: 0.45, ease: "power1.in" }, 7.32);
+      tl.set("#f07-row1", { backgroundColor: "#edf1fe", borderColor: "rgba(64,96,239,0.55)" }, 7.26);
+      tl.set("#f07-rank1", { backgroundColor: "#4060ef", color: "#ffffff" }, 7.28);
+      tl.to("#f07-cursor", { x: 1450, y: 470, duration: 0.5, ease: "power2.inOut" }, 7.7);
+
+      /* -- Scene 4 (9.6–11.1s)：步驟④「正式確認」——移向按鈕、11.0 按下 -- */
+      tl.fromTo("#f07-chip4", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 9.6);
+      tl.to("#f07-cursor", { x: 1518, y: 602, duration: 0.8, ease: "power2.inOut" }, 9.65);
+      tl.to("#f07-cursor", { scale: 0.85, duration: 0.09, ease: "power2.in" }, 11.0);
+      tl.to("#f07-cursor", { scale: 1, duration: 0.18, ease: "power2.out" }, 11.09);
+      tl.to("#f07-confirm", { scale: 0.955, duration: 0.09, ease: "power2.in" }, 11.0);
+      tl.to("#f07-confirm", { scale: 1, duration: 0.22, ease: "back.out(2.2)" }, 11.09);
+      tl.to("#f07-confirm", { backgroundColor: "#3350dd", duration: 0.08, ease: "none" }, 11.0);
+      tl.to("#f07-confirm", { backgroundColor: "#4060ef", duration: 0.28, ease: "power1.out" }, 11.12);
+      tl.set("#f07-rip3", { opacity: 1, scale: 0.2 }, 11.02);
+      tl.to("#f07-rip3", { scale: 2.6, duration: 0.55, ease: "power2.out" }, 11.02);
+      tl.to("#f07-rip3", { opacity: 0, duration: 0.45, ease: "power1.in" }, 11.12);
+
+      /* -- Scene 5 (11.2–13s)：✓「已指派・決策已留痕」落定（sfx thump @11.2）＋留痕一行入帳＋特寫 -- */
+      tl.fromTo("#f07-chip5", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 11.2);
+      tl.fromTo("#f07-donecard", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: "power3.out" }, 11.2);
+      tl.set("#f07-audit", { opacity: 1, x: -46 }, 11.75);
+      tl.to("#f07-audit", { x: 0, duration: 0.4, ease: "power3.out" }, 11.75);
+
+      /* coordinate-target-zoom：入帳特寫（✓ 卡＋留痕列群中心 (1360,461)），12.45 定格 */
+      tl.to("#f07-zoomo", { scale: 1.24, duration: 1.1, ease: "power2.inOut" }, 11.35);
+      tl.to("#f07-zoomi", { x: -400, y: 79, duration: 1.1, ease: "power2.inOut" }, 11.35);
+
+      window.__timelines["07-t4-fillgap"] = tl;
+    })();
+  </script>
+</template>

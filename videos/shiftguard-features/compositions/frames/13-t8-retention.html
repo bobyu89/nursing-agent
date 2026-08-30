@@ -1,0 +1,768 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+    @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+    @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+    /* ============ 13-t8-retention — 任務⑧盤一次留任風險（10.4s 留任雷達） ============ */
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      color: #16233a;
+      -webkit-font-smoothing: antialiased;
+    }
+    #f13-bg,
+    #f13-main {
+      position: absolute;
+      inset: 0;
+    }
+    #f13-bg {
+      background: #f3f5fa;
+    }
+    #f13-main {
+      overflow: hidden;
+    }
+
+    /* ---- virtual camera (coordinate-target-zoom: outer scales, inner translates) ---- */
+    #f13-zoom-outer {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+      will-change: transform;
+    }
+    #f13-zoom-inner {
+      position: absolute;
+      inset: 0;
+      will-change: transform;
+    }
+
+    /* ---- dashboard frame (mock recreation, no traffic lights) ---- */
+    #f13-window {
+      position: absolute;
+      left: 340px;
+      top: 130px;
+      width: 1240px;
+      height: 650px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow:
+        0 24px 48px rgba(22, 35, 58, 0.08),
+        0 2px 8px rgba(22, 35, 58, 0.05);
+      overflow: hidden;
+    }
+    .f13-toolbar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      height: 46px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e4e9f1;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+    }
+    .f13-pill {
+      width: 300px;
+      height: 20px;
+      border-radius: 10px;
+      background: #eef2f7;
+      border: 1px solid #e4e9f1;
+    }
+    .f13-demo-tag {
+      margin-left: auto;
+      font-size: 17px;
+      letter-spacing: 0.08em;
+      color: #5c6b85;
+      background: #f8fafc;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      padding: 2px 14px;
+      line-height: 24px;
+    }
+    .f13-sidebar {
+      position: absolute;
+      left: 0;
+      top: 46px;
+      bottom: 0;
+      width: 68px;
+      background: #f8fafc;
+      border-right: 1px solid #eef2f7;
+    }
+    .f13-side-item {
+      position: absolute;
+      left: 24px;
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: #eef2f7;
+    }
+    .f13-side-item.f13-active {
+      background: #edf1fe;
+      border: 1px solid rgba(64, 96, 239, 0.55);
+    }
+    .f13-screen {
+      position: absolute;
+      left: 68px;
+      top: 46px;
+      right: 0;
+      bottom: 0;
+    }
+
+    /* ---- 留任雷達表 ---- */
+    #f13-title {
+      position: absolute;
+      left: 36px;
+      top: 26px;
+      font-size: 34px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      opacity: 0;
+    }
+    #f13-hair {
+      position: absolute;
+      left: 36px;
+      top: 84px;
+      width: 1100px;
+      height: 1px;
+      background: #e4e9f1;
+      opacity: 0;
+    }
+    #f13-sortbtn {
+      position: absolute;
+      left: 946px;
+      top: 30px;
+      width: 190px;
+      height: 44px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      box-shadow: 0 2px 8px rgba(22, 35, 58, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      opacity: 0;
+    }
+    #f13-sortbtn-label {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: #47566f;
+    }
+    #f13-table {
+      position: absolute;
+      left: 36px;
+      top: 100px;
+      width: 1100px;
+      height: 480px;
+    }
+    #f13-thead {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 1100px;
+      height: 40px;
+      display: grid;
+      grid-template-columns: 180px repeat(5, 184px);
+      align-items: center;
+      font-size: 18px;
+      font-weight: 600;
+      color: #5c6b85;
+      letter-spacing: 0.08em;
+      border-bottom: 1px solid #e4e9f1;
+      opacity: 0;
+    }
+    .f13-srow {
+      position: absolute;
+      left: 0;
+      width: 1100px;
+      height: 52px;
+      opacity: 0;
+      will-change: transform;
+    }
+    #f13-s1 {
+      top: 40px;
+    }
+    #f13-s2 {
+      top: 92px;
+    }
+    #f13-s3 {
+      top: 144px;
+    }
+    #f13-s4 {
+      top: 196px;
+    }
+    #f13-s5 {
+      top: 248px;
+    }
+    .f13-prow {
+      width: 100%;
+      height: 100%;
+      will-change: transform;
+    }
+    .f13-tr {
+      display: grid;
+      grid-template-columns: 180px repeat(5, 184px);
+      align-items: center;
+      height: 52px;
+      border-bottom: 1px solid #eef2f7;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+    .f13-name {
+      font-size: 20px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      padding-left: 4px;
+    }
+    .f13-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 19px;
+      color: #47566f;
+      font-weight: 500;
+    }
+    .f13-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex: none;
+    }
+    .f13-dot-ok {
+      background: #117a58;
+    }
+    .f13-dot-warn {
+      background: #93600a;
+    }
+    .f13-hi {
+      color: #93600a;
+      font-weight: 800;
+    }
+
+    /* ---- 明細卡（anchored-layout-expand：mask 定高、sheet 上收） ---- */
+    #f13-dmask {
+      position: absolute;
+      left: 0;
+      top: 92px;
+      width: 1100px;
+      height: 170px;
+      overflow: hidden;
+    }
+    #f13-dsheet {
+      box-sizing: border-box;
+      width: 1100px;
+      height: 170px;
+      background: #f8fafc;
+      border: 1px solid #e4e9f1;
+      border-left: 5px solid #93600a;
+      border-radius: 12px;
+      padding: 13px 24px;
+      will-change: transform;
+    }
+    .f13-dbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      height: 27px;
+      margin-bottom: 2px;
+      opacity: 0;
+    }
+    .f13-dlabel {
+      width: 64px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #47566f;
+      letter-spacing: 0.08em;
+      flex: none;
+    }
+    .f13-dtrack {
+      position: relative;
+      flex: 1;
+      height: 10px;
+      border-radius: 5px;
+      background: #eef2f7;
+    }
+    .f13-dfill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      border-radius: 5px;
+      transform-origin: 0% 50%;
+    }
+    .f13-df-warn {
+      background: #93600a;
+    }
+    .f13-df-ok {
+      background: #117a58;
+    }
+    .f13-dword {
+      width: 58px;
+      text-align: center;
+      font-size: 15px;
+      font-weight: 800;
+      border-radius: 6px;
+      padding: 2px 0;
+      flex: none;
+    }
+    .f13-dw-warn {
+      background: rgba(147, 96, 10, 0.1);
+      color: #93600a;
+    }
+    .f13-dw-ok {
+      background: #e6f6ef;
+      color: #117a58;
+    }
+
+    /* ---- ✓ 完成卡 ---- */
+    #f13-done {
+      position: absolute;
+      left: 306px;
+      top: 478px;
+      width: 560px;
+      height: 88px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-left: 6px solid #117a58;
+      border-radius: 12px;
+      box-shadow: 0 14px 34px rgba(22, 35, 58, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      opacity: 0;
+    }
+    .f13-done-ico {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #e6f6ef;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+    }
+    .f13-done-text {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #117a58;
+    }
+
+    /* ---- cursor + ripples（世界座標，鏡頭內） ---- */
+    #f13-cursor {
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: 40;
+      pointer-events: none;
+      opacity: 0;
+    }
+    .f13-rip {
+      position: absolute;
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      border: 2.5px solid #4060ef;
+      opacity: 0;
+      z-index: 39;
+      pointer-events: none;
+    }
+    #f13-rip1 {
+      left: 1394px;
+      top: 173px;
+    }
+    #f13-rip2 {
+      left: 939px;
+      top: 287px;
+    }
+
+    /* ---- overlay: 任務卡 + 步驟籤（鏡頭外） ---- */
+    #f13-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+    }
+    #f13-task {
+      position: absolute;
+      left: 96px;
+      top: 58px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 22px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow: 0 6px 16px rgba(22, 35, 58, 0.07);
+      opacity: 0;
+    }
+    .f13-task-tick {
+      width: 8px;
+      height: 26px;
+      border-radius: 3px;
+      background: #4060ef;
+      flex: none;
+    }
+    .f13-task-text {
+      font-size: 23px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: #16233a;
+      white-space: nowrap;
+    }
+    .f13-chip {
+      position: absolute;
+      left: 96px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px 0 8px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      box-shadow: 0 4px 12px rgba(22, 35, 58, 0.07);
+      opacity: 0;
+    }
+    #f13-chip1 {
+      top: 552px;
+    }
+    #f13-chip2 {
+      top: 604px;
+    }
+    #f13-chip3 {
+      top: 656px;
+    }
+    #f13-chipok {
+      top: 708px;
+    }
+    .f13-chip-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .f13-chip-num.f13-num-ok {
+      background: #117a58;
+    }
+    .f13-chip-text {
+      font-size: 20px;
+      font-weight: 600;
+      color: #16233a;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+  </style>
+
+  <div id="root" data-composition-id="13-t8-retention" data-duration="10.4" data-width="1920" data-height="1080">
+    <!-- full-bleed ground -->
+    <div id="f13-bg" class="clip" data-start="0" data-duration="10.4" data-track-index="0"></div>
+
+    <div id="f13-main" class="clip" data-start="0" data-duration="10.4" data-track-index="1">
+      <div id="f13-zoom-outer" data-layout-allow-overflow="">
+        <div id="f13-zoom-inner">
+          <div id="f13-window">
+            <div class="f13-toolbar">
+              <span class="f13-pill"></span>
+              <span class="f13-demo-tag">示範資料</span>
+            </div>
+            <div class="f13-sidebar">
+              <span class="f13-side-item" style="top: 18px"></span>
+              <span class="f13-side-item" style="top: 56px"></span>
+              <span class="f13-side-item" style="top: 94px"></span>
+              <span class="f13-side-item f13-active" style="top: 132px"></span>
+            </div>
+
+            <div class="f13-screen">
+              <div id="f13-title">留任雷達</div>
+              <div id="f13-hair"></div>
+              <div id="f13-sortbtn">
+                <svg width="18" height="16" viewBox="0 0 18 16" fill="none">
+                  <path d="M1 2.5h16M1 8h11M1 13.5h6" stroke="#47566f" stroke-width="2.2" stroke-linecap="round" />
+                </svg>
+                <span id="f13-sortbtn-label">負荷排序</span>
+              </div>
+
+              <div id="f13-table">
+                <div id="f13-thead">
+                  <span>人員</span><span>工時</span><span>夜班</span><span>連續</span><span>假日</span><span>代班</span>
+                </div>
+
+                <!-- 明細卡遮罩（anchored-layout-expand：sheet 由上收起，展開時把後列往下推） -->
+                <div id="f13-dmask" data-layout-allow-overflow="" data-layout-allow-overlap>
+                  <div id="f13-dsheet">
+                    <div class="f13-dbar" id="f13-db1">
+                      <span class="f13-dlabel">工時</span>
+                      <span class="f13-dtrack"><span class="f13-dfill f13-df-warn" id="f13-fb1" style="width: 82%"></span></span>
+                      <span class="f13-dword f13-dw-warn">偏高</span>
+                    </div>
+                    <div class="f13-dbar" id="f13-db2">
+                      <span class="f13-dlabel">夜班</span>
+                      <span class="f13-dtrack"><span class="f13-dfill f13-df-warn" id="f13-fb2" style="width: 74%"></span></span>
+                      <span class="f13-dword f13-dw-warn">偏高</span>
+                    </div>
+                    <div class="f13-dbar" id="f13-db3">
+                      <span class="f13-dlabel">連續</span>
+                      <span class="f13-dtrack"><span class="f13-dfill f13-df-warn" id="f13-fb3" style="width: 68%"></span></span>
+                      <span class="f13-dword f13-dw-warn">偏高</span>
+                    </div>
+                    <div class="f13-dbar" id="f13-db4">
+                      <span class="f13-dlabel">假日</span>
+                      <span class="f13-dtrack"><span class="f13-dfill f13-df-ok" id="f13-fb4" style="width: 34%"></span></span>
+                      <span class="f13-dword f13-dw-ok">正常</span>
+                    </div>
+                    <div class="f13-dbar" id="f13-db5">
+                      <span class="f13-dlabel">代班</span>
+                      <span class="f13-dtrack"><span class="f13-dfill f13-df-ok" id="f13-fb5" style="width: 40%"></span></span>
+                      <span class="f13-dword f13-dw-ok">正常</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="f13-srow" id="f13-s1">
+                  <div class="f13-prow" id="f13-p1">
+                    <div class="f13-tr" id="f13-tr1">
+                      <span class="f13-name">N-01</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="f13-srow" id="f13-s2">
+                  <div class="f13-prow" id="f13-p2">
+                    <div class="f13-tr" id="f13-tr2">
+                      <span class="f13-name">N-02</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="f13-srow" id="f13-s3">
+                  <div class="f13-prow" id="f13-p3">
+                    <div class="f13-tr" id="f13-tr3">
+                      <span class="f13-name">N-03</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-warn"></span><span class="f13-hi">偏高</span></span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-warn"></span><span class="f13-hi">偏高</span></span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-warn"></span><span class="f13-hi">偏高</span></span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="f13-srow" id="f13-s4">
+                  <div class="f13-prow" id="f13-p4">
+                    <div class="f13-tr" id="f13-tr4">
+                      <span class="f13-name">N-04</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="f13-srow" id="f13-s5">
+                  <div class="f13-prow" id="f13-p5">
+                    <div class="f13-tr" id="f13-tr5">
+                      <span class="f13-name">N-05</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-ok"></span>正常</span>
+                      <span class="f13-cell"><span class="f13-dot f13-dot-warn"></span><span class="f13-hi">偏高</span></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ✓ 完成卡 -->
+              <div id="f13-done" data-layout-allow-overlap>
+                <span class="f13-done-ico" data-layout-allow-overlap>
+                  <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+                    <path d="M5.5 13.8l5 5L20.5 8" stroke="#117a58" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </span>
+                <span class="f13-done-text" data-layout-allow-overlap>高負荷名單在手</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ripple rings（DOM 常駐、scale 0） -->
+          <div class="f13-rip" id="f13-rip1" data-layout-allow-overlap></div>
+          <div class="f13-rip" id="f13-rip2" data-layout-allow-overlap></div>
+
+          <!-- 品牌游標 -->
+          <div id="f13-cursor" data-layout-allow-overlap>
+            <svg width="30" height="30" viewBox="0 0 24 24" style="display: block; margin: -2px 0 0 -2px">
+              <path d="M2 2 L2 18.2 L7.5 13.6 L10.9 21 L14 19.5 L10.7 12.3 L18 12 Z" fill="#4060ef" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- overlay above camera -->
+      <div id="f13-overlay">
+        <div id="f13-task" data-layout-allow-overlap>
+          <span class="f13-task-tick" data-layout-allow-overlap></span>
+          <span class="f13-task-text" data-layout-allow-overlap>任務・盤留任風險</span>
+        </div>
+
+        <div class="f13-chip" id="f13-chip1" data-layout-allow-overlap>
+          <span class="f13-chip-num" data-layout-allow-overlap>1</span><span class="f13-chip-text" data-layout-allow-overlap>開雷達</span>
+        </div>
+        <div class="f13-chip" id="f13-chip2" data-layout-allow-overlap>
+          <span class="f13-chip-num" data-layout-allow-overlap>2</span><span class="f13-chip-text" data-layout-allow-overlap>負荷排序</span>
+        </div>
+        <div class="f13-chip" id="f13-chip3" data-layout-allow-overlap>
+          <span class="f13-chip-num" data-layout-allow-overlap>3</span><span class="f13-chip-text" data-layout-allow-overlap>點開明細</span>
+        </div>
+        <div class="f13-chip" id="f13-chipok" data-layout-allow-overlap>
+          <span class="f13-chip-num f13-num-ok" data-layout-allow-overlap>
+            <svg width="15" height="15" viewBox="0 0 18 18" fill="none">
+              <path d="M4 9.4l3.4 3.4L14 5.6" stroke="#ffffff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span><span class="f13-chip-text" data-layout-allow-overlap>名單在手</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      /* -- Scene 1 (0–1.35s)：外框落定、任務卡、步驟①、雷達表 waterfall -- */
+      tl.fromTo("#f13-window", { y: 56, opacity: 0, scale: 0.985 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "power3.out" }, 0);
+      tl.fromTo("#f13-task", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power2.out" }, 0.1);
+      tl.fromTo("#f13-title", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power3.out" }, 0.28);
+      tl.fromTo("#f13-hair", { scaleX: 0, opacity: 1 }, { scaleX: 1, opacity: 1, duration: 0.45, ease: "power2.out", transformOrigin: "0% 50%" }, 0.36);
+      tl.fromTo("#f13-sortbtn", { y: -10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, 0.42);
+      tl.fromTo("#f13-chip1", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.5);
+      /* 表格 cascade（waterfall：set 二值 opacity＋power4 whip、間距遞減） */
+      tl.set("#f13-thead", { opacity: 1, y: 50 }, 0.5);
+      tl.to("#f13-thead", { y: 0, duration: 0.17, ease: "power4.out" }, 0.5);
+      tl.set("#f13-s1", { opacity: 1, y: 44 }, 0.68);
+      tl.to("#f13-s1", { y: 0, duration: 0.15, ease: "power4.out" }, 0.68);
+      tl.set("#f13-s2", { opacity: 1, y: 42 }, 0.84);
+      tl.to("#f13-s2", { y: 0, duration: 0.14, ease: "power4.out" }, 0.84);
+      tl.set("#f13-s3", { opacity: 1, y: 42 }, 0.98);
+      tl.to("#f13-s3", { y: 0, duration: 0.14, ease: "power4.out" }, 0.98);
+      tl.set("#f13-s4", { opacity: 1, y: 40 }, 1.1);
+      tl.to("#f13-s4", { y: 0, duration: 0.13, ease: "power4.out" }, 1.1);
+      tl.set("#f13-s5", { opacity: 1, y: 40 }, 1.21);
+      tl.to("#f13-s5", { y: 0, duration: 0.13, ease: "power4.out" }, 1.21);
+
+      /* -- Scene 2 (0.45–2.4s)：游標 → 「負荷排序」、點擊（sfx click @1.2 local）、列重排 -- */
+      tl.set("#f13-cursor", { x: 1560, y: 700 }, 0);
+      tl.to("#f13-cursor", { opacity: 1, duration: 0.2, ease: "power1.out" }, 0.35);
+      tl.to("#f13-cursor", { x: 1449, y: 228, duration: 0.62, ease: "power2.inOut" }, 0.45);
+      tl.to("#f13-cursor", { scale: 0.85, duration: 0.08, ease: "power2.in", transformOrigin: "10% 10%" }, 1.2);
+      tl.to("#f13-cursor", { scale: 1, duration: 0.14, ease: "power2.out", transformOrigin: "10% 10%" }, 1.28);
+      tl.to("#f13-sortbtn", { scale: 0.95, duration: 0.08, ease: "power2.in", transformOrigin: "50% 50%" }, 1.2);
+      tl.to("#f13-sortbtn", { scale: 1, duration: 0.14, ease: "power2.out", transformOrigin: "50% 50%" }, 1.28);
+      tl.fromTo("#f13-rip1", { scale: 0, opacity: 1 }, { scale: 3.2, opacity: 0, duration: 0.55, ease: "power2.out", immediateRender: false }, 1.24);
+      tl.to("#f13-sortbtn", { backgroundColor: "#edf1fe", borderColor: "rgba(64, 96, 239, 0.55)", duration: 0.25, ease: "power1.out" }, 1.3);
+      tl.to("#f13-sortbtn-label", { color: "#3350dd", duration: 0.25, ease: "power1.out" }, 1.3);
+      /* 列重排：N-03 浮上第一列（sort 位移各列、輕微階梯錯開） */
+      tl.to("#f13-s3", { y: -104, duration: 0.75, ease: "power2.inOut" }, 1.45);
+      tl.to("#f13-s5", { y: -156, duration: 0.72, ease: "power2.inOut" }, 1.5);
+      tl.to("#f13-s1", { y: 104, duration: 0.7, ease: "power2.inOut" }, 1.54);
+      tl.to("#f13-s2", { y: 104, duration: 0.7, ease: "power2.inOut" }, 1.58);
+      tl.to("#f13-s4", { y: 52, duration: 0.68, ease: "power2.inOut" }, 1.62);
+      tl.fromTo("#f13-chip2", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 1.7);
+      /* N-03 落位後單次 bg 閃示（兩段 tween，非 yoyo） */
+      tl.to("#f13-tr3", { backgroundColor: "rgba(147, 96, 10, 0.07)", duration: 0.3, ease: "sine.in" }, 2.35);
+      tl.to("#f13-tr3", { backgroundColor: "#ffffff", duration: 0.4, ease: "sine.out" }, 2.65);
+      /* camera A：輕推近 N-03 首列 */
+      tl.to("#f13-zoom-outer", { scale: 1.12, duration: 0.85, ease: "power2.inOut" }, 2.75);
+      tl.to("#f13-zoom-inner", { x: -34, y: 198, duration: 0.85, ease: "power2.inOut" }, 2.75);
+
+      /* -- Scene 3 (4.05–6.6s)：游標點 N-03 列、明細卡向下展開（anchored-layout-expand） -- */
+      tl.to("#f13-cursor", { x: 994, y: 342, duration: 0.6, ease: "power2.inOut" }, 4.05);
+      tl.to("#f13-cursor", { scale: 0.85, duration: 0.08, ease: "power2.in", transformOrigin: "10% 10%" }, 4.75);
+      tl.to("#f13-cursor", { scale: 1, duration: 0.14, ease: "power2.out", transformOrigin: "10% 10%" }, 4.83);
+      tl.to("#f13-tr3", { scale: 0.985, duration: 0.08, ease: "power2.in", transformOrigin: "50% 50%" }, 4.75);
+      tl.to("#f13-tr3", { scale: 1, duration: 0.14, ease: "power2.out", transformOrigin: "50% 50%" }, 4.83);
+      tl.fromTo("#f13-rip2", { scale: 0, opacity: 1 }, { scale: 3.2, opacity: 0, duration: 0.55, ease: "power2.out", immediateRender: false }, 4.79);
+      tl.fromTo("#f13-chip3", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 4.9);
+      /* 展開：sheet 與被推列共乘一條 tween（function-based from/to，貼合不裂縫） */
+      tl.fromTo(
+        ["#f13-dsheet", "#f13-p5", "#f13-p1", "#f13-p2", "#f13-p4"],
+        {
+          y: function (i) {
+            return i === 0 ? -170 : 0;
+          },
+        },
+        {
+          y: function (i) {
+            return i === 0 ? 0 : 170;
+          },
+          duration: 0.6,
+          ease: "power3.out",
+        },
+        4.95
+      );
+      /* camera B：涵蓋 N-03 列＋明細卡 */
+      tl.to("#f13-zoom-outer", { scale: 1.15, duration: 0.9, ease: "power2.inOut" }, 5.05);
+      tl.to("#f13-zoom-inner", { x: -34, y: 113, duration: 0.9, ease: "power2.inOut" }, 5.05);
+      /* 明細列 fade 進場（展開 25% 後開始）＋五維量條依序填滿（stat fill） */
+      tl.fromTo("#f13-db1", { opacity: 0 }, { opacity: 1, duration: 0.26, ease: "power2.out" }, 5.15);
+      tl.fromTo("#f13-db2", { opacity: 0 }, { opacity: 1, duration: 0.26, ease: "power2.out" }, 5.21);
+      tl.fromTo("#f13-db3", { opacity: 0 }, { opacity: 1, duration: 0.26, ease: "power2.out" }, 5.27);
+      tl.fromTo("#f13-db4", { opacity: 0 }, { opacity: 1, duration: 0.26, ease: "power2.out" }, 5.33);
+      tl.fromTo("#f13-db5", { opacity: 0 }, { opacity: 1, duration: 0.26, ease: "power2.out" }, 5.39);
+      tl.fromTo("#f13-fb1", { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: "power3.out" }, 5.35);
+      tl.fromTo("#f13-fb2", { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: "power3.out" }, 5.48);
+      tl.fromTo("#f13-fb3", { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: "power3.out" }, 5.61);
+      tl.fromTo("#f13-fb4", { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: "power3.out" }, 5.74);
+      tl.fromTo("#f13-fb5", { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: "power3.out" }, 5.87);
+      /* 游標讓位 */
+      tl.to("#f13-cursor", { x: 1420, y: 560, duration: 0.7, ease: "power2.inOut" }, 5.6);
+
+      /* -- Scene 4 (6.7–7.4s)：VO「誰快撐不住」——三個偏高詞逐一輕脈衝（兩段 tween） -- */
+      tl.to("#f13-db1 .f13-dword", { scale: 1.12, duration: 0.16, ease: "sine.in", transformOrigin: "50% 50%" }, 6.7);
+      tl.to("#f13-db1 .f13-dword", { scale: 1, duration: 0.2, ease: "sine.out", transformOrigin: "50% 50%" }, 6.86);
+      tl.to("#f13-db2 .f13-dword", { scale: 1.12, duration: 0.16, ease: "sine.in", transformOrigin: "50% 50%" }, 6.95);
+      tl.to("#f13-db2 .f13-dword", { scale: 1, duration: 0.2, ease: "sine.out", transformOrigin: "50% 50%" }, 7.11);
+      tl.to("#f13-db3 .f13-dword", { scale: 1.12, duration: 0.16, ease: "sine.in", transformOrigin: "50% 50%" }, 7.2);
+      tl.to("#f13-db3 .f13-dword", { scale: 1, duration: 0.2, ease: "sine.out", transformOrigin: "50% 50%" }, 7.36);
+
+      /* -- Scene 5 (7.55–10.4s)：拉回全景（名單在手）、✓ 完成卡 slam＋✓ 步驟籤、安靜收尾 -- */
+      tl.to("#f13-zoom-outer", { scale: 1, duration: 0.85, ease: "power2.inOut" }, 7.55);
+      tl.to("#f13-zoom-inner", { x: 0, y: 0, duration: 0.85, ease: "power2.inOut" }, 7.55);
+      tl.fromTo(
+        "#f13-done",
+        { y: -30, scale: 1.15, opacity: 0, filter: "blur(7px)" },
+        { y: 0, scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.34, ease: "power4.out" },
+        8.4
+      );
+      tl.fromTo("#f13-chipok", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 8.52);
+      tl.to("#f13-zoom-outer", { scale: 1.012, duration: 1.6, ease: "sine.out" }, 8.8);
+
+      window.__timelines["13-t8-retention"] = tl;
+    })();
+  </script>
+</template>

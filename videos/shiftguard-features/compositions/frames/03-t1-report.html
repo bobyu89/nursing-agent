@@ -1,0 +1,593 @@
+<template>
+  <div id="root" data-composition-id="03-t1-report" data-width="1920" data-height="1080" data-duration="11.8">
+    <!-- track 0: full-bleed light canvas -->
+    <div id="f03-bg" class="clip" data-start="0" data-duration="11.8" data-track-index="0"></div>
+
+    <!-- track 1: camera layer carrying the LINE recreation panel -->
+    <div id="f03-cam" class="clip" data-start="0" data-duration="11.8" data-track-index="1">
+      <div id="f03-camzoom">
+        <div id="f03-panel">
+          <!-- Scene 1: user bubble, typed character-by-character (discrete-text-sequence) -->
+          <div id="f03-user">
+            <span id="f03-typed"></span><span id="f03-cursorbar"></span>
+          </div>
+
+          <!-- 守守：機器人頭像（官方 logo 原樣內嵌；mascot 漸層不受禁漸層約束） -->
+          <div id="f03-avatar" aria-hidden="true">
+            <svg viewBox="0 0 64 64">
+              <defs>
+                <radialGradient id="f03-sg-fur" cx="50%" cy="26%" r="90%">
+                  <stop offset="0%" stop-color="#fffdf6" />
+                  <stop offset="100%" stop-color="#f3ecdb" />
+                </radialGradient>
+              </defs>
+              <circle cx="14.5" cy="15" r="9.2" fill="url(#f03-sg-fur)" />
+              <circle cx="49.5" cy="15" r="9.2" fill="url(#f03-sg-fur)" />
+              <circle cx="15.5" cy="16" r="4.8" fill="#d9d4c8" />
+              <circle cx="48.5" cy="16" r="4.8" fill="#d9d4c8" />
+              <path d="M32 9 C48.5 9 58 22 58 38 C58 53 47 61.5 32 61.5 C17 61.5 6 53 6 38 C6 22 15.5 9 32 9 Z" fill="url(#f03-sg-fur)" />
+              <ellipse cx="32" cy="45" rx="11.5" ry="9" fill="#e6e1d4" />
+              <circle cx="22.5" cy="33.5" r="2.9" fill="#16233a" />
+              <circle cx="41.5" cy="33.5" r="2.9" fill="#16233a" />
+              <circle cx="23.5" cy="32.5" r="1" fill="#ffffff" />
+              <circle cx="42.5" cy="32.5" r="1" fill="#ffffff" />
+              <rect x="27.4" y="39.2" width="9.2" height="5.6" rx="2.8" fill="#16233a" />
+              <path d="M28.5 49.5 Q32 52.5 35.5 49.5" fill="none" stroke="#16233a" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </div>
+
+          <!-- Scene 2 working state: typing dots — the pulse dies the instant the ack lands -->
+          <div id="f03-dots">
+            <i class="f03-dot"></i><i class="f03-dot"></i><i class="f03-dot"></i>
+          </div>
+
+          <!-- Scene 2 receipt: bot ack card, rows light up one by one -->
+          <div id="f03-ack">
+            <div class="f03-ack-title">【班守 ShiftGuard】已收到缺班通報，解析如下：</div>
+            <div class="f03-ack-rows">
+              <div class="f03-arow"><span class="f03-abar"></span><span class="f03-atext">・日期：8/29（六）</span></div>
+              <div class="f03-arow"><span class="f03-abar"></span><span class="f03-atext">・班別：小夜（15:00–23:00）</span></div>
+              <div class="f03-arow"><span class="f03-abar"></span><span class="f03-atext">・單位：3A 病房</span></div>
+            </div>
+          </div>
+
+          <!-- Scene 4: green completion card — bold check drawn as SVG stroke -->
+          <div id="f03-done">
+            <svg id="f03-donesvg" viewBox="0 0 40 40" aria-hidden="true">
+              <path id="f03-check" d="M8 21 L17 30 L33 11" fill="none" stroke="#117a58" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span class="f03-done-t">通報成立</span>
+          </div>
+
+          <!-- Scene 3: follow-up — LINE quick-reply 圓角膠囊鈕（bot asks back） -->
+          <div id="f03-qr">
+            <div id="f03-qr1" class="f03-qrpill">白班</div>
+            <div id="f03-qr2" class="f03-qrpill">小夜<span id="f03-ring"></span></div>
+            <div id="f03-qr3" class="f03-qrpill">大夜</div>
+          </div>
+
+          <!-- cursor actor: one igniting click on 「小夜」, then it exits -->
+          <div id="f03-pointer" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M2 2 L2 19 L7 14.6 L10.2 21.6 L13.2 20.2 L10 13.4 L16.6 13.2 Z" fill="#16233a" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round" />
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- track 2: flat UI layer — task card, step-chip rail, 示範資料 tag -->
+    <div id="f03-ui" class="clip" data-start="0" data-duration="11.8" data-track-index="2">
+      <div id="f03-task">
+        <span id="f03-task-tick" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M5 12.5 L10 17.5 L19 7" fill="none" stroke="#4060ef" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        </span>
+        <span id="f03-task-t">任務・回報缺班</span>
+      </div>
+      <div id="f03-demo">示範資料</div>
+
+      <!-- step chips accumulate down the left rail, lighting with the action -->
+      <div id="f03-steps">
+        <div id="f03-step1" class="f03-step"><span class="f03-stepnum">1</span><span class="f03-steptext">打一句話</span></div>
+        <div id="f03-step2" class="f03-step"><span class="f03-stepnum">2</span><span class="f03-steptext">系統解析立案</span></div>
+        <div id="f03-step3" class="f03-step"><span class="f03-stepnum">3</span><span class="f03-steptext">按鈕補條件</span></div>
+        <div id="f03-step4" class="f03-step f03-step-done">
+          <span class="f03-stepok"><svg viewBox="0 0 24 24"><path d="M5 12.5 L10 17.5 L19 7" fill="none" stroke="#ffffff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" /></svg></span>
+          <span class="f03-steptext f03-steptext-ok">通報成立</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+    @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+    @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    #root,
+    #root * {
+      box-sizing: border-box;
+    }
+    .clip {
+      position: absolute;
+      inset: 0;
+    }
+    #f03-bg {
+      background: #f3f5fa;
+    }
+    #f03-camzoom {
+      position: absolute;
+      inset: 0;
+      transform-origin: 880px 500px;
+      will-change: transform;
+    }
+
+    /* ---- LINE recreation panel（米白對話區、右綠左白、無狀態列、無 emoji） ---- */
+    #f03-panel {
+      position: absolute;
+      left: 620px;
+      top: 96px;
+      width: 720px;
+      height: 760px;
+      background: #efe9e2;
+      border: 1px solid rgba(22, 35, 58, 0.1);
+      border-radius: 18px;
+      box-shadow: 0 10px 30px rgba(22, 35, 58, 0.06);
+      will-change: transform;
+    }
+
+    /* user bubble — LINE green, white ink（擬真，非品牌色） */
+    #f03-user {
+      position: absolute;
+      top: 26px;
+      right: 26px;
+      width: 46px;
+      overflow: hidden;
+      padding: 13px 16px;
+      background: #06c755;
+      color: #ffffff;
+      font-size: 27px;
+      font-weight: 500;
+      line-height: 36px;
+      border-radius: 18px 18px 6px 18px;
+      white-space: nowrap;
+      transform-origin: 100% 100%;
+      will-change: transform;
+    }
+    #f03-typed {
+      display: inline-block;
+      min-width: 2px;
+    }
+    #f03-cursorbar {
+      display: inline-block;
+      width: 3px;
+      height: 27px;
+      margin-left: 3px;
+      vertical-align: -3px;
+      background: rgba(255, 255, 255, 0.95);
+      opacity: 0;
+    }
+
+    /* 守守頭像 */
+    #f03-avatar {
+      position: absolute;
+      top: 118px;
+      left: 22px;
+      width: 46px;
+      height: 46px;
+      padding: 4px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 50%;
+      will-change: transform;
+    }
+    #f03-avatar svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    #f03-dots {
+      position: absolute;
+      top: 118px;
+      left: 82px;
+      width: 96px;
+      height: 52px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 18px 18px 18px 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      transform-origin: 0% 50%;
+      will-change: transform;
+    }
+    .f03-dot {
+      display: block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #5c6b85;
+    }
+
+    /* bot ack card — white, ink text, hairline, accent-tint row bars */
+    #f03-ack {
+      position: absolute;
+      top: 118px;
+      left: 82px;
+      width: 592px;
+      padding: 18px 20px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 6px 18px 18px 18px;
+      box-shadow: 0 6px 18px rgba(22, 35, 58, 0.05);
+      transform-origin: 0% 0%;
+      will-change: transform;
+      color: #16233a;
+    }
+    .f03-ack-title {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.45;
+      color: #16233a;
+    }
+    .f03-ack-rows {
+      margin-top: 10px;
+    }
+    .f03-arow {
+      position: relative;
+      margin-top: 4px;
+      padding: 4px 8px;
+      font-size: 23px;
+      font-weight: 500;
+      line-height: 30px;
+      color: #16233a;
+      font-variant-numeric: tabular-nums;
+    }
+    .f03-abar {
+      position: absolute;
+      inset: 0;
+      background: #edf1fe;
+      border-radius: 6px;
+      transform-origin: 0% 50%;
+      z-index: 0;
+    }
+    .f03-atext {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* green completion card（ok tint） */
+    #f03-done {
+      position: absolute;
+      top: 356px;
+      left: 82px;
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 24px;
+      background: #e6f6ef;
+      border: 1px solid rgba(17, 122, 88, 0.3);
+      border-radius: 6px 18px 18px 18px;
+      box-shadow: 0 6px 18px rgba(22, 35, 58, 0.05);
+      transform-origin: 0% 0%;
+      will-change: transform;
+    }
+    #f03-donesvg {
+      display: block;
+      width: 36px;
+      height: 36px;
+    }
+    #f03-check {
+      stroke-dasharray: 40;
+      stroke-dashoffset: 40;
+    }
+    .f03-done-t {
+      font-size: 27px;
+      font-weight: 800;
+      color: #117a58;
+      letter-spacing: 0.02em;
+    }
+
+    /* quick-reply 圓角膠囊鈕 */
+    #f03-qr {
+      position: absolute;
+      top: 646px;
+      left: 82px;
+      display: flex;
+      gap: 14px;
+    }
+    .f03-qrpill {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 108px;
+      height: 54px;
+      background: #ffffff;
+      border: 1.5px solid #e4e9f1;
+      border-radius: 999px;
+      box-shadow: 0 4px 12px rgba(22, 35, 58, 0.05);
+      font-size: 22px;
+      font-weight: 700;
+      color: #16233a;
+      transform-origin: 50% 50%;
+      will-change: transform;
+    }
+    #f03-ring {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      border: 3px solid #4060ef;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* cursor actor */
+    #f03-pointer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 30px;
+      height: 30px;
+      z-index: 60;
+      transform-origin: 4px 4px;
+      pointer-events: none;
+      will-change: transform;
+    }
+    #f03-pointer svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ---- flat UI layer ---- */
+    #f03-task {
+      position: absolute;
+      left: 72px;
+      top: 48px;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 16px 24px 15px 20px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 14px;
+      box-shadow: 0 4px 14px rgba(22, 35, 58, 0.05);
+      will-change: transform;
+    }
+    #f03-task-tick {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: #edf1fe;
+    }
+    #f03-task-tick svg {
+      display: block;
+      width: 18px;
+      height: 18px;
+    }
+    #f03-task-t {
+      margin-top: 9px;
+      font-size: 22px;
+      font-weight: 800;
+      color: #16233a;
+      letter-spacing: 0.02em;
+    }
+    #f03-demo {
+      position: absolute;
+      right: 72px;
+      top: 56px;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      color: #5c6b85;
+    }
+
+    /* step-chip rail */
+    #f03-steps {
+      position: absolute;
+      left: 72px;
+      top: 240px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .f03-step {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      height: 56px;
+      padding: 0 22px 0 13px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      box-shadow: 0 4px 14px rgba(22, 35, 58, 0.05);
+      will-change: transform;
+    }
+    .f03-stepnum {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    .f03-steptext {
+      font-size: 21px;
+      font-weight: 700;
+      color: #16233a;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .f03-step-done {
+      background: #e6f6ef;
+      border-color: rgba(17, 122, 88, 0.3);
+    }
+    .f03-stepok {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: #117a58;
+    }
+    .f03-stepok svg {
+      display: block;
+      width: 17px;
+      height: 17px;
+    }
+    .f03-steptext-ok {
+      color: #117a58;
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+      window.__timelines["03-t1-report"] = tl;
+
+      /* VO (global 15.1–25.9 = local 0.3–11.1):
+         「第一件事，回報缺班。打一句話，系統解析立案；
+           沒講清楚的，按鈕補一下就好——全程不用開系統。」
+         SFX local: 0.5 typewriter tick / 4.6 message pop / 9.4 soft ui click */
+
+      /* ============ Scene 1 (0.0–2.8) — panel + typed user bubble ============ */
+      tl.fromTo("#f03-panel", { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" }, 0);
+      tl.fromTo("#f03-task", { x: -18, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 0.1);
+      tl.fromTo("#f03-demo", { opacity: 0 }, { opacity: 0.8, duration: 0.5, ease: "power2.out" }, 0.35);
+      tl.fromTo("#f03-user", { scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.45, ease: "power3.out" }, 0.32);
+
+      /* step chips light with the action and accumulate; previous chip dims */
+      var STEP_AT = [0.5, 3.8, 7.6, 9.8];
+      var stepEls = gsap.utils.toArray(".f03-step");
+      stepEls.forEach(function (s, i) {
+        tl.fromTo(s, { x: -24, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, STEP_AT[i]);
+        if (i > 0) tl.to(stepEls[i - 1], { opacity: 0.55, duration: 0.35, ease: "power2.out" }, STEP_AT[i]);
+      });
+
+      /* discrete-text-sequence — keystroke clusters + word-break pauses.
+         Authored as 1ms micro-tweens (property rendering is seek-mode-proof;
+         zero-duration sets can be skipped and onUpdate callbacks never fire
+         under a suppressed-events seek). Bubble width steps with each state. */
+      var SEQ = [
+        { t: 0.5, text: "我" },
+        { t: 0.68, text: "我明" },
+        { t: 0.85, text: "我明天" },
+        { t: 1.3, text: "我明天小" },
+        { t: 1.47, text: "我明天小夜" },
+        { t: 1.92, text: "我明天小夜沒" },
+        { t: 2.06, text: "我明天小夜沒辦" },
+        { t: 2.2, text: "我明天小夜沒辦法" },
+        { t: 2.35, text: "我明天小夜沒辦法上" },
+        { t: 2.5, text: "我明天小夜沒辦法上班" }
+      ];
+      var typedEl = document.getElementById("f03-typed");
+      SEQ.forEach(function (s) {
+        tl.to(typedEl, { textContent: s.text, duration: 0.001, ease: "none" }, s.t);
+        tl.to("#f03-user", { width: 27 * s.text.length + 44, duration: 0.001, ease: "none" }, s.t);
+      });
+
+      /* cursor blink — deterministic square wave as render-driven micro-tweens */
+      var BLINK = [
+        [0.44, 1], [0.74, 0], [1.04, 1], [1.34, 0],
+        [1.64, 1], [1.94, 0], [2.24, 1], [2.54, 0],
+        [2.62, 1], [2.72, 0]
+      ];
+      BLINK.forEach(function (b) {
+        tl.to("#f03-cursorbar", { opacity: b[1], duration: 0.001, ease: "none" }, b[0]);
+      });
+
+      /* send beat — tiny pulse from the bubble corner */
+      tl.to("#f03-user", { scale: 1.03, duration: 0.09, yoyo: true, repeat: 1, ease: "sine.inOut" }, 2.72);
+
+      /* ============ Scene 2 (2.9–7.0) — the machine works, then the ack cascades ============ */
+      tl.fromTo("#f03-avatar", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(1.6)" }, 2.88);
+      tl.fromTo("#f03-dots", { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: "power3.out" }, 2.88);
+      gsap.utils.toArray(".f03-dot").forEach(function (d, i) {
+        tl.to(d, { y: -5, duration: 0.15, ease: "sine.inOut", yoyo: true, repeat: 7 }, 3.0 + i * 0.08);
+      });
+      /* the pulse dies the instant the receipt lands */
+      tl.to("#f03-dots", { scale: 0.85, opacity: 0, duration: 0.16, ease: "power2.in" }, 4.42);
+
+      tl.fromTo(
+        "#f03-ack",
+        { scale: 0.92, y: 10, opacity: 0 },
+        { scale: 1, y: 0, opacity: 1, duration: 0.5, ease: "power3.out" },
+        4.58
+      );
+
+      /* rows light one by one — arrival + accent-tint flash that fades */
+      var arows = gsap.utils.toArray(".f03-arow");
+      var abars = gsap.utils.toArray(".f03-abar");
+      var ROW_AT = [5.2, 5.75, 6.3];
+      arows.forEach(function (row, i) {
+        tl.fromTo(row.querySelector(".f03-atext"), { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.35, ease: "power3.out" }, ROW_AT[i]);
+        tl.fromTo(abars[i], { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.22, ease: "power2.out" }, ROW_AT[i]);
+        tl.to(abars[i], { opacity: 0, duration: 0.5, ease: "power2.out" }, ROW_AT[i] + 0.55);
+      });
+
+      /* ============ Scene 3 (7.6–9.5) — bot asks back: quick-reply pills + one igniting click ============ */
+      gsap.utils.toArray(".f03-qrpill").forEach(function (p, i) {
+        tl.fromTo(
+          p,
+          { scale: 0.6, y: 10, opacity: 0 },
+          { scale: 1, y: 0, opacity: 1, duration: 0.4, ease: "power3.out" },
+          7.7 + i * 0.2
+        );
+      });
+
+      /* cursor-click-ripple: move → press (cursor+target depress together) → single ring */
+      tl.fromTo("#f03-pointer", { x: 560, y: 720, opacity: 0 }, { opacity: 1, duration: 0.25, ease: "power2.out" }, 8.3);
+      tl.to("#f03-pointer", { x: 254, y: 668, duration: 0.85, ease: "power2.inOut" }, 8.35);
+      tl.to("#f03-pointer", { scale: 0.85, duration: 0.08, ease: "power2.in", yoyo: true, repeat: 1 }, 9.35);
+      tl.to("#f03-qr2", { scale: 0.94, duration: 0.08, ease: "power2.in", yoyo: true, repeat: 1 }, 9.35);
+      /* press state on 「小夜」; the un-chosen pills recede */
+      tl.to("#f03-qr2", { backgroundColor: "#edf1fe", borderColor: "#4060ef", color: "#3350dd", duration: 0.18, ease: "power2.out" }, 9.42);
+      tl.to(["#f03-qr1", "#f03-qr3"], { opacity: 0.45, duration: 0.3, ease: "power2.out" }, 9.48);
+      tl.fromTo(
+        "#f03-ring",
+        { xPercent: -50, yPercent: -50, scale: 0, opacity: 0.9 },
+        { scale: 2.4, opacity: 0, duration: 0.6, ease: "power2.out" },
+        9.44
+      );
+      /* the igniting click done, the cursor exits (blueprint law) */
+      tl.to("#f03-pointer", { opacity: 0, duration: 0.35, ease: "power2.in" }, 9.95);
+
+      /* ============ Scene 4 (9.8–11.8) — 通報成立 + settle ============ */
+      tl.fromTo(
+        "#f03-done",
+        { scale: 0.9, y: 14, opacity: 0 },
+        { scale: 1, y: 0, opacity: 1, duration: 0.5, ease: "power3.out" },
+        9.8
+      );
+      tl.fromTo("#f03-check", { strokeDashoffset: 40 }, { strokeDashoffset: 0, duration: 0.45, ease: "power2.out" }, 9.95);
+
+      /* ONE camera move — payoff push-in toward the completion card, micro-drift to the last frame */
+      tl.fromTo("#f03-camzoom", { scale: 1 }, { scale: 1.045, duration: 1.6, ease: "power2.inOut" }, 9.6);
+      tl.to("#f03-camzoom", { scale: 1.052, duration: 0.6, ease: "none" }, 11.2);
+    })();
+  </script>
+</template>

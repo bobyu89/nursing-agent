@@ -1,0 +1,7 @@
+{
+  "scene": "00-cover",
+  "duration_s": 3.0,
+  "rules": ["waterfall-entry (adapted: exit-only autoAlpha stagger choreography)"],
+  "exit": { "vector": "none — 0 px/s; content fully cleared by 2.80s, last 0.2s is a flat #101b30 canvas", "still_moving": false },
+  "entry": { "vector": "none — 0 px/s; t=0 is the fully static poster frame (holds until 1.30s)", "from_rest": true }
+}

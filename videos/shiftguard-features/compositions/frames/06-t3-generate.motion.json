@@ -1,0 +1,7 @@
+{
+  "scene": "06-t3-generate",
+  "duration_s": 10.0,
+  "rules": ["waterfall-entry", "cursor-click-ripple", "spring-pop-entrance"],
+  "exit": { "vector": "macro push-in (scale 1→1.028, sine.inOut over full 10s) ends at ~0 px/s; last reveal (✓ card) settled by 9.12s", "still_moving": false },
+  "entry": { "vector": "static first frame (push-in starts at 0 velocity); window rises 40px over 0.5s from 0.02s", "from_rest": true }
+}

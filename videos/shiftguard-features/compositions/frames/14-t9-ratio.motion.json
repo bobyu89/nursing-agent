@@ -1,0 +1,19 @@
+{
+  "scene": "14-t9-ratio",
+  "duration_s": 12,
+  "rules": [
+    "control-target-sync",
+    "counting-dynamic-scale",
+    "cursor-click-ripple",
+    "coordinate-target-zoom",
+    "multi-phase-camera"
+  ],
+  "exit": {
+    "vector": "camera micro push settling at scale 1.018 via sine.inOut ending exactly at 12.0s, ~0 px/s; all elements landed",
+    "still_moving": false
+  },
+  "entry": {
+    "vector": "platform window rising from y+56 at ~305 px/s upward at first frame (power3.out, 0.55s); ground static",
+    "from_rest": false
+  }
+}

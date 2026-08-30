@@ -1,0 +1,672 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+    @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+    @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+    /* ============ 15-t10-sandbox — 任務⑩試一次政策改動（11.0s） ============ */
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      color: #16233a;
+      -webkit-font-smoothing: antialiased;
+    }
+    #f15-bg,
+    #f15-main {
+      position: absolute;
+      inset: 0;
+    }
+    #f15-bg {
+      background: #f3f5fa;
+    }
+    #f15-main {
+      overflow: hidden;
+    }
+
+    /* ---- virtual camera ---- */
+    #f15-zoom-outer {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+      will-change: transform;
+    }
+    #f15-zoom-inner {
+      position: absolute;
+      inset: 0;
+      will-change: transform;
+    }
+
+    /* ---- platform window ---- */
+    #f15-window {
+      position: absolute;
+      left: 350px;
+      top: 150px;
+      width: 1240px;
+      height: 600px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow:
+        0 24px 48px rgba(22, 35, 58, 0.08),
+        0 2px 8px rgba(22, 35, 58, 0.05);
+      overflow: hidden;
+      opacity: 0;
+    }
+    .f15-toolbar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      height: 46px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e4e9f1;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      z-index: 3;
+    }
+    .f15-pill {
+      width: 300px;
+      height: 20px;
+      border-radius: 10px;
+      background: #eef2f7;
+      border: 1px solid #e4e9f1;
+    }
+    .f15-demo-tag {
+      margin-left: auto;
+      font-size: 17px;
+      letter-spacing: 0.08em;
+      color: #5c6b85;
+      background: #f8fafc;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      padding: 2px 14px;
+      line-height: 24px;
+    }
+    .f15-sidebar {
+      position: absolute;
+      left: 0;
+      top: 46px;
+      bottom: 0;
+      width: 68px;
+      background: #f8fafc;
+      border-right: 1px solid #eef2f7;
+      z-index: 2;
+    }
+    .f15-side-item {
+      position: absolute;
+      left: 24px;
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: #eef2f7;
+    }
+    .f15-side-item.f15-active {
+      background: #edf1fe;
+      border: 1px solid rgba(64, 96, 239, 0.55);
+    }
+
+    /* ---- parameter row（政策沙盤參數） ---- */
+    #f15-param {
+      position: absolute;
+      left: 100px;
+      top: 140px;
+      width: 640px;
+      height: 76px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(22, 35, 58, 0.04);
+      opacity: 0;
+    }
+    .f15-param-label {
+      position: absolute;
+      left: 24px;
+      top: 0;
+      line-height: 76px;
+      font-size: 23px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+    #f15-valbox {
+      position: absolute;
+      left: 400px;
+      top: 14px;
+      width: 158px;
+      height: 48px;
+      background: #ffffff;
+      border: 1.5px solid #cfd8e6;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+    }
+    #f15-vnum {
+      display: inline-block;
+      font-size: 28px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      min-width: 36px;
+      text-align: right;
+      transform-origin: 50% 50%;
+    }
+    .f15-vunit {
+      font-size: 17px;
+      font-weight: 600;
+      color: #47566f;
+      letter-spacing: 0.04em;
+    }
+    #f15-stepper {
+      position: absolute;
+      left: 570px;
+      top: 14px;
+      width: 36px;
+      height: 48px;
+      border: 1.5px solid #cfd8e6;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #ffffff;
+    }
+    .f15-stephalf {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #f15-stepup { top: 0; }
+    #f15-stepdown { top: 24px; border-top: 1px solid #eef2f7; }
+
+    /* ---- 試算 button + note + progress ---- */
+    #f15-btn {
+      position: absolute;
+      left: 100px;
+      top: 252px;
+      width: 200px;
+      height: 54px;
+      border-radius: 12px;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.3em;
+      text-indent: 0.3em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+    }
+    #f15-note {
+      position: absolute;
+      left: 324px;
+      top: 252px;
+      height: 54px;
+      display: flex;
+      align-items: center;
+      font-size: 19px;
+      font-weight: 600;
+      color: #5c6b85;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+      transform-origin: 0% 50%;
+      opacity: 0;
+    }
+    #f15-prog {
+      position: absolute;
+      left: 100px;
+      top: 336px;
+      width: 300px;
+      height: 6px;
+      border-radius: 3px;
+      background: #eef2f7;
+      overflow: hidden;
+      opacity: 0;
+    }
+    #f15-runner {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 90px;
+      height: 6px;
+      border-radius: 3px;
+      background: #4060ef;
+    }
+
+    /* ---- skeleton parameter rows ---- */
+    .f15-skel {
+      position: absolute;
+      left: 100px;
+      width: 640px;
+      height: 44px;
+      background: #fbfcfe;
+      border: 1px solid #eef2f7;
+      border-radius: 12px;
+      opacity: 0;
+    }
+    #f15-skel1 { top: 380px; }
+    #f15-skel2 { top: 436px; }
+    .f15-skb {
+      position: absolute;
+      left: 24px;
+      top: 14px;
+      height: 16px;
+      border-radius: 8px;
+      background: #eef2f7;
+    }
+
+    /* ---- diff result card（平行試算結果） ---- */
+    #f15-result {
+      position: absolute;
+      left: 760px;
+      top: 140px;
+      width: 410px;
+      height: 218px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-left: 6px solid #c92c21;
+      border-radius: 12px;
+      box-shadow: 0 14px 34px rgba(22, 35, 58, 0.09);
+      opacity: 0;
+    }
+    #f15-diffhead {
+      position: absolute;
+      left: 24px;
+      top: 20px;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #c92c21;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      opacity: 0;
+    }
+    .f15-diffrow {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 62px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 24px;
+      opacity: 0;
+    }
+    #f15-diff1 { top: 76px; }
+    #f15-diff2 { top: 140px; }
+    #f15-diffrule {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      top: 139px;
+      height: 1px;
+      background: #eef2f7;
+    }
+    .f15-hchip {
+      display: inline-block;
+      padding: 1px 9px 2px;
+      border-radius: 6px;
+      background: #fdecea;
+      color: #c92c21;
+      font-weight: 800;
+      font-size: 17px;
+      flex: none;
+      font-variant-numeric: tabular-nums;
+      transform-origin: 50% 50%;
+    }
+    .f15-difftext {
+      font-size: 19.5px;
+      font-weight: 600;
+      color: #c92c21;
+      letter-spacing: 0.01em;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    /* ---- ✓ done card ---- */
+    #f15-done {
+      position: absolute;
+      left: 100px;
+      top: 490px;
+      width: 560px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-left: 6px solid #117a58;
+      border-radius: 12px;
+      box-shadow: 0 14px 34px rgba(22, 35, 58, 0.09);
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      opacity: 0;
+      z-index: 5;
+    }
+    .f15-done-ico {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: #e6f6ef;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+    }
+    .f15-done-title {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #117a58;
+      white-space: nowrap;
+    }
+
+    /* ---- ripples + cursor ---- */
+    .f15-rip {
+      position: absolute;
+      border-radius: 50%;
+      border: 2.5px solid #4060ef;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 4;
+    }
+    #f15-rip-step {
+      left: 653px;
+      top: 131px;
+      width: 70px;
+      height: 70px;
+    }
+    #f15-rip-btn {
+      left: 140px;
+      top: 219px;
+      width: 120px;
+      height: 120px;
+    }
+    #f15-cursor {
+      position: absolute;
+      left: 1480px;
+      top: 800px;
+      width: 30px;
+      height: 32px;
+      z-index: 50;
+      pointer-events: none;
+    }
+
+    /* ---- overlay: task card + step chips ---- */
+    #f15-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+    }
+    #f15-tasklabel {
+      position: absolute;
+      left: 96px;
+      top: 52px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 24px 0 16px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow: 0 6px 16px rgba(22, 35, 58, 0.07);
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #16233a;
+      opacity: 0;
+    }
+    .f15-tick {
+      width: 8px;
+      height: 26px;
+      border-radius: 3px;
+      background: #4060ef;
+      flex: none;
+    }
+    .f15-chip {
+      position: absolute;
+      left: 96px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px 0 8px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      box-shadow: 0 4px 12px rgba(22, 35, 58, 0.07);
+      opacity: 0;
+    }
+    #f15-chip1 { top: 552px; }
+    #f15-chip2 { top: 604px; }
+    #f15-chip3 { top: 656px; }
+    #f15-chipd { top: 708px; }
+    .f15-chip-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
+    #f15-chipd .f15-chip-num {
+      background: #117a58;
+    }
+    .f15-chip-text {
+      font-size: 20px;
+      font-weight: 600;
+      color: #16233a;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+  </style>
+
+  <div id="root" data-composition-id="15-t10-sandbox" data-duration="11" data-width="1920" data-height="1080">
+    <!-- full-bleed ground -->
+    <div id="f15-bg" class="clip" data-start="0" data-duration="11" data-track-index="0"></div>
+
+    <div id="f15-main" class="clip" data-start="0" data-duration="11" data-track-index="1">
+      <div id="f15-zoom-outer" data-layout-allow-overflow="">
+        <div id="f15-zoom-inner">
+          <div id="f15-window">
+            <div class="f15-toolbar">
+              <span class="f15-pill"></span>
+              <span class="f15-demo-tag">示範資料</span>
+            </div>
+            <div class="f15-sidebar">
+              <span class="f15-side-item" style="top: 18px"></span>
+              <span class="f15-side-item" style="top: 56px"></span>
+              <span class="f15-side-item" style="top: 94px"></span>
+              <span class="f15-side-item f15-active" style="top: 132px"></span>
+            </div>
+
+            <!-- 參數列：班間休息時間下限 -->
+            <div id="f15-param">
+              <span class="f15-param-label">班間休息時間下限</span>
+              <div id="f15-valbox">
+                <span id="f15-vnum">11</span>
+                <span class="f15-vunit">小時</span>
+              </div>
+              <div id="f15-stepper">
+                <span class="f15-stephalf" id="f15-stepup">
+                  <svg width="14" height="9" viewBox="0 0 14 9" fill="none">
+                    <path d="M2 7l5-5 5 5" stroke="#47566f" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </span>
+                <span class="f15-stephalf" id="f15-stepdown">
+                  <svg width="14" height="9" viewBox="0 0 14 9" fill="none">
+                    <path d="M2 2l5 5 5-5" stroke="#47566f" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </span>
+              </div>
+            </div>
+
+            <!-- 試算 -->
+            <div id="f15-btn">試算</div>
+            <div id="f15-note">平行試算・不動正式班表</div>
+            <div id="f15-prog"><span id="f15-runner"></span></div>
+
+            <!-- skeleton parameter rows -->
+            <div class="f15-skel" id="f15-skel1"><span class="f15-skb" style="width: 190px"></span></div>
+            <div class="f15-skel" id="f15-skel2"><span class="f15-skb" style="width: 150px"></span></div>
+
+            <!-- diff result -->
+            <div id="f15-result">
+              <div id="f15-diffhead">＋ 新增警示 2 筆</div>
+              <div class="f15-diffrow" id="f15-diff1">
+                <span class="f15-hchip" id="f15-h4a">H4</span>
+                <span class="f15-difftext">班間休息不足 ・ N-04 ・ 9/3</span>
+              </div>
+              <div id="f15-diffrule"></div>
+              <div class="f15-diffrow" id="f15-diff2">
+                <span class="f15-hchip" id="f15-h4b">H4</span>
+                <span class="f15-difftext">班間休息不足 ・ N-01 ・ 9/5</span>
+              </div>
+            </div>
+
+            <!-- ✓ done card -->
+            <div id="f15-done">
+              <span class="f15-done-ico">
+                <svg width="25" height="25" viewBox="0 0 26 26" fill="none">
+                  <path d="M5.5 13.8l5 5L20.5 8" stroke="#117a58" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="f15-done-title">影響已量化・有數字再決策</span>
+            </div>
+
+            <div class="f15-rip" id="f15-rip-step"></div>
+            <div class="f15-rip" id="f15-rip-btn"></div>
+          </div>
+
+          <!-- cursor rides inside the camera -->
+          <div id="f15-cursor">
+            <svg width="30" height="32" viewBox="0 0 24 26" fill="none">
+              <path d="M4.5 1.5v19.4l5-4.9 3 7.2 3.4-1.4-3-7.1h7.1z" fill="#16233a" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- overlay above camera -->
+      <div id="f15-overlay">
+        <div id="f15-tasklabel"><span class="f15-tick"></span>任務・政策沙盤</div>
+
+        <div class="f15-chip" id="f15-chip1" data-layout-allow-overlap>
+          <span class="f15-chip-num" data-layout-allow-overlap>1</span><span class="f15-chip-text" data-layout-allow-overlap>調參數</span>
+        </div>
+        <div class="f15-chip" id="f15-chip2" data-layout-allow-overlap>
+          <span class="f15-chip-num" data-layout-allow-overlap>2</span><span class="f15-chip-text" data-layout-allow-overlap>跑沙盤</span>
+        </div>
+        <div class="f15-chip" id="f15-chip3" data-layout-allow-overlap>
+          <span class="f15-chip-num" data-layout-allow-overlap>3</span><span class="f15-chip-text" data-layout-allow-overlap>看新增警示</span>
+        </div>
+        <div class="f15-chip" id="f15-chipd" data-layout-allow-overlap>
+          <span class="f15-chip-num" data-layout-allow-overlap>
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
+              <path d="M4 10.6l4 4L16 6.4" stroke="#ffffff" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span><span class="f15-chip-text" data-layout-allow-overlap>量化</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      /* -- Scene 1 (0–0.6s)：舞台落定——外框、任務卡、參數列、試算鈕、步驟① -- */
+      tl.fromTo("#f15-window", { y: 56, opacity: 0, scale: 0.985 }, { y: 0, opacity: 1, scale: 1, duration: 0.55, ease: "power3.out" }, 0);
+      tl.fromTo("#f15-tasklabel", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power2.out" }, 0.12);
+      tl.fromTo("#f15-param", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.26);
+      tl.fromTo("#f15-btn", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.36, ease: "power2.out" }, 0.38);
+      tl.fromTo(["#f15-skel1", "#f15-skel2"], { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power1.out", stagger: 0.08 }, 0.46);
+      tl.fromTo("#f15-chip1", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.5);
+
+      /* -- Scene 2 (0.55–1.3s)：游標到步進鈕，11 → 12 瞬時跳格（self-conversion snap） -- */
+      /* cursor 起點 (1480,800) → 步進上鍵 (1038,316) */
+      tl.to("#f15-cursor", { x: -442, y: -484, duration: 0.55, ease: "power2.inOut" }, 0.55);
+      tl.to("#f15-cursor", { scale: 0.86, duration: 0.09, ease: "power2.in", yoyo: true, repeat: 1, transformOrigin: "20% 8%" }, 1.14);
+      tl.to("#f15-stepup", { backgroundColor: "#edf1fe", duration: 0.1, ease: "none" }, 1.14);
+      tl.to("#f15-stepup", { backgroundColor: "#ffffff", duration: 0.3, ease: "power1.out" }, 1.28);
+      tl.fromTo("#f15-rip-step", { scale: 0, opacity: 0.85 }, { scale: 2.0, opacity: 0, duration: 0.5, ease: "power2.out", immediateRender: false }, 1.18);
+      /* 值跳格＋彈定＋框線閃示（同拍） */
+      tl.set("#f15-vnum", { textContent: "12" }, 1.2);
+      tl.fromTo("#f15-vnum", { scale: 1.3 }, { scale: 1, duration: 0.32, ease: "power3.out" }, 1.2);
+      tl.to("#f15-valbox", { borderColor: "#4060ef", duration: 0.14, ease: "power1.out" }, 1.2);
+      tl.to("#f15-valbox", { borderColor: "#cfd8e6", duration: 0.4, ease: "power1.out" }, 1.7);
+
+      /* -- Scene 3 (1.3–3.5s)：按「試算」（sfx click @1.8）→ 平行試算提示＋進度短掃 -- */
+      /* → 試算鈕中心 (550,429) */
+      tl.to("#f15-cursor", { x: -930, y: -371, duration: 0.42, ease: "power3.out" }, 1.36);
+      tl.to("#f15-cursor", { scale: 0.86, duration: 0.09, ease: "power2.in", yoyo: true, repeat: 1, transformOrigin: "20% 8%" }, 1.8);
+      tl.to("#f15-btn", { scale: 0.955, duration: 0.089, ease: "power2.in" }, 1.8);
+      tl.to("#f15-btn", { scale: 1, duration: 0.24, ease: "back.out(3)" }, 1.89);
+      tl.to("#f15-btn", { backgroundColor: "#3350dd", duration: 0.09, ease: "none" }, 1.8);
+      tl.to("#f15-btn", { backgroundColor: "#4060ef", duration: 0.3, ease: "power1.out" }, 1.92);
+      tl.fromTo("#f15-rip-btn", { scale: 0, opacity: 0.95 }, { scale: 3.0, opacity: 0, duration: 0.6, ease: "power2.out", immediateRender: false }, 1.84);
+      tl.to("#f15-cursor", { x: -904, y: -335, duration: 0.3, ease: "power2.out" }, 2.15);
+      tl.fromTo("#f15-chip2", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 2.0);
+      tl.fromTo("#f15-note", { y: 6, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, 2.0);
+      /* progress shimmer：純色滑塊兩趟（無漸層） */
+      tl.to("#f15-prog", { opacity: 1, duration: 0.18, ease: "none" }, 2.02);
+      tl.fromTo("#f15-runner", { x: -90 }, { x: 310, duration: 0.62, ease: "power1.inOut", immediateRender: false }, 2.08);
+      tl.fromTo("#f15-runner", { x: -90 }, { x: 310, duration: 0.62, ease: "power1.inOut", immediateRender: false }, 2.74);
+      tl.to("#f15-prog", { opacity: 0, duration: 0.18, ease: "power1.in" }, 3.5);
+
+      /* -- Scene 4 (3.55–5.8s)：diff 卡落下，「＋ 新增警示 2 筆」與兩列紅字 waterfall 逐條入 -- */
+      tl.fromTo(
+        "#f15-result",
+        { y: -26, scale: 1.14, opacity: 0, filter: "blur(7px)" },
+        { y: 0, scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.32, ease: "power4.out" },
+        3.55
+      );
+      /* waterfall-entry：binary opacity（set）＋下方單一方向、間距遞減 */
+      tl.set("#f15-diffhead", { opacity: 1, y: 56 }, 3.7);
+      tl.to("#f15-diffhead", { y: 0, duration: 0.18, ease: "power4.out" }, 3.7);
+      tl.set("#f15-diff1", { opacity: 1, y: 48 }, 4.75);
+      tl.to("#f15-diff1", { y: 0, duration: 0.15, ease: "power4.out" }, 4.75);
+      tl.set("#f15-diff2", { opacity: 1, y: 44 }, 5.45);
+      tl.to("#f15-diff2", { y: 0, duration: 0.14, ease: "power4.out" }, 5.45);
+      tl.fromTo("#f15-chip3", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 5.4);
+
+      /* -- Scene 4b (4.55–8.1s)：punch-in 收住參數與 diff（couple 同框）＋微推 HOLD -- */
+      tl.to("#f15-zoom-outer", { scale: 1.2, duration: 1.0, ease: "power3.inOut" }, 4.55);
+      tl.to("#f15-zoom-inner", { x: -140, y: 80, duration: 1.0, ease: "power3.inOut" }, 4.55);
+      tl.to("#f15-zoom-outer", { scale: 1.222, duration: 2.3, ease: "sine.inOut" }, 5.75);
+      /* VO「先看到再決定」：H4 章輕脈衝 */
+      tl.to("#f15-h4a", { scale: 1.12, duration: 0.3, ease: "sine.inOut", yoyo: true, repeat: 1 }, 6.35);
+      /* VO「誠實的答案」：沙盤提示語輕脈衝 */
+      tl.to("#f15-note", { scale: 1.04, duration: 0.3, ease: "sine.inOut", yoyo: true, repeat: 1 }, 7.55);
+
+      /* -- Scene 5 (8.15–9.4s)：拉回全景 → ✓ 完成卡「影響已量化・有數字再決策」＋步驟✓ -- */
+      tl.to("#f15-zoom-outer", { scale: 1, duration: 0.8, ease: "power2.inOut" }, 8.15);
+      tl.to("#f15-zoom-inner", { x: 0, y: 0, duration: 0.8, ease: "power2.inOut" }, 8.15);
+      tl.fromTo(
+        "#f15-done",
+        { y: -30, scale: 1.18, opacity: 0, filter: "blur(7px)" },
+        { y: 0, scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.34, ease: "power4.out" },
+        8.95
+      );
+      tl.fromTo("#f15-chipd", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 9.0);
+
+      /* 尾段安靜微推至 11.0（收在近零速度，等硬切） */
+      tl.to("#f15-zoom-outer", { scale: 1.015, duration: 1.6, ease: "sine.inOut" }, 9.4);
+
+      window.__timelines["15-t10-sandbox"] = tl;
+    })();
+  </script>
+</template>

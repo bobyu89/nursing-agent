@@ -1,0 +1,217 @@
+<template>
+  <div id="root" data-composition-id="19-cta" data-width="1920" data-height="1080" data-duration="5">
+    <style>
+      @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+      @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+      @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+      /* 19-cta — CTA end-card（同 promo F14 文法）：瀏覽器框＋URL＋標準字＋accent 按鈕；
+         動作於前 2.0s 內完成（浮入＋按鈕 spring＋單次 pulse），停留後
+         末 ~0.5s dissolve 收黑——全片唯一 exit。 */
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+      .f19cta-bg {
+        background: #f3f5fa;
+      }
+      .f19cta-stage {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .f19cta-browser {
+        box-sizing: border-box;
+        width: 1160px;
+        height: 620px;
+        margin-bottom: 172px;
+        background: #ffffff;
+        border: 1px solid #e4e9f1;
+        border-radius: 12px;
+        box-shadow: 0 18px 44px rgba(22, 35, 58, 0.08);
+        overflow: hidden;
+        opacity: 0;
+        will-change: transform, opacity;
+      }
+      .f19cta-toolbar {
+        box-sizing: border-box;
+        height: 58px;
+        background: #ffffff;
+        border-bottom: 1px solid #e4e9f1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .f19cta-url {
+        box-sizing: border-box;
+        padding: 8px 26px;
+        background: #f8fafc;
+        border: 1px solid #e4e9f1;
+        border-radius: 8px;
+        font-size: 22px;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        color: #47566f;
+        white-space: nowrap;
+      }
+      .f19cta-viewport {
+        box-sizing: border-box;
+        height: 560px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 52px;
+      }
+      .f19cta-wordmark {
+        font-size: 84px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        line-height: 1.1;
+        color: #16233a;
+        white-space: nowrap;
+        opacity: 0;
+        will-change: transform, opacity;
+      }
+      .f19cta-wm-en {
+        color: #4060ef;
+        margin-left: 0.08em;
+      }
+      .f19cta-cta {
+        position: relative;
+      }
+      .f19cta-glow {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 470px;
+        height: 100px;
+        margin-left: -235px;
+        margin-top: -50px;
+        border-radius: 50px;
+        box-shadow: 0 0 110px 46px rgba(51, 80, 221, 0.55);
+        opacity: 0;
+        z-index: 1;
+      }
+      .f19cta-btn {
+        position: relative;
+        z-index: 2;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 92px;
+        padding: 0 64px;
+        background: #4060ef;
+        color: #ffffff;
+        font-size: 34px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        border-radius: 12px;
+        box-shadow: 0 10px 26px rgba(64, 96, 239, 0.28);
+        transform-origin: 50% 50%;
+        white-space: nowrap;
+        opacity: 0;
+        will-change: transform, opacity;
+      }
+      .f19cta-dark {
+        position: absolute;
+        inset: 0;
+        background: #101b30;
+        opacity: 0;
+      }
+    </style>
+
+    <!-- Full-bleed light canvas (track 0) -->
+    <div id="f19cta-clip-bg" class="clip f19cta-bg" data-start="0" data-duration="5" data-track-index="0"></div>
+
+    <!-- CTA stage (track 1) — minimal browser frame, wordmark + accent button -->
+    <div id="f19cta-clip-stage" class="clip f19cta-stage" data-start="0" data-duration="5" data-track-index="1">
+      <div class="f19cta-browser" id="f19cta-browser">
+        <div class="f19cta-toolbar">
+          <div class="f19cta-url">bobyu89.github.io/nursing-agent</div>
+        </div>
+        <div class="f19cta-viewport">
+          <div class="f19cta-wordmark" id="f19cta-wordmark">
+            <span class="f19cta-wm-zh">班守</span> <span class="f19cta-wm-en">ShiftGuard</span>
+          </div>
+          <div class="f19cta-cta">
+            <div class="f19cta-glow" id="f19cta-glow"></div>
+            <div class="f19cta-btn" id="f19cta-btn">立即體驗示範平台</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Film-final dissolve layer (track 2) — the movie's ONLY exit animation -->
+    <div id="f19cta-clip-dark" class="clip" data-start="0" data-duration="5" data-track-index="2">
+      <div class="f19cta-dark" id="f19cta-dark"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+        var SH_REST = "0 10px 26px rgba(64, 96, 239, 0.28)";
+        var SH_PRESS = "0 3px 10px rgba(64, 96, 239, 0.2)";
+
+        // Scene 1 (0.10–0.80s): 瀏覽器框浮入——calm settle，無過衝。
+        tl.fromTo(
+          "#f19cta-browser",
+          { opacity: 0, y: 56, scale: 0.965 },
+          { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power3.out" },
+          0.1
+        );
+
+        // 標準字於框落定時浮現（VO「換你動手了。」0.3–2.4）。
+        tl.fromTo(
+          "#f19cta-wordmark",
+          { opacity: 0, y: 18 },
+          { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" },
+          0.42
+        );
+
+        // Scene 2 (0.90–1.42s): spring-pop-entrance——按鈕落地。
+        tl.fromTo(
+          "#f19cta-btn",
+          { opacity: 0, scale: 0, y: 26 },
+          { opacity: 1, scale: 1, y: 0, duration: 0.52, ease: "power3.out" },
+          0.9
+        );
+
+        // press-release-spring，僅此一次 pulse：線性下壓 → 相鄰彈性回彈（1.98s 完成）。
+        tl.to(
+          "#f19cta-btn",
+          { scale: 0.96, boxShadow: SH_PRESS, duration: 0.1, ease: "power1.in" },
+          1.44
+        );
+        tl.to(
+          "#f19cta-btn",
+          { scale: 1, boxShadow: SH_REST, duration: 0.44, ease: "back.out(1.4)" },
+          1.54
+        );
+
+        // ambient-glow-bloom（bloom-and-hold，極淡）：光暈與回彈同落。
+        tl.fromTo(
+          "#f19cta-glow",
+          { opacity: 0 },
+          { opacity: 0.3, duration: 0.46, ease: "power2.out" },
+          1.54
+        );
+
+        // Scene 3 (2.0–4.5s): 靜止 CTA hold。末 0.5s：dissolve 收至近黑——
+        // 全片唯一 exit（本幀為最終幀）。
+        tl.to("#f19cta-dark", { opacity: 1, duration: 0.5, ease: "power2.in" }, 4.5);
+
+        window.__timelines["19-cta"] = tl;
+      })();
+    </script>
+  </div>
+</template>

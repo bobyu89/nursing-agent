@@ -1,0 +1,759 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+    @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+    @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+    /* ============ 11-t7-dispatch — 任務⑦跨單位借一個人（14.6s 調度棋盤） ============ */
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      color: #16233a;
+      -webkit-font-smoothing: antialiased;
+    }
+    #f11-bg,
+    #f11-main {
+      position: absolute;
+      inset: 0;
+    }
+    #f11-bg {
+      background: #f3f5fa;
+    }
+    #f11-main {
+      overflow: hidden;
+    }
+
+    /* ---- virtual camera (coordinate-target-zoom: outer scales, inner translates) ---- */
+    #f11-zoom-outer {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+      will-change: transform;
+    }
+    #f11-zoom-inner {
+      position: absolute;
+      inset: 0;
+      will-change: transform;
+    }
+
+    /* ---- platform frame (mock recreation, no traffic lights) ---- */
+    #f11-window {
+      position: absolute;
+      left: 340px;
+      top: 130px;
+      width: 1240px;
+      height: 650px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow:
+        0 24px 48px rgba(22, 35, 58, 0.08),
+        0 2px 8px rgba(22, 35, 58, 0.05);
+      overflow: hidden;
+    }
+    .f11-toolbar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      height: 46px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e4e9f1;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+    }
+    .f11-pill {
+      width: 300px;
+      height: 20px;
+      border-radius: 10px;
+      background: #eef2f7;
+      border: 1px solid #e4e9f1;
+    }
+    .f11-demo-tag {
+      margin-left: auto;
+      font-size: 17px;
+      letter-spacing: 0.08em;
+      color: #5c6b85;
+      background: #f8fafc;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      padding: 2px 14px;
+      line-height: 24px;
+    }
+    .f11-sidebar {
+      position: absolute;
+      left: 0;
+      top: 46px;
+      bottom: 0;
+      width: 68px;
+      background: #f8fafc;
+      border-right: 1px solid #eef2f7;
+    }
+    .f11-side-item {
+      position: absolute;
+      left: 24px;
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: #eef2f7;
+    }
+    .f11-side-item.f11-active {
+      background: #edf1fe;
+      border: 1px solid rgba(64, 96, 239, 0.55);
+    }
+    .f11-screen {
+      position: absolute;
+      left: 68px;
+      top: 46px;
+      right: 0;
+      bottom: 0;
+    }
+
+    /* ---- 調度棋盤（單位×班別） ---- */
+    #f11-board-title {
+      position: absolute;
+      left: 36px;
+      top: 26px;
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      opacity: 0;
+    }
+    #f11-hair {
+      position: absolute;
+      left: 36px;
+      top: 82px;
+      width: 592px;
+      height: 1px;
+      background: #e4e9f1;
+      opacity: 0;
+    }
+    .f11-hrow,
+    .f11-brow {
+      position: absolute;
+      left: 36px;
+      display: flex;
+      gap: 6px;
+      opacity: 0;
+    }
+    #f11-bh {
+      top: 98px;
+      height: 34px;
+    }
+    #f11-br1 {
+      top: 140px;
+    }
+    #f11-br2 {
+      top: 232px;
+    }
+    #f11-br3 {
+      top: 324px;
+    }
+    .f11-ulabel {
+      width: 130px;
+      display: flex;
+      align-items: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: #47566f;
+      font-variant-numeric: tabular-nums;
+    }
+    .f11-htxt {
+      width: 150px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      font-weight: 600;
+      color: #5c6b85;
+      letter-spacing: 0.12em;
+    }
+    .f11-cell {
+      width: 150px;
+      height: 82px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 19px;
+      font-weight: 700;
+    }
+    .f11-c-ok {
+      background: #e6f6ef;
+      border: 1px solid rgba(17, 122, 88, 0.22);
+      color: #117a58;
+    }
+    .f11-c-warn {
+      background: rgba(147, 96, 10, 0.1);
+      border: 1px solid rgba(147, 96, 10, 0.28);
+      color: #93600a;
+    }
+    .f11-c-danger {
+      background: #fdecea;
+      border: 1.5px solid rgba(201, 44, 33, 0.5);
+      color: #c92c21;
+      font-size: 22px;
+      font-weight: 800;
+    }
+    .f11-cdot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex: none;
+    }
+    .f11-d-ok {
+      background: #117a58;
+    }
+    .f11-d-warn {
+      background: #93600a;
+    }
+    .f11-d-danger {
+      background: #c92c21;
+    }
+
+    /* ---- 候選名單面板 ---- */
+    #f11-panel {
+      box-sizing: border-box;
+      position: absolute;
+      left: 640px;
+      top: 96px;
+      width: 496px;
+      height: 340px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow: 0 14px 34px rgba(22, 35, 58, 0.09);
+      padding: 18px 20px;
+      opacity: 0;
+    }
+    #f11-needtag {
+      height: 36px;
+      border-radius: 8px;
+      background: #edf1fe;
+      color: #3350dd;
+      font-size: 15.5px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-variant-numeric: tabular-nums;
+      opacity: 0;
+    }
+    .f11-cand {
+      box-sizing: border-box;
+      position: relative;
+      margin-top: 12px;
+      height: 118px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      padding: 14px 18px 12px;
+      opacity: 0;
+    }
+    .f11-cand-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .f11-cid {
+      font-size: 22px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    .f11-crole {
+      font-size: 16px;
+      color: #47566f;
+      font-weight: 500;
+    }
+    .f11-badges {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+    }
+    .f11-badge {
+      padding: 3px 10px;
+      border-radius: 6px;
+      background: #edf1fe;
+      color: #3350dd;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+    .f11-badge-miss {
+      padding: 3px 10px;
+      border-radius: 6px;
+      background: #fdecea;
+      color: #c92c21;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .f11-gauge {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 16px;
+      opacity: 0;
+    }
+    .f11-gtext {
+      font-size: 13.5px;
+      color: #5c6b85;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .f11-gtrack {
+      position: relative;
+      flex: 1;
+      height: 8px;
+      border-radius: 4px;
+      background: #eef2f7;
+    }
+    .f11-gfill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 62%;
+      border-radius: 4px;
+      background: #117a58;
+      transform-origin: 0% 50%;
+    }
+    .f11-gtick {
+      position: absolute;
+      left: 45%;
+      top: -4px;
+      width: 2px;
+      height: 16px;
+      border-radius: 1px;
+      background: #47566f;
+    }
+    #f11-sel {
+      position: absolute;
+      right: 14px;
+      top: -12px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #4060ef;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 10px rgba(64, 96, 239, 0.35);
+      opacity: 0;
+    }
+
+    /* ---- ✓ 完成卡 ---- */
+    #f11-done {
+      position: absolute;
+      left: 256px;
+      top: 468px;
+      width: 660px;
+      height: 92px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-left: 6px solid #117a58;
+      border-radius: 12px;
+      box-shadow: 0 14px 34px rgba(22, 35, 58, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      opacity: 0;
+    }
+    .f11-done-ico {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #e6f6ef;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+    }
+    .f11-done-text {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #117a58;
+    }
+
+    /* ---- cursor + ripples（世界座標，鏡頭內） ---- */
+    #f11-cursor {
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: 40;
+      pointer-events: none;
+      opacity: 0;
+    }
+    .f11-rip {
+      position: absolute;
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      border: 2.5px solid #4060ef;
+      opacity: 0;
+      z-index: 39;
+      pointer-events: none;
+    }
+    #f11-rip1 {
+      left: 750px;
+      top: 486px;
+    }
+    #f11-rip2 {
+      left: 1241px;
+      top: 342px;
+    }
+
+    /* ---- overlay: 任務卡 + 步驟籤（鏡頭外） ---- */
+    #f11-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+    }
+    #f11-task {
+      position: absolute;
+      left: 96px;
+      top: 58px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 22px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 12px;
+      box-shadow: 0 6px 16px rgba(22, 35, 58, 0.07);
+      opacity: 0;
+    }
+    .f11-task-tick {
+      width: 8px;
+      height: 26px;
+      border-radius: 3px;
+      background: #4060ef;
+      flex: none;
+    }
+    .f11-task-text {
+      font-size: 23px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: #16233a;
+      white-space: nowrap;
+    }
+    .f11-chip {
+      position: absolute;
+      left: 96px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px 0 8px;
+      background: #ffffff;
+      border: 1px solid #e4e9f1;
+      border-radius: 999px;
+      box-shadow: 0 4px 12px rgba(22, 35, 58, 0.07);
+      opacity: 0;
+    }
+    #f11-chip1 {
+      top: 500px;
+    }
+    #f11-chip2 {
+      top: 552px;
+    }
+    #f11-chip3 {
+      top: 604px;
+    }
+    #f11-chip4 {
+      top: 656px;
+    }
+    #f11-chipok {
+      top: 708px;
+    }
+    .f11-chip-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #4060ef;
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .f11-chip-num.f11-num-ok {
+      background: #117a58;
+    }
+    .f11-chip-text {
+      font-size: 20px;
+      font-weight: 600;
+      color: #16233a;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+  </style>
+
+  <div id="root" data-composition-id="11-t7-dispatch" data-duration="14.6" data-width="1920" data-height="1080">
+    <!-- full-bleed ground -->
+    <div id="f11-bg" class="clip" data-start="0" data-duration="14.6" data-track-index="0"></div>
+
+    <div id="f11-main" class="clip" data-start="0" data-duration="14.6" data-track-index="1">
+      <div id="f11-zoom-outer" data-layout-allow-overflow="">
+        <div id="f11-zoom-inner">
+          <div id="f11-window">
+            <div class="f11-toolbar">
+              <span class="f11-pill"></span>
+              <span class="f11-demo-tag">示範資料</span>
+            </div>
+            <div class="f11-sidebar">
+              <span class="f11-side-item" style="top: 18px"></span>
+              <span class="f11-side-item" style="top: 56px"></span>
+              <span class="f11-side-item f11-active" style="top: 94px"></span>
+              <span class="f11-side-item" style="top: 132px"></span>
+            </div>
+
+            <div class="f11-screen">
+              <div id="f11-board-title">調度棋盤</div>
+              <div id="f11-hair"></div>
+
+              <!-- 棋盤：單位×班別 -->
+              <div class="f11-hrow" id="f11-bh">
+                <span class="f11-ulabel"></span>
+                <span class="f11-htxt">白班</span>
+                <span class="f11-htxt">小夜</span>
+                <span class="f11-htxt">大夜</span>
+              </div>
+              <div class="f11-brow" id="f11-br1">
+                <span class="f11-ulabel">MED-3A</span>
+                <span class="f11-cell f11-c-ok"><span class="f11-cdot f11-d-ok"></span>補齊</span>
+                <span class="f11-cell f11-c-warn"><span class="f11-cdot f11-d-warn"></span>吃緊</span>
+                <span class="f11-cell f11-c-warn"><span class="f11-cdot f11-d-warn"></span>吃緊</span>
+              </div>
+              <div class="f11-brow" id="f11-br2">
+                <span class="f11-ulabel">SUR-5B</span>
+                <span class="f11-cell f11-c-ok"><span class="f11-cdot f11-d-ok"></span>補齊</span>
+                <span class="f11-cell f11-c-ok"><span class="f11-cdot f11-d-ok"></span>補齊</span>
+                <span class="f11-cell f11-c-ok"><span class="f11-cdot f11-d-ok"></span>補齊</span>
+              </div>
+              <div class="f11-brow" id="f11-br3">
+                <span class="f11-ulabel">ICU</span>
+                <span class="f11-cell f11-c-ok"><span class="f11-cdot f11-d-ok"></span>補齊</span>
+                <span class="f11-cell f11-c-danger" id="f11-gapcell"><span class="f11-cdot f11-d-danger"></span>缺 1</span>
+                <span class="f11-cell f11-c-ok"><span class="f11-cdot f11-d-ok"></span>補齊</span>
+              </div>
+
+              <!-- 候選名單面板（點紅格後彈出） -->
+              <div id="f11-panel">
+                <div id="f11-needtag">2026-08-08（六）小夜｜ICU｜需 ACLS＋VENT</div>
+
+                <div class="f11-cand" id="f11-cand1" data-layout-allow-overlap>
+                  <div class="f11-cand-top">
+                    <span class="f11-cid">S-03</span>
+                    <span class="f11-crole">資深護理師 N3</span>
+                    <span class="f11-badges">
+                      <span class="f11-badge" id="f11-bA">ACLS</span>
+                      <span class="f11-badge" id="f11-bV">VENT</span>
+                    </span>
+                  </div>
+                  <div class="f11-gauge" id="f11-g1">
+                    <span class="f11-gtext">SUR-5B 借出後仍 ≥ 底線</span>
+                    <span class="f11-gtrack"><span class="f11-gfill" id="f11-g1fill"></span><span class="f11-gtick"></span></span>
+                  </div>
+                  <span id="f11-sel" data-layout-allow-overlap>
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                      <path d="M4 9.4l3.4 3.4L14 5.6" stroke="#ffffff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                </div>
+
+                <div class="f11-cand" id="f11-cand2">
+                  <div class="f11-cand-top">
+                    <span class="f11-cid">S-01</span>
+                    <span class="f11-crole">護理師 N2</span>
+                    <span class="f11-badges">
+                      <span class="f11-badge" id="f11-b1A">ACLS</span>
+                      <span class="f11-badge-miss" id="f11-b1miss">缺 VENT</span>
+                    </span>
+                  </div>
+                  <div class="f11-gauge" id="f11-g2">
+                    <span class="f11-gtext">SUR-5B 借出後仍 ≥ 底線</span>
+                    <span class="f11-gtrack"><span class="f11-gfill" id="f11-g2fill"></span><span class="f11-gtick"></span></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ✓ 完成卡 -->
+              <div id="f11-done" data-layout-allow-overlap>
+                <span class="f11-done-ico">
+                  <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+                    <path d="M5.5 13.8l5 5L20.5 8" stroke="#117a58" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </span>
+                <span class="f11-done-text">守恆檢查通過・借人不加班</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ripple rings（DOM 常駐、scale 0） -->
+          <div class="f11-rip" id="f11-rip1" data-layout-allow-overlap></div>
+          <div class="f11-rip" id="f11-rip2" data-layout-allow-overlap></div>
+
+          <!-- 品牌游標 -->
+          <div id="f11-cursor" data-layout-allow-overlap>
+            <svg width="30" height="30" viewBox="0 0 24 24" style="display: block; margin: -2px 0 0 -2px">
+              <path d="M2 2 L2 18.2 L7.5 13.6 L10.9 21 L14 19.5 L10.7 12.3 L18 12 Z" fill="#4060ef" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- overlay above camera -->
+      <div id="f11-overlay">
+        <div id="f11-task" data-layout-allow-overlap>
+          <span class="f11-task-tick" data-layout-allow-overlap></span>
+          <span class="f11-task-text" data-layout-allow-overlap>任務・跨單位借人</span>
+        </div>
+
+        <div class="f11-chip" id="f11-chip1" data-layout-allow-overlap>
+          <span class="f11-chip-num" data-layout-allow-overlap>1</span><span class="f11-chip-text" data-layout-allow-overlap>開棋盤</span>
+        </div>
+        <div class="f11-chip" id="f11-chip2" data-layout-allow-overlap>
+          <span class="f11-chip-num" data-layout-allow-overlap>2</span><span class="f11-chip-text" data-layout-allow-overlap>點紅格缺口</span>
+        </div>
+        <div class="f11-chip" id="f11-chip3" data-layout-allow-overlap>
+          <span class="f11-chip-num" data-layout-allow-overlap>3</span><span class="f11-chip-text" data-layout-allow-overlap>看資格與餘裕</span>
+        </div>
+        <div class="f11-chip" id="f11-chip4" data-layout-allow-overlap>
+          <span class="f11-chip-num" data-layout-allow-overlap>4</span><span class="f11-chip-text" data-layout-allow-overlap>選定</span>
+        </div>
+        <div class="f11-chip" id="f11-chipok" data-layout-allow-overlap>
+          <span class="f11-chip-num f11-num-ok" data-layout-allow-overlap>
+            <svg width="15" height="15" viewBox="0 0 18 18" fill="none">
+              <path d="M4 9.4l3.4 3.4L14 5.6" stroke="#ffffff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span><span class="f11-chip-text" data-layout-allow-overlap>守恆通過</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      /* -- Scene 1 (0–1.5s)：外框落定、任務卡、步驟①、棋盤 waterfall -- */
+      tl.fromTo("#f11-window", { y: 56, opacity: 0, scale: 0.985 }, { y: 0, opacity: 1, scale: 1, duration: 0.55, ease: "power3.out" }, 0);
+      tl.fromTo("#f11-task", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power2.out" }, 0.12);
+      tl.fromTo("#f11-chip1", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0.5);
+      tl.fromTo("#f11-board-title", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power3.out" }, 0.55);
+      tl.fromTo("#f11-hair", { scaleX: 0, opacity: 1 }, { scaleX: 1, opacity: 1, duration: 0.5, ease: "power2.out", transformOrigin: "0% 50%" }, 0.6);
+      /* 棋盤列 cascade（waterfall：set 二值 opacity ＋ power4 whip、間距遞減） */
+      tl.set("#f11-bh", { opacity: 1, y: 50 }, 0.7);
+      tl.to("#f11-bh", { y: 0, duration: 0.17, ease: "power4.out" }, 0.7);
+      tl.set("#f11-br1", { opacity: 1, y: 46 }, 0.95);
+      tl.to("#f11-br1", { y: 0, duration: 0.15, ease: "power4.out" }, 0.95);
+      tl.set("#f11-br2", { opacity: 1, y: 44 }, 1.15);
+      tl.to("#f11-br2", { y: 0, duration: 0.14, ease: "power4.out" }, 1.15);
+      tl.set("#f11-br3", { opacity: 1, y: 44 }, 1.32);
+      tl.to("#f11-br3", { y: 0, duration: 0.14, ease: "power4.out" }, 1.32);
+
+      /* -- Scene 2 (1.2–2.4s)：游標入場 → 紅格（ICU・小夜）、點擊（sfx click @2.2 local） -- */
+      tl.set("#f11-cursor", { x: 1500, y: 720 }, 0);
+      tl.to("#f11-cursor", { opacity: 1, duration: 0.2, ease: "power1.out" }, 1.2);
+      tl.to("#f11-cursor", { x: 805, y: 541, duration: 0.7, ease: "power2.inOut" }, 1.35);
+      /* 紅格預先吸睛：單次輕脈衝（兩段 tween，非 yoyo） */
+      tl.to("#f11-gapcell", { scale: 1.045, duration: 0.2, ease: "sine.in", transformOrigin: "50% 50%" }, 1.82);
+      tl.to("#f11-gapcell", { scale: 1, duration: 0.17, ease: "sine.out", transformOrigin: "50% 50%" }, 2.02);
+      /* click：游標與目標同步壓下、回彈（cursor-click-ripple） */
+      tl.to("#f11-cursor", { scale: 0.85, duration: 0.079, ease: "power2.in", transformOrigin: "10% 10%" }, 2.2);
+      tl.to("#f11-cursor", { scale: 1, duration: 0.14, ease: "power2.out", transformOrigin: "10% 10%" }, 2.28);
+      tl.to("#f11-gapcell", { scale: 0.95, duration: 0.079, ease: "power2.in", transformOrigin: "50% 50%" }, 2.2);
+      tl.to("#f11-gapcell", { scale: 1, duration: 0.14, ease: "power2.out", transformOrigin: "50% 50%" }, 2.28);
+      tl.fromTo("#f11-rip1", { scale: 0, opacity: 1 }, { scale: 3.4, opacity: 0, duration: 0.6, ease: "power2.out", immediateRender: false }, 2.24);
+      tl.fromTo("#f11-chip2", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 2.4);
+      /* camera A：往紅格與面板中間推近 */
+      tl.to("#f11-zoom-outer", { scale: 1.22, duration: 0.6, ease: "power2.inOut" }, 2.25);
+      tl.to("#f11-zoom-inner", { x: 55, y: 40, duration: 0.6, ease: "power2.inOut" }, 2.25);
+
+      /* -- Scene 3 (2.55–5.5s)：候選面板 spring-pop、需求標示、候選列 cascade、資格徽章 -- */
+      tl.fromTo(
+        "#f11-panel",
+        { scale: 0, opacity: 0 },
+        { scale: 1, opacity: 1, duration: 0.55, ease: "power3.out", transformOrigin: "0% 30%" },
+        2.55
+      );
+      tl.fromTo("#f11-needtag", { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power2.out" }, 2.9);
+      /* camera B：面板置中 */
+      tl.to("#f11-zoom-outer", { scale: 1.12, duration: 0.9, ease: "power2.inOut" }, 3.05);
+      tl.to("#f11-zoom-inner", { x: -336, y: 98, duration: 0.9, ease: "power2.inOut" }, 3.05);
+      tl.set("#f11-cand1", { opacity: 1, y: 46 }, 3.3);
+      tl.to("#f11-cand1", { y: 0, duration: 0.15, ease: "power4.out" }, 3.3);
+      tl.set("#f11-cand2", { opacity: 1, y: 42 }, 3.6);
+      tl.to("#f11-cand2", { y: 0, duration: 0.14, ease: "power4.out" }, 3.6);
+      /* 游標讓位到面板下緣 */
+      tl.to("#f11-cursor", { x: 1150, y: 610, duration: 0.7, ease: "power2.inOut" }, 3.5);
+      /* VO「資格合不合」：S-03 高亮、徽章 pop；S-01 降暗＋缺 VENT 原因 */
+      tl.to("#f11-cand1", { backgroundColor: "#edf1fe", borderColor: "#4060ef", duration: 0.3, ease: "power1.out" }, 4.6);
+      tl.fromTo("#f11-bA", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "power3.out", transformOrigin: "50% 50%" }, 4.7);
+      tl.fromTo("#f11-bV", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "power3.out", transformOrigin: "50% 50%" }, 4.92);
+      tl.fromTo("#f11-b1A", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.32, ease: "power3.out", transformOrigin: "50% 50%" }, 5.1);
+      tl.to("#f11-cand2", { opacity: 0.6, duration: 0.35, ease: "power1.inOut" }, 5.15);
+      tl.fromTo("#f11-b1miss", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.32, ease: "power3.out", transformOrigin: "50% 50%" }, 5.3);
+      tl.fromTo("#f11-chip3", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 5.6);
+
+      /* -- Scene 4 (5.95–7.2s)：VO「借出的單位撐不撐得住」——餘裕列 waterfall＋量條填滿 -- */
+      tl.set("#f11-g1", { opacity: 1, y: 34 }, 5.95);
+      tl.to("#f11-g1", { y: 0, duration: 0.15, ease: "power4.out" }, 5.95);
+      tl.fromTo("#f11-g1fill", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power3.out" }, 6.1);
+      tl.set("#f11-g2", { opacity: 1, y: 32 }, 6.45);
+      tl.to("#f11-g2", { y: 0, duration: 0.14, ease: "power4.out" }, 6.45);
+      tl.fromTo("#f11-g2fill", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power3.out" }, 6.6);
+
+      /* -- Scene 5 (8.6–10.2s)：VO「兩個條件同屏攤開」——拉回全景、資格與餘裕先後強調 -- */
+      tl.to("#f11-zoom-outer", { scale: 1, duration: 1.0, ease: "power2.inOut" }, 8.6);
+      tl.to("#f11-zoom-inner", { x: 0, y: 0, duration: 1.0, ease: "power2.inOut" }, 8.6);
+      tl.to(["#f11-bA", "#f11-bV", "#f11-b1A"], { scale: 1.08, duration: 0.22, ease: "sine.in", transformOrigin: "50% 50%" }, 8.95);
+      tl.to(["#f11-bA", "#f11-bV", "#f11-b1A"], { scale: 1, duration: 0.26, ease: "sine.out", transformOrigin: "50% 50%" }, 9.17);
+      tl.to(["#f11-g1fill", "#f11-g2fill"], { backgroundColor: "#0d8f66", duration: 0.239, ease: "sine.in" }, 9.55);
+      tl.to(["#f11-g1fill", "#f11-g2fill"], { backgroundColor: "#117a58", duration: 0.3, ease: "sine.out" }, 9.79);
+
+      /* -- Scene 6 (11.2–12.4s)：游標選定 S-03（步驟④ 11.9） -- */
+      tl.to("#f11-cursor", { x: 1296, y: 397, duration: 0.6, ease: "power2.inOut" }, 11.2);
+      tl.to("#f11-zoom-outer", { scale: 1.14, duration: 0.8, ease: "power2.inOut" }, 11.35);
+      tl.to("#f11-zoom-inner", { x: -336, y: 143, duration: 0.8, ease: "power2.inOut" }, 11.35);
+      tl.fromTo("#f11-chip4", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 11.9);
+      tl.to("#f11-cursor", { scale: 0.85, duration: 0.079, ease: "power2.in", transformOrigin: "10% 10%" }, 11.95);
+      tl.to("#f11-cursor", { scale: 1, duration: 0.14, ease: "power2.out", transformOrigin: "10% 10%" }, 12.03);
+      tl.to("#f11-cand1", { scale: 0.97, duration: 0.08, ease: "power2.in", transformOrigin: "50% 50%" }, 11.95);
+      tl.to("#f11-cand1", { scale: 1, duration: 0.14, ease: "power2.out", transformOrigin: "50% 50%" }, 12.03);
+      tl.fromTo("#f11-rip2", { scale: 0, opacity: 1 }, { scale: 3.2, opacity: 0, duration: 0.55, ease: "power2.out", immediateRender: false }, 12.0);
+      tl.to("#f11-cand1", { borderColor: "#3350dd", boxShadow: "0 6px 18px rgba(64, 96, 239, 0.25)", duration: 0.3, ease: "power1.out" }, 12.05);
+      tl.fromTo("#f11-sel", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "power3.out", transformOrigin: "50% 50%" }, 12.1);
+
+      /* -- Scene 7 (12.8s)：✓ 完成卡 slam（sfx thump @12.8）＋ ✓ 步驟籤 -- */
+      tl.fromTo(
+        "#f11-done",
+        { y: -30, scale: 1.15, opacity: 0, filter: "blur(7px)" },
+        { y: 0, scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.34, ease: "power4.out" },
+        12.8
+      );
+      tl.fromTo("#f11-chipok", { x: -28, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 12.92);
+
+      /* 尾段安靜推近至 14.6（sine.out 收速歸零，等硬切） */
+      tl.to("#f11-zoom-outer", { scale: 1.148, duration: 1.5, ease: "sine.out" }, 13.1);
+
+      window.__timelines["11-t7-dispatch"] = tl;
+    })();
+  </script>
+</template>

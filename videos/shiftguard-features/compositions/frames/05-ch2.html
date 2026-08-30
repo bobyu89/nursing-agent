@@ -1,0 +1,155 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+    @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+    @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+    /* ============ 05-ch2 — 章節卡・護理長（titlecard-reveal + waterfall-entry, 2.6s） ============ */
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      color: #16233a;
+      -webkit-font-smoothing: antialiased;
+    }
+    .clip {
+      position: absolute;
+      inset: 0;
+    }
+    #f05-bg {
+      background: #f3f5fa;
+    }
+    /* hairline atmosphere — static frame furniture */
+    .f05-hairline {
+      position: absolute;
+      left: 340px;
+      width: 1240px;
+      height: 1px;
+      background: #e4e9f1;
+    }
+    #f05-hl1 {
+      top: 150px;
+    }
+    #f05-hl2 {
+      top: 812px;
+    }
+
+    /* centered chapter group (micro-drift target) */
+    #f05-group {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 340px;
+      text-align: center;
+      transform-origin: 50% 40%;
+      will-change: transform;
+    }
+    #f05-coderow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 26px;
+      height: 46px;
+    }
+    .f05-codeline {
+      width: 64px;
+      height: 2px;
+      border-radius: 1px;
+      background: #4060ef;
+      opacity: 0;
+    }
+    #f05-code {
+      display: inline-block;
+      font-size: 46px;
+      font-weight: 800;
+      letter-spacing: 0.28em;
+      text-indent: 0.28em;
+      color: #4060ef;
+      font-variant-numeric: tabular-nums;
+      opacity: 0;
+    }
+    #f05-title {
+      margin-top: 30px;
+      font-size: 100px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      line-height: 1.15;
+      color: #16233a;
+      white-space: nowrap;
+    }
+    .f05-frag {
+      display: inline-block;
+      opacity: 0;
+    }
+    #f05-sub {
+      display: inline-block;
+      margin-top: 42px;
+      font-size: 30px;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-indent: 0.2em;
+      color: #47566f;
+      opacity: 0;
+    }
+  </style>
+
+  <div id="root" data-composition-id="05-ch2" data-duration="2.6" data-width="1920" data-height="1080">
+    <!-- full-bleed ground -->
+    <div id="f05-bg" class="clip" data-start="0" data-duration="2.6" data-track-index="0"></div>
+
+    <!-- content stage -->
+    <div id="f05-stage" class="clip" data-start="0" data-duration="2.6" data-track-index="1">
+      <span class="f05-hairline" id="f05-hl1"></span>
+      <span class="f05-hairline" id="f05-hl2"></span>
+
+      <div id="f05-group">
+        <div id="f05-coderow">
+          <span class="f05-codeline" id="f05-cline1"></span>
+          <span id="f05-code">02</span>
+          <span class="f05-codeline" id="f05-cline2"></span>
+        </div>
+        <div id="f05-title">
+          <span class="f05-frag" id="f05-t1">第二章</span><span class="f05-frag" id="f05-t2">・護理長</span>
+        </div>
+        <div>
+          <span id="f05-sub">每天的中樞</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+      var F = 1 / 60;
+
+      /* waterfall-entry — one direction (from below), binary opacity via set, shrinking gaps */
+      /* code (light opener) */
+      var t0 = 0.12;
+      tl.set("#f05-code", { opacity: 1, y: 44 }, t0);
+      tl.to("#f05-code", { y: 0, duration: 0.14, ease: "power4.out" }, t0);
+      /* flanking hairlines grow outward from the code */
+      tl.fromTo("#f05-cline1", { scaleX: 0, opacity: 0.5 }, { scaleX: 1, opacity: 0.5, duration: 0.32, ease: "power2.out", transformOrigin: "100% 50%" }, 0.32);
+      tl.fromTo("#f05-cline2", { scaleX: 0, opacity: 0.5 }, { scaleX: 1, opacity: 0.5, duration: 0.32, ease: "power2.out", transformOrigin: "0% 50%" }, 0.32);
+      /* headline split into two fragments — the anchors, biggest travel */
+      var t1 = t0 + 0.14 + 2 * F;
+      tl.set("#f05-t1", { opacity: 1, y: 78 }, t1);
+      tl.to("#f05-t1", { y: 0, duration: 0.18, ease: "power4.out" }, t1);
+      var t2 = t1 + 0.18 - F;
+      tl.set("#f05-t2", { opacity: 1, y: 70 }, t2);
+      tl.to("#f05-t2", { y: 0, duration: 0.16, ease: "power4.out" }, t2);
+      /* subtitle — lightest, snaps in tight */
+      var t3 = t2 + 0.16 - 2 * F;
+      tl.set("#f05-sub", { opacity: 1, y: 44 }, t3);
+      tl.to("#f05-sub", { y: 0, duration: 0.13, ease: "power4.out" }, t3);
+
+      /* allocated stillness — one barely-perceptible drift, landing at zero velocity by 2.6 */
+      tl.to("#f05-group", { scale: 1.007, duration: 1.75, ease: "sine.inOut" }, 0.85);
+
+      window.__timelines["05-ch2"] = tl;
+    })();
+  </script>
+</template>

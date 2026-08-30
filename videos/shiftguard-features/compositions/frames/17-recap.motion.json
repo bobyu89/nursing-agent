@@ -1,0 +1,13 @@
+{
+  "scene": "17-recap",
+  "duration_s": 7.0,
+  "rules": ["spring-pop-entrance", "waterfall-entry", "sine-wave-loop"],
+  "exit": {
+    "vector": "grid container sine float, y passing through 0 moving up at ~9px/s at the final frame (bounded phase tween ends exactly at 7.0s); cards and title at rest",
+    "still_moving": true
+  },
+  "entry": {
+    "vector": "none — first frame fully static (cut in); first card pops at 0.30s",
+    "from_rest": true
+  }
+}

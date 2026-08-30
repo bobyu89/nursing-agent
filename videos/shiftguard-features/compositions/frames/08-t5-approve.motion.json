@@ -1,0 +1,13 @@
+{
+  "scene": "08-t5-approve",
+  "duration_s": 10.8,
+  "rules": ["coordinate-target-zoom", "waterfall-entry", "cursor-click-ripple"],
+  "exit": {
+    "vector": "camera micro-push (scale 1.0->1.016, sine.inOut 9.55-10.8) settles to ~0 px/s at 10.8 — zero-velocity, hard-cut ready",
+    "still_moving": false
+  },
+  "entry": {
+    "vector": "platform window slides up from y+56 (power3.out, 0.55s starting at t=0) — ~305 px/s upward at first frame",
+    "from_rest": false
+  }
+}

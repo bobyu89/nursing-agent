@@ -1,0 +1,7 @@
+{
+  "scene": "03-t1-report",
+  "duration_s": 11.8,
+  "rules": ["discrete-text-sequence", "spring-pop-entrance", "cursor-click-ripple", "svg-path-draw"],
+  "exit": { "vector": "camera micro push-in, scale 1.045→1.052 over final 0.6s (≈0.012 scale/s, ~5–11 px/s outward at panel edge)", "still_moving": true },
+  "entry": { "vector": "LINE panel rising up ~140 px/s (power3.out entrance onset at t=0, from y+26)", "from_rest": false }
+}

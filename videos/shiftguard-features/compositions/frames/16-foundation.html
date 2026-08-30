@@ -1,0 +1,417 @@
+<template>
+  <div id="root" data-composition-id="16-foundation" data-width="1920" data-height="1080" data-duration="7.8">
+    <style>
+      @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+      @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+      @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+      /* 16-foundation — 治理底座巡禮：左＝儀表板三指標（詞語狀態）輕掃，
+         軟切右側規則手冊 H1–H10 勻速捲讀（同 promo F11 文法）。 */
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+        color: #16233a;
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+      .f16fd-bg {
+        background: #f3f5fa;
+      }
+
+      /* ---- 字卡（左欄） ---- */
+      .f16fd-title {
+        position: absolute;
+        left: 140px;
+        top: 150px;
+        font-size: 96px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        line-height: 1.15;
+        color: #16233a;
+        white-space: nowrap;
+      }
+      #f16fd-t-lead,
+      #f16fd-t-accent {
+        display: inline-block;
+        opacity: 0;
+        will-change: transform, opacity;
+      }
+      #f16fd-t-accent {
+        color: #4060ef;
+      }
+      #f16fd-under {
+        position: absolute;
+        left: 432px;
+        top: 273px;
+        width: 390px;
+        height: 10px;
+        border-radius: 5px;
+        background: #4060ef;
+        transform: scaleX(0);
+        transform-origin: left center;
+        will-change: transform;
+      }
+
+      /* ---- 治理儀表板 mini（三張純指標卡，詞語狀態） ---- */
+      .f16fd-dash {
+        position: absolute;
+        left: 132px;
+        top: 372px;
+        width: 576px;
+        height: 484px;
+        padding: 8px;
+        box-sizing: border-box;
+        overflow: hidden;
+      }
+      .f16fd-card {
+        box-sizing: border-box;
+        width: 560px;
+        height: 140px;
+        margin-bottom: 24px;
+        padding: 24px 32px;
+        background: #ffffff;
+        border: 1px solid #e4e9f1;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(22, 35, 58, 0.05);
+        opacity: 0;
+        will-change: transform, opacity;
+      }
+      .f16fd-card-label {
+        font-size: 22px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        color: #5c6b85;
+        line-height: 1;
+      }
+      .f16fd-card-value {
+        margin-top: 14px;
+        font-size: 40px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        color: #16233a;
+        line-height: 1;
+      }
+      #f16fd-sweep {
+        position: absolute;
+        left: 0;
+        top: -30px;
+        width: 150px;
+        height: 544px;
+        background: rgba(64, 96, 239, 0.1);
+        filter: blur(16px);
+        will-change: transform;
+      }
+
+      /* ---- 示範資料壓角 ---- */
+      #f16fd-tag {
+        position: absolute;
+        left: 1652px;
+        top: 42px;
+        padding: 8px 20px;
+        background: #ffffff;
+        border: 1px solid #e4e9f1;
+        border-radius: 999px;
+        font-size: 20px;
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        color: #5c6b85;
+        opacity: 0;
+        will-change: transform, opacity;
+      }
+
+      /* ---- 極簡瀏覽器外框（無紅綠燈）＝規則手冊 ---- */
+      .f16fd-browser {
+        position: absolute;
+        left: 1000px;
+        top: 110px;
+        width: 800px;
+        height: 770px;
+        background: #ffffff;
+        border: 1px solid #e4e9f1;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(22, 35, 58, 0.05);
+        overflow: hidden;
+        opacity: 0;
+        will-change: transform, opacity;
+      }
+      .f16fd-toolbar {
+        height: 56px;
+        background: #f8fafc;
+        border-bottom: 1px solid #e4e9f1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 20px;
+      }
+      .f16fd-addr {
+        height: 32px;
+        padding: 0 26px;
+        background: #ffffff;
+        border: 1px solid #e4e9f1;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        font-size: 17px;
+        letter-spacing: 0.06em;
+        color: #5c6b85;
+      }
+      .f16fd-viewport {
+        position: absolute;
+        top: 57px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        overflow: hidden;
+      }
+      .f16fd-scroll {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 8px 32px 140px;
+        box-sizing: border-box;
+        will-change: transform;
+      }
+      .f16fd-pagehead {
+        height: 75px;
+        padding: 20px 0 18px;
+        line-height: 36px;
+        font-size: 27px;
+        font-weight: 700;
+        color: #16233a;
+        border-bottom: 1px solid #e4e9f1;
+        box-sizing: border-box;
+      }
+
+      /* ---- 規則列 ---- */
+      .f16fd-row {
+        box-sizing: border-box;
+        height: 118px;
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        border-bottom: 1px solid #eef2f7;
+        border-radius: 10px;
+        background-color: rgba(64, 96, 239, 0);
+      }
+      .f16fd-row.f16fd-tall {
+        height: 148px;
+      }
+      .f16fd-chip {
+        flex: 0 0 auto;
+        min-width: 88px;
+        height: 44px;
+        padding: 0 14px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #edf1fe;
+        color: #4060ef;
+        border-radius: 8px;
+        font-size: 21px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+      .f16fd-name {
+        font-size: 30px;
+        font-weight: 600;
+        line-height: 38px;
+        color: #16233a;
+      }
+      .f16fd-basis {
+        margin-top: 5px;
+        font-size: 19px;
+        line-height: 26px;
+        font-weight: 400;
+        color: #5c6b85;
+      }
+      #f16fd-row-h7,
+      #f16fd-row-h10 {
+        will-change: transform;
+      }
+    </style>
+
+    <div id="f16fd-clip-bg" class="clip f16fd-bg" data-start="0" data-duration="7.8" data-track-index="0"></div>
+
+    <!-- 左：字卡＋治理儀表板 mini＋示範資料壓角 -->
+    <div id="f16fd-clip-stage" class="clip" data-start="0" data-duration="7.8" data-track-index="1">
+      <div class="f16fd-title"><span id="f16fd-t-lead">同一塊</span><span id="f16fd-t-accent">治理底座</span></div>
+      <div id="f16fd-under"></div>
+
+      <div class="f16fd-dash" data-layout-allow-overlap="">
+        <div class="f16fd-card" id="f16fd-card-1">
+          <div class="f16fd-card-label">規則通過率</div>
+          <div class="f16fd-card-value">逐班檢核</div>
+        </div>
+        <div class="f16fd-card" id="f16fd-card-2">
+          <div class="f16fd-card-label">決策留痕數</div>
+          <div class="f16fd-card-value">完整歸檔</div>
+        </div>
+        <div class="f16fd-card" id="f16fd-card-3">
+          <div class="f16fd-card-label">主動預警</div>
+          <div class="f16fd-card-value">全天監測</div>
+        </div>
+        <div id="f16fd-sweep" data-layout-allow-overflow=""></div>
+      </div>
+
+      <div id="f16fd-tag">示範資料</div>
+    </div>
+
+    <!-- 右：規則手冊（軟切進場後勻速捲讀，cut 時仍在動） -->
+    <div id="f16fd-clip-book" class="clip" data-start="0" data-duration="7.8" data-track-index="2">
+      <div class="f16fd-browser" id="f16fd-browser">
+        <div class="f16fd-toolbar">
+          <div class="f16fd-addr" data-layout-allow-overlap="">規則手冊</div>
+        </div>
+        <div class="f16fd-viewport">
+          <div class="f16fd-scroll" id="f16fd-scroll" data-layout-allow-overflow="">
+            <div class="f16fd-pagehead">規則手冊</div>
+            <div class="f16fd-row">
+              <div class="f16fd-chip">H1</div>
+              <div><div class="f16fd-name">職務與資格符合</div></div>
+            </div>
+            <div class="f16fd-row">
+              <div class="f16fd-chip">H2</div>
+              <div><div class="f16fd-name">當日未排其他班別</div></div>
+            </div>
+            <div class="f16fd-row">
+              <div class="f16fd-chip">H3</div>
+              <div><div class="f16fd-name">非請假／不可排班狀態</div></div>
+            </div>
+            <div class="f16fd-row">
+              <div class="f16fd-chip">H4</div>
+              <div><div class="f16fd-name">班間休息時間充足</div></div>
+            </div>
+            <div class="f16fd-row">
+              <div class="f16fd-chip">H5</div>
+              <div><div class="f16fd-name">連續上班天數上限</div></div>
+            </div>
+            <div class="f16fd-row">
+              <div class="f16fd-chip">H6</div>
+              <div><div class="f16fd-name">週工時絕對上限</div></div>
+            </div>
+            <div class="f16fd-row f16fd-tall" id="f16fd-row-h7">
+              <div class="f16fd-chip">H7</div>
+              <div>
+                <div class="f16fd-name">雙週例假保障（四週彈性工時）</div>
+                <div class="f16fd-basis">勞動基準法第 36 條第 2 項第 3 款</div>
+              </div>
+            </div>
+            <div class="f16fd-row">
+              <div class="f16fd-chip">H8</div>
+              <div><div class="f16fd-name">四週正常工時總量</div></div>
+            </div>
+            <div class="f16fd-row">
+              <div class="f16fd-chip">H9</div>
+              <div><div class="f16fd-name">四週例假與休息日總量</div></div>
+            </div>
+            <div class="f16fd-row f16fd-tall" id="f16fd-row-h10">
+              <div class="f16fd-chip">H10</div>
+              <div>
+                <div class="f16fd-name">個人限制班別（母性保護等）</div>
+                <div class="f16fd-basis">勞動基準法第 49 條</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+        var F = 1 / 60;
+
+        // Phase 1 (0.08–0.54) — 儀表板三卡 waterfall-entry（binary opacity＋下方 whip）
+        tl.set("#f16fd-card-1", { opacity: 1, y: 70 }, 0.08);
+        tl.to("#f16fd-card-1", { y: 0, duration: 0.18, ease: "power4.out" }, 0.08);
+        var c2 = 0.08 + 0.18 - F;
+        tl.set("#f16fd-card-2", { opacity: 1, y: 56 }, c2);
+        tl.to("#f16fd-card-2", { y: 0, duration: 0.16, ease: "power4.out" }, c2);
+        var c3 = c2 + 0.16 - F;
+        tl.set("#f16fd-card-3", { opacity: 1, y: 48 }, c3);
+        tl.to("#f16fd-card-3", { y: 0, duration: 0.15, ease: "power4.out" }, c3);
+
+        // 示範資料壓角（安靜進場）
+        tl.fromTo(
+          "#f16fd-tag",
+          { opacity: 0, y: -8 },
+          { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" },
+          0.4
+        );
+
+        // Phase 2 (0.35–1.03) — 字卡 waterfall：同一塊 → 治理底座 → 底線
+        tl.set("#f16fd-t-lead", { opacity: 1, y: 80 }, 0.35);
+        tl.to("#f16fd-t-lead", { y: 0, duration: 0.18, ease: "power4.out" }, 0.35);
+        var tAcc = 0.35 + 0.18 + 2 * F;
+        tl.set("#f16fd-t-accent", { opacity: 1, y: 50 }, tAcc);
+        tl.to("#f16fd-t-accent", { y: 0, duration: 0.16, ease: "power4.out" }, tAcc);
+        var tUnd = tAcc + 0.16 - F;
+        tl.fromTo(
+          "#f16fd-under",
+          { scaleX: 0 },
+          { scaleX: 1, duration: 0.32, ease: "power3.out" },
+          tUnd
+        );
+
+        // Phase 3 (1.2–2.2) — 指標一覽輕掃（單趟 light sweep，實心微透靛藍帶，非漸層）
+        tl.fromTo(
+          "#f16fd-sweep",
+          { x: -240, skewX: -14 },
+          { x: 720, skewX: -14, duration: 1.0, ease: "none" },
+          1.2
+        );
+
+        // Phase 4 (2.3–2.9) — 軟切：規則手冊軟性交叉淡入（VO「十條規則攤在手冊裡」）
+        tl.fromTo(
+          "#f16fd-browser",
+          { opacity: 0, y: 26 },
+          { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" },
+          2.3
+        );
+
+        // Phase 4b (2.55–7.8) — viewport-change（pan 形）：內容於靜止外框下勻速上移，
+        // 750px / 5.25s ≈ 142.9px/s，一路捲到底、cut 時仍在動。
+        tl.fromTo(
+          "#f16fd-scroll",
+          { y: 0 },
+          { y: -750, duration: 5.25, ease: "none" },
+          2.55
+        );
+
+        // Phase 5 (4.7–5.3) — H7 經過時輕 pulse（VO「每一條都有法源」；相鄰成對 tween，無 yoyo）
+        tl.to(
+          "#f16fd-row-h7",
+          { backgroundColor: "rgba(64,96,239,0.07)", scale: 1.02, duration: 0.3, ease: "sine.inOut" },
+          4.7
+        );
+        tl.to(
+          "#f16fd-row-h7",
+          { backgroundColor: "rgba(64,96,239,0)", scale: 1, duration: 0.3, ease: "sine.inOut" },
+          5.0
+        );
+
+        // Phase 5b (7.0–7.6) — H10 經過時輕 pulse，捲動不停。
+        tl.to(
+          "#f16fd-row-h10",
+          { backgroundColor: "rgba(64,96,239,0.07)", scale: 1.02, duration: 0.3, ease: "sine.inOut" },
+          7.0
+        );
+        tl.to(
+          "#f16fd-row-h10",
+          { backgroundColor: "rgba(64,96,239,0)", scale: 1, duration: 0.3, ease: "sine.inOut" },
+          7.3
+        );
+
+        window.__timelines["16-foundation"] = tl;
+      })();
+    </script>
+  </div>
+</template>

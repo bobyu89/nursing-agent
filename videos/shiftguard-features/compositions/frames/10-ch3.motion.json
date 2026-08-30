@@ -1,0 +1,13 @@
+{
+  "scene": "10-ch3",
+  "duration_s": 2.6,
+  "rules": ["waterfall-entry"],
+  "exit": {
+    "vector": "barely-perceptible group drift (scale 1.000->1.007, sine.inOut 0.85-2.6) settles to ~0 px/s at 2.6 — zero-velocity, hard-cut ready",
+    "still_moving": false
+  },
+  "entry": {
+    "vector": "static ground at t=0 (0 px/s); first waterfall element whips in from below at 0.12s",
+    "from_rest": true
+  }
+}

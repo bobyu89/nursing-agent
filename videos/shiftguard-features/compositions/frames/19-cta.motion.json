@@ -1,0 +1,13 @@
+{
+  "scene": "19-cta",
+  "duration_s": 5.0,
+  "rules": ["spring-pop-entrance", "press-release-spring", "ambient-glow-bloom"],
+  "exit": {
+    "vector": "opacity-only dissolve to near-black (#101b30) over 4.5–5.0s, complete at the final frame; no positional motion (the film's only exit — final frame)",
+    "still_moving": false
+  },
+  "entry": {
+    "vector": "none — first frame is the bare light canvas under the incoming crossfade; browser floats in from 0.10s",
+    "from_rest": true
+  }
+}

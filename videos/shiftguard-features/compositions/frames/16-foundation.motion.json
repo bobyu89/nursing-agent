@@ -1,0 +1,13 @@
+{
+  "scene": "16-foundation",
+  "duration_s": 7.8,
+  "rules": ["waterfall-entry", "viewport-change", "ambient-glow-bloom"],
+  "exit": {
+    "vector": "handbook scroll content translating up at ~142.9px/s inside the static browser frame (linear tween ends exactly at 7.8s — still scrolling at the cut); rest of frame at rest",
+    "still_moving": true
+  },
+  "entry": {
+    "vector": "none — first frame fully static (cut in); dashboard cards whip in from 0.08s",
+    "from_rest": true
+  }
+}

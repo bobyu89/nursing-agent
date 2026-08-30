@@ -1,0 +1,7 @@
+{
+  "scene": "02-ch1",
+  "duration_s": 2.6,
+  "rules": ["waterfall-entry", "multi-phase-camera (micro-drift register: scale 1→1.007 across the hold)"],
+  "exit": { "vector": "none — 0 px/s; cascade lands 0.71s, micro-drift (scale 1→1.007, sine.inOut) eases to zero velocity exactly at 2.60s", "still_moving": false },
+  "entry": { "vector": "none — 0 px/s at first frame (bare light #f3f5fa stage after hard cut); cascade starts 0.12s", "from_rest": true }
+}

@@ -1,0 +1,13 @@
+{
+  "scene": "18-oneliner",
+  "duration_s": 3.0,
+  "rules": ["waterfall-entry", "css-marker-patterns"],
+  "exit": {
+    "vector": "none — fully static hold from 1.83s to the cut (deliberate stillness card)",
+    "still_moving": false
+  },
+  "entry": {
+    "vector": "none — first frame static (cut in); first word whips in at 0.12s",
+    "from_rest": true
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "scene": "05-ch2",
+  "duration_s": 2.6,
+  "rules": ["waterfall-entry"],
+  "exit": { "vector": "scale micro-drift 1.000→1.007 (sine.inOut) lands at ~0 px/s by 2.6s; composed still card", "still_moving": false },
+  "entry": { "vector": "static open on flat ground; first waterfall arrival at 0.12s (y+44 whip)", "from_rest": true }
+}

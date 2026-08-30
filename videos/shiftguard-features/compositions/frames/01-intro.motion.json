@@ -1,0 +1,7 @@
+{
+  "scene": "01-intro",
+  "duration_s": 9.2,
+  "rules": ["waterfall-entry", "spring-pop-entrance", "svg-path-draw"],
+  "exit": { "vector": "none — 0 px/s; last tween (chip 04 accent fill) ends 7.49s, frame holds static 7.49–9.20s", "still_moving": false },
+  "entry": { "vector": "none — 0 px/s at first frame (bare light #f3f5fa stage after hard cut); first title whip starts 0.15s", "from_rest": true }
+}

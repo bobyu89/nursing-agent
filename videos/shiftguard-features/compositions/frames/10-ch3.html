@@ -1,0 +1,156 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+    @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+    @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+    /* ============ 10-ch3 — 章節卡・督導（titlecard-reveal + waterfall-entry, 2.6s）
+       版型與節奏對齊 05-ch2 章節卡原型：僅換章節碼 03、標題與副標文字。 ============ */
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      color: #16233a;
+      -webkit-font-smoothing: antialiased;
+    }
+    .clip {
+      position: absolute;
+      inset: 0;
+    }
+    #f10c-bg {
+      background: #f3f5fa;
+    }
+    /* hairline atmosphere — static frame furniture */
+    .f10c-hairline {
+      position: absolute;
+      left: 340px;
+      width: 1240px;
+      height: 1px;
+      background: #e4e9f1;
+    }
+    #f10c-hl1 {
+      top: 150px;
+    }
+    #f10c-hl2 {
+      top: 812px;
+    }
+
+    /* centered chapter group (micro-drift target) */
+    #f10c-group {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 340px;
+      text-align: center;
+      transform-origin: 50% 40%;
+      will-change: transform;
+    }
+    #f10c-coderow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 26px;
+      height: 46px;
+    }
+    .f10c-codeline {
+      width: 64px;
+      height: 2px;
+      border-radius: 1px;
+      background: #4060ef;
+      opacity: 0;
+    }
+    #f10c-code {
+      display: inline-block;
+      font-size: 46px;
+      font-weight: 800;
+      letter-spacing: 0.28em;
+      text-indent: 0.28em;
+      color: #4060ef;
+      font-variant-numeric: tabular-nums;
+      opacity: 0;
+    }
+    #f10c-title {
+      margin-top: 30px;
+      font-size: 100px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      line-height: 1.15;
+      color: #16233a;
+      white-space: nowrap;
+    }
+    .f10c-frag {
+      display: inline-block;
+      opacity: 0;
+    }
+    #f10c-sub {
+      display: inline-block;
+      margin-top: 42px;
+      font-size: 30px;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-indent: 0.2em;
+      color: #47566f;
+      opacity: 0;
+    }
+  </style>
+
+  <div id="root" data-composition-id="10-ch3" data-duration="2.6" data-width="1920" data-height="1080">
+    <!-- full-bleed ground -->
+    <div id="f10c-bg" class="clip" data-start="0" data-duration="2.6" data-track-index="0"></div>
+
+    <!-- content stage -->
+    <div id="f10c-stage" class="clip" data-start="0" data-duration="2.6" data-track-index="1">
+      <span class="f10c-hairline" id="f10c-hl1"></span>
+      <span class="f10c-hairline" id="f10c-hl2"></span>
+
+      <div id="f10c-group">
+        <div id="f10c-coderow">
+          <span class="f10c-codeline" id="f10c-cline1"></span>
+          <span id="f10c-code">03</span>
+          <span class="f10c-codeline" id="f10c-cline2"></span>
+        </div>
+        <div id="f10c-title">
+          <span class="f10c-frag" id="f10c-t1">第三章</span><span class="f10c-frag" id="f10c-t2">・督導</span>
+        </div>
+        <div>
+          <span id="f10c-sub">跨單位的棋盤</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+      var F = 1 / 60;
+
+      /* waterfall-entry — one direction (from below), binary opacity via set, shrinking gaps */
+      /* code (light opener) */
+      var t0 = 0.12;
+      tl.set("#f10c-code", { opacity: 1, y: 44 }, t0);
+      tl.to("#f10c-code", { y: 0, duration: 0.14, ease: "power4.out" }, t0);
+      /* flanking hairlines grow outward from the code */
+      tl.fromTo("#f10c-cline1", { scaleX: 0, opacity: 0.5 }, { scaleX: 1, opacity: 0.5, duration: 0.32, ease: "power2.out", transformOrigin: "100% 50%" }, 0.32);
+      tl.fromTo("#f10c-cline2", { scaleX: 0, opacity: 0.5 }, { scaleX: 1, opacity: 0.5, duration: 0.32, ease: "power2.out", transformOrigin: "0% 50%" }, 0.32);
+      /* headline split into two fragments — the anchors, biggest travel */
+      var t1 = t0 + 0.14 + 2 * F;
+      tl.set("#f10c-t1", { opacity: 1, y: 78 }, t1);
+      tl.to("#f10c-t1", { y: 0, duration: 0.18, ease: "power4.out" }, t1);
+      var t2 = t1 + 0.18 - F;
+      tl.set("#f10c-t2", { opacity: 1, y: 70 }, t2);
+      tl.to("#f10c-t2", { y: 0, duration: 0.16, ease: "power4.out" }, t2);
+      /* subtitle — lightest, snaps in tight */
+      var t3 = t2 + 0.16 - 2 * F;
+      tl.set("#f10c-sub", { opacity: 1, y: 44 }, t3);
+      tl.to("#f10c-sub", { y: 0, duration: 0.13, ease: "power4.out" }, t3);
+
+      /* allocated stillness — one barely-perceptible drift, landing at zero velocity by 2.6 */
+      tl.to("#f10c-group", { scale: 1.007, duration: 1.75, ease: "sine.inOut" }, 0.85);
+
+      window.__timelines["10-ch3"] = tl;
+    })();
+  </script>
+</template>
