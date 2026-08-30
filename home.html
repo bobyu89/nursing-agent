@@ -339,6 +339,152 @@
     .final-band h2 { font-size: clamp(30px, 4.6vw, 46px) !important; }
     .final-band .cta-solid { margin-top: 34px; }
 
+    /* ══ 視覺升級（全部純 CSS——script-src 'none' 不動）═════ */
+
+    /* 閱讀進度條：不支援 scroll-driven 的瀏覽器維持 scaleX(0) 隱藏 */
+    .progress {
+      position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 60;
+      background: linear-gradient(90deg, var(--accent), hsl(200 90% 70%));
+      transform: scaleX(0); transform-origin: 0 50%; pointer-events: none;
+    }
+    @keyframes p-grow { to { transform: scaleX(1); } }
+
+    /* 環境光球：低速漂移的模糊光暈，透過液態玻璃的 backdrop-blur 帶出景深 */
+    .orb {
+      position: fixed; border-radius: 50%; pointer-events: none; z-index: 1;
+      filter: blur(90px); opacity: .13;
+    }
+    .orb.o1 { width: 46vmin; height: 46vmin; background: hsl(228 88% 62%); top: 16%; left: -12vmin; animation: orb-a 34s ease-in-out infinite alternate; }
+    .orb.o2 { width: 38vmin; height: 38vmin; background: hsl(38 70% 58%); top: 58%; right: -10vmin; opacity: .08; animation: orb-b 41s ease-in-out infinite alternate; }
+    @keyframes orb-a { to { transform: translate(16vmin, 12vmin); } }
+    @keyframes orb-b { to { transform: translate(-14vmin, -16vmin); } }
+
+    /* H1–H10 規則帶：無限跑馬燈（hover 暫停），兩組相同內容無縫循環 */
+    .rulebelt {
+      position: relative; z-index: 10; overflow: hidden; padding: 30px 0 6px;
+      -webkit-mask: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+              mask: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    }
+    .belt-track { display: flex; width: max-content; animation: belt 52s linear infinite; }
+    .rulebelt:hover .belt-track { animation-play-state: paused; }
+    .belt-set { display: flex; gap: 14px; padding-right: 14px; }
+    .belt-set span {
+      flex: none; display: flex; align-items: center; gap: 10px;
+      font-size: 13px; color: var(--muted-foreground); white-space: nowrap;
+      border: 1px solid var(--border); border-radius: 999px; padding: 9px 18px;
+      background: rgba(255,255,255,.03);
+    }
+    .belt-set b { color: var(--accent); font-weight: 500; font-family: var(--font-display); font-size: 14.5px; }
+    @keyframes belt { to { transform: translateX(-50%); } }
+
+    /* CTA 雷達脈衝：留任雷達的隱喻，一圈一圈掃出去 */
+    .pulse { position: relative; }
+    .pulse::before, .pulse::after {
+      content: ''; position: absolute; inset: 0; border-radius: 999px;
+      border: 1.5px solid hsl(228 88% 70% / .75); pointer-events: none;
+      animation: radar 3s ease-out 1s infinite;
+    }
+    .pulse::after { animation-delay: 2.5s; }
+    @keyframes radar {
+      0% { transform: scale(1); opacity: .8; }
+      70%, 100% { transform: scale(1.26, 1.8); opacity: 0; }
+    }
+
+    /* 影片殼背後的呼吸光暈：把目光引到播放區 */
+    .video-shell { position: relative; isolation: isolate; }
+    .video-shell::before {
+      content: ''; position: absolute; inset: 6% -3%; z-index: -1; border-radius: 48px;
+      background: radial-gradient(closest-side, hsl(228 88% 60% / .34), transparent 74%);
+      filter: blur(34px); animation: shell-glow 5.4s ease-in-out infinite alternate;
+    }
+    @keyframes shell-glow { from { opacity: .4; } to { opacity: 1; } }
+
+    /* 導覽列連結：底線滑入 */
+    .nav-links a { position: relative; }
+    .nav-links a::after {
+      content: ''; position: absolute; left: 2px; right: 2px; bottom: 5px; height: 1.5px;
+      background: var(--accent); transform: scaleX(0); transform-origin: 0 50%;
+      transition: transform .28s ease;
+    }
+    .nav-links a:hover::after, .nav-links a.active::after { transform: scaleX(1); }
+
+    /* hero 主標的「真相」二字微光掃過（不支援 background-clip:text 則維持原色） */
+    @supports (-webkit-background-clip: text) {
+      .hero h1 em {
+        background: linear-gradient(100deg, var(--muted-foreground) 40%, #fff 50%, var(--muted-foreground) 60%);
+        background-size: 240% 100%; background-position: 115% 0;
+        -webkit-background-clip: text; background-clip: text;
+        -webkit-text-fill-color: transparent; color: transparent;
+        animation: shimmer 6.5s ease-in-out 2.4s infinite;
+      }
+      @keyframes shimmer {
+        0% { background-position: 115% 0; }
+        34%, 100% { background-position: -15% 0; }
+      }
+    }
+
+    /* 決策階梯：一階一階（樣式基準——逐級點亮在下方 scroll-driven 區塊） */
+    .ladder { line-height: 1.9; }
+    .rung { display: flex; align-items: baseline; gap: 14px; padding: 7px 0; }
+    .rung b { flex: none; }
+    .rung + .rung { border-top: 1px dashed hsl(228 26% 26% / .55); }
+
+    /* 守守登場：結尾 CTA 上方，漂浮＋眨眼 */
+    .mascot { display: flex; justify-content: center; margin-bottom: 4px; }
+    .mascot svg { animation: bob 3.8s ease-in-out infinite; filter: drop-shadow(0 12px 28px rgba(64,96,239,.35)); }
+    .m-eye { transform-box: fill-box; transform-origin: center; animation: blink 4.6s infinite; }
+    @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+    @keyframes blink { 0%, 90%, 100% { transform: scaleY(1); } 94%, 96% { transform: scaleY(.08); } }
+
+    /* scroll-driven 進階：進度條、hero 視差、數字跳動、階梯逐級亮、卡片縮放進場 */
+    @property --n { syntax: '<integer>'; inherits: true; initial-value: 0; }
+    @media (prefers-reduced-motion: no-preference) {
+      @supports (animation-timeline: view()) {
+        .progress { animation: p-grow linear both; animation-timeline: scroll(root); }
+        .hero { animation: hero-away linear both; animation-timeline: scroll(root); animation-range: 0 80vh; }
+        .grid .card.reveal, .stat.reveal, .proof.reveal, .price.reveal { animation-name: card-in; }
+        .stat-live {
+          color: transparent; position: relative;
+          animation: countup linear both; animation-timeline: view(); animation-range: entry 40% cover 42%;
+        }
+        .stat-live::after {
+          content: counter(sn); counter-reset: sn var(--n);
+          position: absolute; inset-inline-end: 0; top: 0; color: var(--accent);
+        }
+        .ladder { view-timeline: --lad; }
+        .rung { opacity: .18; transform: translateX(-10px); animation: rung-on linear both; animation-timeline: --lad; }
+        .rung:nth-child(1) { animation-range: cover 2% cover 26%; }
+        .rung:nth-child(2) { animation-range: cover 14% cover 38%; }
+        .rung:nth-child(3) { animation-range: cover 26% cover 50%; }
+        .rung:nth-child(4) { animation-range: cover 38% cover 62%; }
+        .rung b { color: var(--muted-foreground); transition: none; }
+        .rung:nth-child(1) b, .rung:nth-child(2) b, .rung:nth-child(3) b, .rung:nth-child(4) b { animation: rung-b linear both; animation-timeline: --lad; }
+        .rung:nth-child(1) b { animation-range: cover 2% cover 26%; }
+        .rung:nth-child(2) b { animation-range: cover 14% cover 38%; }
+        .rung:nth-child(3) b { animation-range: cover 26% cover 50%; }
+        .rung:nth-child(4) b { animation-range: cover 38% cover 62%; }
+      }
+    }
+    @keyframes hero-away { to { transform: translateY(9vh); opacity: .22; } }
+    @keyframes card-in {
+      from { opacity: 0; transform: translateY(28px) scale(.96); }
+      to { opacity: 1; transform: none; }
+    }
+    @keyframes countup { from { --n: 0; } to { --n: var(--target); } }
+    @keyframes rung-on { to { opacity: 1; transform: none; } }
+    @keyframes rung-b { to { color: var(--accent); } }
+
+    /* 減少動態偏好：新增裝飾全部靜止，跑馬燈攤平成可讀清單 */
+    @media (prefers-reduced-motion: reduce) {
+      .progress { display: none; }
+      .orb, .belt-track, .pulse::before, .pulse::after, .video-shell::before,
+      .mascot svg, .m-eye, .hero h1 em { animation: none; }
+      .rulebelt { -webkit-mask: none; mask: none; }
+      .belt-track { width: auto; }
+      .belt-set { flex-wrap: wrap; justify-content: center; padding: 0 20px; }
+      .belt-set + .belt-set { display: none; }
+    }
+
     /* 產品影片區：封面即影片第一幕，poster 點播零跳接 */
     .video-shell { margin: 44px auto 0; max-width: 1060px; }
     .video-shell video {
@@ -351,6 +497,11 @@
   </style>
 </head>
 <body>
+
+<!-- 閱讀進度條＋環境光球（純裝飾） -->
+<div class="progress" aria-hidden="true"></div>
+<div class="orb o1" aria-hidden="true"></div>
+<div class="orb o2" aria-hidden="true"></div>
 
 <!-- ══ Hero：全螢幕影片背景 ══════════════════════ -->
 <div class="hero-wrap">
@@ -406,7 +557,7 @@
       每一個判斷都交代得出依據。在她遞辭呈之前，先看見她。
     </p>
     <div class="cta-row animate-fade-rise-delay-2">
-      <a class="cta-solid" href="index.html">立即體驗 Demo</a>
+      <a class="cta-solid pulse" href="index.html">立即體驗 Demo</a>
       <a class="liquid-glass btn-glass cta" href="#video" style="flex-direction:row">
         <b>97 秒，看懂班守 ↓</b>
       </a>
@@ -417,6 +568,36 @@
     </p>
   </section>
   <a class="scroll-cue" href="#video" aria-label="往下看更多"></a>
+</div>
+
+<!-- ══ H1–H10 規則帶：十條硬規則跑馬燈（名稱取自 src/rules.js）══ -->
+<div class="rulebelt" id="rules" aria-hidden="true">
+  <div class="belt-track">
+    <div class="belt-set">
+      <span><b>H1</b>職務與資格符合</span>
+      <span><b>H2</b>當日未排其他班別</span>
+      <span><b>H3</b>非請假／不可排班狀態</span>
+      <span><b>H4</b>班間休息時間充足</span>
+      <span><b>H5</b>連續上班天數上限</span>
+      <span><b>H6</b>週工時絕對上限</span>
+      <span><b>H7</b>雙週例假保障（四週彈性工時）</span>
+      <span><b>H8</b>四週正常工時總量</span>
+      <span><b>H9</b>四週例假與休息日總量</span>
+      <span><b>H10</b>個人限制班別（母性保護等）</span>
+    </div>
+    <div class="belt-set">
+      <span><b>H1</b>職務與資格符合</span>
+      <span><b>H2</b>當日未排其他班別</span>
+      <span><b>H3</b>非請假／不可排班狀態</span>
+      <span><b>H4</b>班間休息時間充足</span>
+      <span><b>H5</b>連續上班天數上限</span>
+      <span><b>H6</b>週工時絕對上限</span>
+      <span><b>H7</b>雙週例假保障（四週彈性工時）</span>
+      <span><b>H8</b>四週正常工時總量</span>
+      <span><b>H9</b>四週例假與休息日總量</span>
+      <span><b>H10</b>個人限制班別（母性保護等）</span>
+    </div>
+  </div>
 </div>
 
 <!-- ══ 產品影片：97 秒看懂 ═══════════════════════ -->
@@ -459,7 +640,7 @@
   <p class="lead reveal">人力不會突然變多。能改變的，是每一個缺口被看見的速度，和每一次調度的公平。</p>
   <div class="stat-grid">
     <div class="liquid-glass stat reveal">
-      <div class="num">約 <em>6 成</em></div>
+      <div class="num">約 <em><span class="stat-live" style="--target:6">6</span> 成</em></div>
       <h3>領照護理師實際執業比率</h3>
       <p>全台領照護理人員超過三十萬，實際在臨床的僅約六成——離職不是個案，是常態。而離職的導火線，往往是「一直被壓在同一批人身上」的班。</p>
       <div class="fix">→ 班守<b>留任雷達</b>把負荷算成看得見的帳，在遞辭呈之前先看見。</div>
@@ -471,7 +652,7 @@
       <div class="fix">→ 班守把需求寫成 <b>⌈占床÷護病比⌉</b>，缺口帳直接說法規的語言。</div>
     </div>
     <div class="liquid-glass stat reveal">
-      <div class="num">最高 <em>100 萬</em></div>
+      <div class="num">最高 <em><span class="stat-live" style="--target:100">100</span> 萬</em></div>
       <h3>違反勞基法工時規定之單案罰鍰上限</h3>
       <p>班距不足 11 小時、連上第 7 天、四週總量超標——人眼排班簽核，每一次都在賭。被罰的是醫院，簽名的是主管。</p>
       <div class="fix">→ 班守 <b>H1–H10 規則引擎</b>在排出來的那一刻就把關，違法的班從源頭排不出來。</div>
@@ -586,10 +767,10 @@
   <h2 class="reveal">決策階梯：從源頭治理到韌性降級</h2>
   <p class="lead reveal">上層做得越好，下層被觸發得越少——我們的成功指標，是韌性模式的啟動次數逐季下降。</p>
   <div class="liquid-glass ladder reveal">
-    <b>0</b>　班表生成——排出來的那一刻就合規<br>
-    <b>1</b>　找合格替補——硬性排除、軟性排序、逐筆交代<br>
-    <b>2</b>　放寬試算＋全局指派——把選項與代價攤開，決定權在主管<br>
-    <b>3</b>　任務重新分配——極端情境的降級運作方案，缺口誠實攤開
+    <div class="rung"><b>0</b><span>班表生成——排出來的那一刻就合規</span></div>
+    <div class="rung"><b>1</b><span>找合格替補——硬性排除、軟性排序、逐筆交代</span></div>
+    <div class="rung"><b>2</b><span>放寬試算＋全局指派——把選項與代價攤開，決定權在主管</span></div>
+    <div class="rung"><b>3</b><span>任務重新分配——極端情境的降級運作方案，缺口誠實攤開</span></div>
   </div>
 </section>
 
@@ -638,9 +819,13 @@
 
 <!-- ══ 最終 CTA ═════════════════════════════════ -->
 <section class="section final-band" id="final">
+  <!-- 守守（北極熊 IP）：漂浮＋眨眼，純 CSS -->
+  <div class="mascot reveal" aria-hidden="true">
+    <svg viewBox="0 0 64 64" width="82" height="82" xmlns="http://www.w3.org/2000/svg"><circle cx="14.5" cy="15" r="9.2" fill="#f7efdf"/><circle cx="49.5" cy="15" r="9.2" fill="#f7efdf"/><circle cx="15.5" cy="16" r="4.8" fill="#d9d4c8"/><circle cx="48.5" cy="16" r="4.8" fill="#d9d4c8"/><path d="M32 9 C48.5 9 58 22 58 38 C58 53 47 61.5 32 61.5 C17 61.5 6 53 6 38 C6 22 15.5 9 32 9 Z" fill="#f7efdf"/><ellipse cx="32" cy="45" rx="11.5" ry="9" fill="#e6e1d4"/><circle class="m-eye" cx="22.5" cy="33.5" r="2.9" fill="#16233a"/><circle class="m-eye" cx="41.5" cy="33.5" r="2.9" fill="#16233a"/><circle class="m-eye" cx="23.5" cy="32.5" r="1" fill="#ffffff"/><circle class="m-eye" cx="42.5" cy="32.5" r="1" fill="#ffffff"/><rect x="27.4" y="39.2" width="9.2" height="5.6" rx="2.8" fill="#16233a"/><path d="M28.5 49.5 Q32 52.5 35.5 49.5" fill="none" stroke="#16233a" stroke-width="1.8" stroke-linecap="round"/></svg>
+  </div>
   <h2 class="reveal">夜再深，也要有人守著班表與彼此。</h2>
   <p class="lead reveal" style="max-width:none">守班的人，值得被同一份認真對待。</p>
-  <a class="cta-solid reveal" href="index.html">立即體驗 Demo——免安裝，30 秒進入</a>
+  <a class="cta-solid pulse reveal" href="index.html">立即體驗 Demo——免安裝，30 秒進入</a>
 </section>
 
 <!-- ══ 誠實聲明 ═════════════════════════════════ -->
