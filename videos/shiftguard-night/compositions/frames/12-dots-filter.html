@@ -1,0 +1,57 @@
+<template>
+  <div id="f12-root" data-composition-id="12-dots-filter" data-duration="7.6" data-width="1920" data-height="1080">
+    <div class="clip" id="f12-clip" data-start="0" data-duration="7.6" data-track-index="0">
+      <div class="p stage" id="f12-stage"></div>
+      <div class="hud" id="f12-hud">班距 · 連續天數<span class="small">月工時 · 證照 · 單位權限</span></div>
+      <div class="sub" id="f12-sub">班距夠不夠、連了幾天、這個月幾小時、證照過期沒有。</div>
+    </div>
+
+    <script src="assets/pixel.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        var PX = window.PX, N = PX.pal.night;
+        var stage = document.getElementById("f12-stage");
+
+        PX.rect(stage, 0, 0, 160, 90, "#080d18");
+        PX.scene.dotGrid(stage, {
+          cols: 8, rows: 3, x0: 33, y0: 33, gap: 13, size: 3,
+          color: N.accentLit, opacity: 0.85, idPrefix: "f12-d"
+        });
+
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+
+        /* 五道硬限制，一波熄掉一批。
+           24 → 18 → 13 → 9 → 6 → 3，對上 rules.js 的 H2/H3/H5/H7/H9。 */
+        var waves = [
+          { at: 0.7,  cut: [0, 4, 9, 13, 18, 22] },   /* H2 單位權限 */
+          { at: 1.9,  cut: [1, 6, 11, 16, 21] },      /* H3 班距 */
+          { at: 3.1,  cut: [3, 8, 14, 19] },          /* H5 連續上班 */
+          { at: 4.3,  cut: [5, 12, 20] },             /* H7 月工時 */
+          { at: 5.5,  cut: [2, 10, 17] }              /* H9 證照效期 */
+        ];
+        for (var w = 0; w < waves.length; w++) {
+          var cut = waves[w].cut;
+          for (var i = 0; i < cut.length; i++) {
+            tl.to("#f12-d" + cut[i],
+              { opacity: 0.06, scale: 0.55, duration: 0.34, ease: "power2.in" },
+              waves[w].at + i * 0.055);
+          }
+        }
+
+        /* 活下來的三個越來越亮 */
+        var live = [7, 15, 23];
+        for (var k = 0; k < live.length; k++) {
+          tl.to("#f12-d" + live[k], { opacity: 1, duration: 1.4, ease: "power2.out" }, 5.4);
+        }
+
+        tl.fromTo("#f12-hud", { opacity: 0, x: 16 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, 0.5);
+        tl.fromTo("#f12-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 0.15);
+        tl.to("#f12-sub", { opacity: 0, duration: 0.35, ease: "power2.in" }, 7.15);
+
+        window.__timelines["12-dots-filter"] = tl;
+      })();
+    </script>
+  </div>
+</template>

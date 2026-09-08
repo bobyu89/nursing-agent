@@ -1,0 +1,69 @@
+<template>
+  <div id="f03-root" data-composition-id="03-roster" data-duration="3.9" data-width="1920" data-height="1080">
+    <div class="clip" id="f03-clip" data-start="0" data-duration="3.9" data-track-index="0">
+      <div class="p stage" id="f03-stage"></div>
+      <div class="sub" id="f03-sub">這是這個月第三次。</div>
+    </div>
+
+    <script src="assets/pixel.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        var PX = window.PX, N = PX.pal.night, BODY = PX.pal.body;
+        var stage = document.getElementById("f03-stage");
+
+        /* 桌面特寫：整個畫面就是一張班表 */
+        PX.rect(stage, 0, 0, 160, 90, "#141f36");
+
+        /* 班表紙：只有格線，沒有字——全片規則 */
+        PX.rect(stage, 18, 14, 124, 66, N.paper);
+        PX.rect(stage, 18, 14, 124, 5, "#aebbd0");     /* 表頭深一階 */
+        var gx = 8, gy = 9;
+        for (var c = 0; c <= 15; c++) {
+          PX.rect(stage, 22 + c * gx, 14, 1, 66, "#9fadC4".toLowerCase(), 0.55);
+        }
+        for (var r = 0; r <= 6; r++) {
+          PX.rect(stage, 18, 19 + r * gy, 124, 1, "#9fadc4", 0.55);
+        }
+
+        /* 那個空格 — 這鏡的主角是它，不是手 */
+        var hole = PX.rect(stage, 62, 46, 8, 9, "#e8bdb6", 1, "f03-hole");
+        PX.rect(stage, 62, 46, 8, 1, N.danger, 0.75);
+        PX.rect(stage, 62, 54, 8, 1, N.danger, 0.75);
+        PX.rect(stage, 62, 46, 1, 9, N.danger, 0.75);
+        PX.rect(stage, 69, 46, 1, 9, N.danger, 0.75);
+
+        /* 手縮小放右邊，筆尖指向空格。
+           20 像素寬的 sprite 放大四倍只會是一坨肉色——
+           要嘛畫細，要嘛縮小。這鏡縮小才對，主角本來就不是手。 */
+        var hand = PX.layer(stage, "f03-hand");
+        PX.sprite(hand, PX.spr.handPen, BODY, 74, 40, 2);
+
+        /* 檯燈的光從右上斜下來 */
+        PX.rect(stage, 0, 0, 160, 90, N.shadow, 0.28);
+        PX.rect(stage, 60, 20, 70, 46, N.lamp, 0.05);
+        PX.rect(stage, 70, 28, 50, 32, N.lamp, 0.04);
+
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+
+        /* 筆尖點兩下 — 一次一個藝術像素 */
+        tl.set("#f03-hand", { y: PX.U }, 1.15);
+        tl.set("#f03-hand", { y: 0 }, 1.32);
+        tl.set("#f03-hand", { y: PX.U }, 1.72);
+        tl.set("#f03-hand", { y: 0 }, 1.89);
+
+        /* 空格被點到時輕輕亮一下 */
+        tl.set("#f03-hole", { background: "#f0c4bd" }, 1.15);
+        tl.set("#f03-hole", { background: "#e2b0aa" }, 1.5);
+        tl.set("#f03-hole", { background: "#f0c4bd" }, 1.72);
+        tl.set("#f03-hole", { background: "#e2b0aa" }, 2.05);
+
+        tl.fromTo("#f03-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 0.25);
+        tl.to("#f03-sub", { opacity: 0, duration: 0.3, ease: "power2.in" }, 3.4);
+
+        window.__timelines["03-roster"] = tl;
+      })();
+    </script>
+  </div>
+</template>

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>深夜的班表 — 班守 ShiftGuard</title>
+    <script src="assets/pixel.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+      @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+      @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1920px; height: 1080px;
+        overflow: hidden;
+        background: #080d18;
+      }
+      #root {
+        position: relative;
+        width: 1920px; height: 1080px;
+        overflow: hidden;
+        background: #080d18;
+        font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      }
+      [data-composition-id="root"] > div[data-composition-src] {
+        position: absolute;
+        inset: 0;
+      }
+      .clip { position: absolute; inset: 0; }
+      .p { position: absolute; }
+      .stage { left: 0; top: 0; width: 1920px; height: 1080px; }
+
+      /* ── 字幕層 ─────────────────────────────────────────
+         全片的中文都在這一層，用真字型渲染。
+         像素畫面裡一個字都沒有——這是全片的規則。 */
+      .sub {
+        position: absolute;
+        left: 50%; bottom: 92px;
+        transform: translateX(-50%);
+        width: 1500px;
+        text-align: center;
+        font-size: 54px;
+        font-weight: 700;
+        line-height: 1.5;
+        color: #ffffff;
+        text-shadow: 0 3px 22px rgba(4,7,14,.96), 0 1px 3px rgba(4,7,14,.92);
+      }
+      .hud {
+        position: absolute;
+        right: 108px; top: 96px;
+        font-size: 40px;
+        font-weight: 500;
+        color: #f3f5fa;
+        letter-spacing: .08em;
+        font-variant-numeric: tabular-nums;
+        text-shadow: 0 2px 14px rgba(4,7,14,.92);
+        text-align: right;
+      }
+      .hud .small {
+        display: block;
+        font-size: 24px;
+        color: #b3c1d8;
+        letter-spacing: .16em;
+        margin-top: 10px;
+      }
+      #blackout { position: absolute; inset: 0; background: #080d18; }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="root"
+      data-start="0"
+      data-duration="86.4"
+      data-width="1920"
+      data-height="1080"
+    >
+      <!-- ── 幕一 · 靜 ────────────────────────────────── -->
+      <div id="el-f01" data-composition-id="01-corridor" data-composition-src="compositions/frames/01-corridor.html"
+           data-start="0" data-duration="5" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-f02" data-composition-id="02-station" data-composition-src="compositions/frames/02-station.html"
+           data-start="5" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-f03" data-composition-id="03-roster" data-composition-src="compositions/frames/03-roster.html"
+           data-start="9" data-duration="3.9" data-track-index="1" data-width="1920" data-height="1080"></div>
+
+      <!-- ── 幕二 · 問 ────────────────────────────────── -->
+      <div id="el-f04" data-composition-id="04-phone-lift" data-composition-src="compositions/frames/04-phone-lift.html"
+           data-start="12.9" data-duration="5" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-f05" data-composition-id="05-face-glow" data-composition-src="compositions/frames/05-face-glow.html"
+           data-start="17.9" data-duration="7.4" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-f06" data-composition-id="06-typing" data-composition-src="compositions/frames/06-typing.html"
+           data-start="25.3" data-duration="4.6" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-f07" data-composition-id="07-silence" data-composition-src="compositions/frames/07-silence.html"
+           data-start="29.9" data-duration="3.8" data-track-index="1" data-width="1920" data-height="1080"></div>
+
+      <!-- ── 幕三 · 等 ────────────────────────────────── -->
+      <div id="el-f08" data-composition-id="08-timelapse" data-composition-src="compositions/frames/08-timelapse.html"
+           data-start="33.7" data-duration="3.5" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-f09" data-composition-id="09-cold-coffee" data-composition-src="compositions/frames/09-cold-coffee.html"
+           data-start="37.2" data-duration="3.2" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-f10" data-composition-id="10-wide" data-composition-src="compositions/frames/10-wide.html"
+           data-start="40.4" data-duration="9.5" data-track-index="1" data-width="1920" data-height="1080"></div>
+
+      <!-- ── 幕四 · 轉 ────────────────────────────────── -->
+      <div id="el-f11" data-composition-id="11-dots-form" data-composition-src="compositions/frames/11-dots-form.html"
+           data-start="49.9" data-duration="3.6" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-f12" data-composition-id="12-dots-filter" data-composition-src="compositions/frames/12-dots-filter.html"
+           data-start="53.5" data-duration="7.6" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-f13" data-composition-id="13-dots-three" data-composition-src="compositions/frames/13-dots-three.html"
+           data-start="61.1" data-duration="6.3" data-track-index="1" data-width="1920" data-height="1080"></div>
+
+      <!-- ── 幕五 · 亮 ────────────────────────────────── -->
+      <div id="el-f14" data-composition-id="14-product" data-composition-src="compositions/frames/14-product.html"
+           data-start="67.4" data-duration="6.7" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-f15" data-composition-id="15-handover" data-composition-src="compositions/frames/15-handover.html"
+           data-start="74.1" data-duration="6.7" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-f16" data-composition-id="16-walk-away" data-composition-src="compositions/frames/16-walk-away.html"
+           data-start="80.8" data-duration="5.6" data-track-index="1" data-width="1920" data-height="1080"></div>
+
+      <div class="clip" id="blackout-clip" data-start="0" data-duration="86.4" data-track-index="9">
+        <div id="blackout"></div>
+      </div>
+
+      <!-- 旁白：暫用配音（Windows SAPI zh-TW）。
+           換成正式 TTS 後要重量長度，每鏡秒數跟著重排。 -->
+      <audio id="a02" src="assets/voice/v02.wav" data-start="5.5"  data-duration="2.84" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a03" src="assets/voice/v03.wav" data-start="9.4"  data-duration="2.9"  data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a04" src="assets/voice/v04.wav" data-start="13.3" data-duration="4.01" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a05" src="assets/voice/v05.wav" data-start="18.3" data-duration="6.36" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a06" src="assets/voice/v06.wav" data-start="25.7" data-duration="3.63" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a07" src="assets/voice/v07.wav" data-start="30.3" data-duration="2.15" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a08" src="assets/voice/v08.wav" data-start="34.1" data-duration="2.28" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a09" src="assets/voice/v09.wav" data-start="37.6" data-duration="1.84" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a10" src="assets/voice/v10.wav" data-start="41"   data-duration="7.46" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a11" src="assets/voice/v11.wav" data-start="50.3" data-duration="2.73" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a12" src="assets/voice/v12.wav" data-start="53.8" data-duration="6.82" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a13" src="assets/voice/v13.wav" data-start="61.4" data-duration="5.19" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a14" src="assets/voice/v14.wav" data-start="67.8" data-duration="5.73" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a15" src="assets/voice/v15.wav" data-start="74.4" data-duration="5.8"  data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a16" src="assets/voice/v16.wav" data-start="81.2" data-duration="3.69" data-track-index="10" data-audio-group="voiceover"></audio>
+    </div>
+
+    <script>
+      (function () {
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+        var D = 86.4;
+
+        /* 總表只管三件事：開場淡入、幕與幕之間的呼吸、收尾淡出。
+           每一鏡的內部節奏由該鏡自己的 timeline 負責。 */
+        tl.fromTo("#blackout", { opacity: 1 }, { opacity: 0, duration: 1.3, ease: "power2.out" }, 0);
+
+        /* 幕三結束 → 幕四：從寫實切到抽象，這裡需要一次真正的黑 */
+        tl.to("#blackout", { opacity: 1, duration: 0.45, ease: "power2.in" }, 49.45);
+        tl.to("#blackout", { opacity: 0, duration: 0.6, ease: "power2.out" }, 49.9);
+
+        /* 幕四結束 → 幕五：從抽象回到空間，再黑一次 */
+        tl.to("#blackout", { opacity: 1, duration: 0.4, ease: "power2.in" }, 67.0);
+        tl.to("#blackout", { opacity: 0, duration: 0.55, ease: "power2.out" }, 67.4);
+
+        tl.to("#blackout", { opacity: 1, duration: 1.0, ease: "power2.in" }, D - 1.0);
+
+        window.__timelines["root"] = tl;
+      })();
+    </script>
+  </body>
+</html>

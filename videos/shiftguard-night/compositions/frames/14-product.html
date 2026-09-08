@@ -1,0 +1,125 @@
+<template>
+  <div id="f14-root" data-composition-id="14-product" data-duration="6.7" data-width="1920" data-height="1080">
+    <div class="clip" id="f14-clip" data-start="0" data-duration="6.7" data-track-index="0">
+      <div class="p stage" id="f14-stage"></div>
+
+      <!-- 全片唯一需要精確中文與正確數字的一鏡。
+           畫面是像素的，字是真字型渲染的——這裡不能糊。 -->
+      <div class="p" id="f14-ui">
+        <div class="f14-title">合規候選 · 內科 3A 小夜班</div>
+        <div class="f14-card" id="f14-c1">
+          <span class="f14-rank">RANK 01</span>
+          <span class="f14-name">陳孟璇</span>
+          <span class="f14-meta">N3 · 內科 3A · ACLS / IV</span>
+          <span class="f14-score">92</span>
+          <span class="f14-why">班距 13.5 小時 · 本月加班 4 小時，全隊最低</span>
+        </div>
+        <div class="f14-card" id="f14-c2">
+          <span class="f14-rank">RANK 02</span>
+          <span class="f14-name">林于潔</span>
+          <span class="f14-meta">N2 · 內科 3A · IV</span>
+          <span class="f14-score">78</span>
+          <span class="f14-why">班距 11.5 小時，貼近下限 · 本月加班 12 小時</span>
+        </div>
+        <div class="f14-card" id="f14-c3">
+          <span class="f14-rank">RANK 03</span>
+          <span class="f14-name">吳柏叡</span>
+          <span class="f14-meta">N2 · 支援 5B · ACLS</span>
+          <span class="f14-score">61</span>
+          <span class="f14-why">跨單位支援，需護理長核可 · 本月加班 18 小時</span>
+        </div>
+      </div>
+
+      <div class="sub" id="f14-sub">班守，把她腦中那套算法變成看得見的東西。</div>
+    </div>
+
+    <style>
+      #f14-ui { left: 0; top: 0; width: 1920px; height: 1080px; }
+      .f14-title {
+        position: absolute; left: 300px; top: 168px;
+        font-size: 30px; font-weight: 500; letter-spacing: .14em;
+        color: #8fa4ff;
+      }
+      .f14-card {
+        position: absolute; left: 300px; width: 1320px; height: 148px;
+        display: block;
+      }
+      #f14-c1 { top: 236px; }
+      #f14-c2 { top: 416px; }
+      #f14-c3 { top: 596px; }
+      .f14-rank {
+        position: absolute; left: 40px; top: 24px;
+        font-size: 22px; font-weight: 500; letter-spacing: .16em;
+        color: #7e8ca6; font-variant-numeric: tabular-nums;
+      }
+      #f14-c1 .f14-rank { color: #8fa4ff; }
+      .f14-name {
+        position: absolute; left: 40px; top: 58px;
+        font-size: 52px; font-weight: 900; color: #f3f5fa;
+      }
+      .f14-meta {
+        position: absolute; left: 230px; top: 74px;
+        font-size: 24px; color: #9aa8c2; letter-spacing: .04em;
+      }
+      .f14-score {
+        position: absolute; right: 320px; top: 46px;
+        font-size: 68px; font-weight: 900; color: #c3cddf;
+        font-variant-numeric: tabular-nums;
+      }
+      #f14-c1 .f14-score { color: #8fa4ff; }
+      .f14-why {
+        position: absolute; left: 40px; top: 118px;
+        font-size: 23px; color: #b3c1d8;
+      }
+    </style>
+
+    <script src="assets/pixel.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        var PX = window.PX, N = PX.pal.night;
+        var stage = document.getElementById("f14-stage");
+
+        PX.rect(stage, 0, 0, 160, 90, "#0b1424");
+
+        /* 像素風的視窗外框，裡面裝真字型的介面 */
+        PX.rect(stage, 22, 10, 116, 70, "#16223c");
+        PX.rect(stage, 22, 10, 116, 1, N.accent);
+        PX.rect(stage, 22, 79, 116, 1, N.accentLit, 0.35);
+        PX.rect(stage, 22, 10, 1, 70, N.accentLit, 0.35);
+        PX.rect(stage, 137, 10, 1, 70, N.accentLit, 0.35);
+
+        /* 三張候選卡的底 */
+        var tops = [19, 34, 49];
+        for (var i = 0; i < 3; i++) {
+          var top = i === 0;
+          PX.rect(stage, 26, tops[i], 108, 12, top ? "#1d2b4d" : "#18243c", 1, "f14-bg" + (i + 1));
+          PX.rect(stage, 26, tops[i], 1, 12, top ? N.accent : N.accentLit, top ? 1 : 0.3);
+          /* 分數條 */
+          PX.rect(stage, 30, tops[i] + 9, 92, 1, N.accentLit, 0.12);
+          var w = [85, 72, 56][i];
+          var bar = PX.rect(stage, 30, tops[i] + 9, w, 1, top ? "#8fa4ff" : N.accent, 1, "f14-bar" + (i + 1));
+          bar.style.transformOrigin = "left center";
+        }
+
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+
+        tl.fromTo("#f14-stage", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.out" }, 0);
+        tl.fromTo(".f14-title", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 0.3);
+
+        for (var j = 1; j <= 3; j++) {
+          tl.set("#f14-bar" + j, { scaleX: 0 }, 0);
+          tl.fromTo("#f14-c" + j, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 0.7 + (j - 1) * 0.32);
+          tl.fromTo("#f14-bg" + j, { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "power2.out" }, 0.62 + (j - 1) * 0.32);
+          tl.to("#f14-bar" + j, { scaleX: 1, duration: 0.85, ease: "power3.out" }, 0.95 + (j - 1) * 0.32);
+        }
+
+        tl.fromTo("#f14-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 0.25);
+        tl.to("#f14-sub", { opacity: 0, duration: 0.35, ease: "power2.in" }, 6.15);
+
+        window.__timelines["14-product"] = tl;
+      })();
+    </script>
+  </div>
+</template>

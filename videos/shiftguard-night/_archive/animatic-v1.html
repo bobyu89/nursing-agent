@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>深夜的班表 — 動態腳本</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Noto Sans TC"; src: local("Noto Sans TC"); }
+      @font-face { font-family: "Microsoft JhengHei"; src: local("Microsoft JhengHei"); }
+      @font-face { font-family: "PingFang TC"; src: local("PingFang TC"); }
+      @font-face { font-family: "Cascadia Mono"; src: local("Cascadia Mono"); }
+      @font-face { font-family: "Consolas"; src: local("Consolas"); }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1920px; height: 1080px;
+        overflow: hidden;
+        background: #101b30;
+      }
+      #root {
+        position: relative;
+        width: 1920px; height: 1080px;
+        overflow: hidden;
+        background: #101b30;
+        font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      }
+      .clip { position: absolute; inset: 0; }
+
+      /* ── 底：暗場 + 極淡班表格線 ─────────────────── */
+      .bg { background: #101b30; }
+      .bg::after {
+        content: "";
+        position: absolute; inset: 0;
+        background-image:
+          repeating-linear-gradient(to right, rgba(147,166,203,.055) 0 1px, transparent 1px 160px),
+          repeating-linear-gradient(to bottom, rgba(147,166,203,.055) 0 1px, transparent 1px 120px);
+      }
+
+      /* ── 鏡頭板（佔位）─────────────────────────── */
+      .shot { display: block; }
+
+      .slug {
+        position: absolute;
+        left: 150px; top: 132px;
+        display: flex; align-items: baseline; gap: 26px;
+      }
+      .slug .id {
+        font-family: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+        font-size: 30px; font-weight: 500;
+        color: #6d86ff;
+        letter-spacing: .1em;
+        font-variant-numeric: tabular-nums;
+      }
+      .slug .act {
+        font-size: 21px; font-weight: 500;
+        color: #8494b1;
+        letter-spacing: .3em;
+      }
+      .slug .len {
+        font-family: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+        font-size: 21px;
+        color: #8494b1;
+        letter-spacing: .05em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* 佔位框：明確標示這裡之後要放生成畫面 */
+      .plate {
+        position: absolute;
+        left: 150px; top: 220px;
+        width: 1620px; height: 500px;
+        border: 2px dashed rgba(109,134,255,.34);
+        border-radius: 18px;
+        background:
+          repeating-linear-gradient(
+            135deg,
+            rgba(109,134,255,.045) 0 14px,
+            transparent 14px 28px
+          );
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 26px;
+        padding: 0 76px;
+      }
+      .plate .kind {
+        font-size: 20px; font-weight: 700;
+        letter-spacing: .22em;
+        color: #6d86ff;
+        padding: 7px 18px;
+        border: 1px solid rgba(109,134,255,.45);
+        border-radius: 999px;
+      }
+      .plate .desc {
+        font-size: 52px;
+        font-weight: 700;
+        line-height: 1.5;
+        color: #c3cddf;
+        max-width: 1360px;
+      }
+
+      /* 產品鏡：不交給 AI，視覺上就要不一樣 */
+      .shot.render .plate {
+        border-style: solid;
+        border-color: #4060ef;
+        background: rgba(64,96,239,.10);
+      }
+      .shot.render .plate .kind { color: #9fb2ff; border-color: #4060ef; }
+
+      /* ── 資訊疊圖（時間、單位、關鍵詞）────────── */
+      .info {
+        position: absolute;
+        right: 150px; top: 140px;
+        font-family: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+        font-size: 40px;
+        font-weight: 500;
+        color: #f3f5fa;
+        letter-spacing: .06em;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        max-width: 900px;
+      }
+
+      /* ── 字幕層：這是這支 animatic 真正要驗的東西 ── */
+      .sub {
+        position: absolute;
+        left: 50%;
+        bottom: 118px;
+        transform: translateX(-50%);
+        width: 1500px;
+        text-align: center;
+        font-size: 54px;
+        font-weight: 700;
+        line-height: 1.45;
+        color: #ffffff;
+        text-shadow: 0 3px 18px rgba(8,14,26,.92), 0 1px 3px rgba(8,14,26,.9);
+        letter-spacing: .01em;
+      }
+
+      /* ── 片尾字標 ───────────────────────────────── */
+      .mark {
+        position: absolute;
+        left: 150px; bottom: 300px;
+        display: flex; align-items: center; gap: 22px;
+      }
+      .mark .lg {
+        width: 62px; height: 62px; border-radius: 14px;
+        background: #4060ef;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 32px; font-weight: 900; color: #fff;
+      }
+      .mark .tx { font-size: 46px; font-weight: 900; color: #f3f5fa; letter-spacing: .04em; }
+      .mark .en { font-size: 28px; font-weight: 500; color: #8494b1; letter-spacing: .2em; }
+
+      /* ── 製作浮水印：提醒這是動態腳本不是成片 ──── */
+      .stamp {
+        position: absolute;
+        left: 150px; bottom: 54px;
+        font-family: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+        font-size: 19px;
+        color: #8494b1;
+        letter-spacing: .16em;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="86.4"
+      data-width="1920"
+      data-height="1080"
+    >
+      <div class="clip bg" data-start="0" data-duration="86.4" data-track-index="0"></div>
+
+      <div class="clip shot" id="s01" data-start="0" data-duration="5" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 01</span><span class="act">幕一 · 靜</span><span class="len">5.0s</span></div>
+        <div class="plate"><span class="kind">空鏡 · 無人</span><span class="desc">深夜病房走廊，日光燈其中一盞在微微閃。地板反著冷光。</span></div>
+        <div class="info">20:14</div>
+      </div>
+
+      <div class="clip shot" id="s02" data-start="5" data-duration="4" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 02</span><span class="act">幕一 · 靜</span><span class="len">4.0s</span></div>
+        <div class="plate"><span class="kind">背影 · 不見臉</span><span class="desc">護理站桌前一個人的背影。一盞檯燈，身後是暗掉的病房。</span></div>
+        <div class="info">內科 3A · 護理長</div>
+        <div class="sub" data-in="5.5" data-out="8.34">小夜班還缺一個人。</div>
+      </div>
+
+      <div class="clip shot" id="s03" data-start="9" data-duration="3.9" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 03</span><span class="act">幕一 · 靜</span><span class="len">3.9s</span></div>
+        <div class="plate"><span class="kind">手部特寫</span><span class="desc">筆停在班表的一個空格上，手指輕點兩下。紙上的字是糊的。</span></div>
+        <div class="sub" data-in="9.4" data-out="12.3">這是這個月第三次。</div>
+      </div>
+
+      <div class="clip shot" id="s04" data-start="12.9" data-duration="5" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 04</span><span class="act">幕二 · 問</span><span class="len">5.0s</span></div>
+        <div class="plate"><span class="kind">手部特寫</span><span class="desc">手拿起手機。拇指懸在螢幕上方，沒有按下去。</span></div>
+        <div class="sub" data-in="13.3" data-out="17.31">每次開口，都要先想過一輪。</div>
+      </div>
+
+      <div class="clip shot" id="s05" data-start="17.9" data-duration="7.4" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 05</span><span class="act">幕二 · 問</span><span class="len">7.4s</span></div>
+        <div class="plate"><span class="kind">下半臉 · 眼睛不入鏡</span><span class="desc">手機的光從下往上打，只照到下巴和嘴唇。眼睛在畫面外。</span></div>
+        <div class="sub" data-in="18.3" data-out="24.66">誰昨天上大夜？誰這個月已經加了二十小時？</div>
+      </div>
+
+      <div class="clip shot" id="s06" data-start="25.3" data-duration="4.6" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 06</span><span class="act">幕二 · 問</span><span class="len">4.6s</span></div>
+        <div class="plate"><span class="kind">手部特寫</span><span class="desc">拇指打了幾個字，停住，又刪掉。重來一次。</span></div>
+        <div class="sub" data-in="25.7" data-out="29.33">誰上次已經幫過我一次了？</div>
+      </div>
+
+      <div class="clip shot" id="s07" data-start="29.9" data-duration="3.8" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 07</span><span class="act">幕二 · 問</span><span class="len">3.8s</span></div>
+        <div class="plate"><span class="kind">靜物 · 無人</span><span class="desc">手機平放在桌上，螢幕亮著。沒有人碰它。光慢慢暗下去。</span></div>
+        <div class="info">已讀 17</div>
+        <div class="sub" data-in="30.3" data-out="32.45">然後就是等。</div>
+      </div>
+
+      <div class="clip shot" id="s08" data-start="33.7" data-duration="3.5" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 08</span><span class="act">幕三 · 等</span><span class="len">3.5s</span></div>
+        <div class="plate"><span class="kind">縮時 · 無人</span><span class="desc">空走廊的縮時。光在變，時間在走。前景一個失焦的掛鐘。</span></div>
+        <div class="info">20:14 → 21:47</div>
+        <div class="sub" data-in="34.1" data-out="36.38">九十三分鐘。</div>
+      </div>
+
+      <div class="clip shot" id="s09" data-start="37.2" data-duration="3.2" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 09</span><span class="act">幕三 · 等</span><span class="len">3.2s</span></div>
+        <div class="plate"><span class="kind">靜物 · 無人</span><span class="desc">冷掉的咖啡，沒打開的便當。杯壁有水珠，空氣裡有灰塵在飄。</span></div>
+        <div class="sub" data-in="37.6" data-out="39.44">沒有人回。</div>
+      </div>
+
+      <div class="clip shot" id="s10" data-start="40.4" data-duration="9.5" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 10</span><span class="act">幕三 · 等</span><span class="len">9.5s — 全片核心</span></div>
+        <div class="plate"><span class="kind">大遠景 · 背影</span><span class="desc">一個人坐在護理站，在畫面裡很小。身後是深不見底的空走廊。肩膀慢慢垮下來。</span></div>
+        <div class="sub" data-in="41" data-out="48.46">不是沒有人願意。<br />是我不知道，該問誰才不會傷到誰。</div>
+      </div>
+
+      <div class="clip shot" id="s11" data-start="49.9" data-duration="3.6" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 11</span><span class="act">幕四 · 轉</span><span class="len">3.6s</span></div>
+        <div class="plate"><span class="kind">抽象 · 最好生成</span><span class="desc">暗中浮出微小的藍色光點，慢慢排列成一片整齊的網格。</span></div>
+        <div class="sub" data-in="50.3" data-out="53.03">她腦中一直在算。</div>
+      </div>
+
+      <div class="clip shot" id="s12" data-start="53.5" data-duration="7.6" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 12</span><span class="act">幕四 · 轉</span><span class="len">7.6s</span></div>
+        <div class="plate"><span class="kind">抽象 · 對應 H1–H10</span><span class="desc">網格上的光點一個一個暗掉，剩下的更亮。像篩子在篩。</span></div>
+        <div class="info">班距 · 連續天數<br />月工時 · 證照 · 單位權限</div>
+        <div class="sub" data-in="53.8" data-out="60.62">班距夠不夠、連了幾天、這個月幾小時、證照過期沒有。</div>
+      </div>
+
+      <div class="clip shot" id="s13" data-start="61.1" data-duration="6.3" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 13</span><span class="act">幕四 · 轉</span><span class="len">6.3s</span></div>
+        <div class="plate"><span class="kind">抽象 · 對應 S1–S5</span><span class="desc">最後剩三個光點。其中一個明顯比另外兩個亮。</span></div>
+        <div class="sub" data-in="61.4" data-out="66.59">只是這套算法，一直沒有離開過她的腦袋。</div>
+      </div>
+
+      <div class="clip shot render" id="s14" data-start="67.4" data-duration="6.7" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 14</span><span class="act">幕五 · 亮</span><span class="len">6.7s</span></div>
+        <div class="plate"><span class="kind">不用 AI · 程式渲染</span><span class="desc">產品畫面：三位候選人浮出，帶分數與理由。全片唯一需要精確中文與正確數字的一鏡。</span></div>
+        <div class="sub" data-in="67.8" data-out="73.53">班守，把她腦中那套算法變成看得見的東西。</div>
+      </div>
+
+      <div class="clip shot" id="s15" data-start="74.1" data-duration="6.7" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 15</span><span class="act">幕五 · 亮</span><span class="len">6.7s</span></div>
+        <div class="plate"><span class="kind">手部 · 晨光</span><span class="desc">早晨的光從百葉窗進來。兩雙手在交接一塊板子。只看得到手和身體。</span></div>
+        <div class="sub" data-in="74.4" data-out="80.2">不是替她決定，是讓她的決定，講得出理由。</div>
+      </div>
+
+      <div class="clip shot" id="s16" data-start="80.8" data-duration="5.6" data-track-index="1">
+        <div class="slug"><span class="id">SHOT 16</span><span class="act">幕五 · 亮</span><span class="len">5.6s</span></div>
+        <div class="plate"><span class="kind">背影 · 收尾</span><span class="desc">走廊，晨光。一個人往深處走去，背對鏡頭，不趕。走出畫面。</span></div>
+        <div class="mark">
+          <span class="lg">班</span><span class="tx">班守</span><span class="en">SHIFTGUARD</span>
+        </div>
+        <div class="sub" data-in="81.2" data-out="84.89">班表照顧好，人就留得住。</div>
+      </div>
+
+      <div class="clip stamp" id="stamp" data-start="0" data-duration="86.4" data-track-index="2">
+        ANIMATIC · 暫用配音（Windows SAPI）· 畫面為佔位
+      </div>
+
+      <audio id="a02" src="assets/voice/v02.wav" data-start="5.5"  data-duration="2.84" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a03" src="assets/voice/v03.wav" data-start="9.4"  data-duration="2.9"  data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a04" src="assets/voice/v04.wav" data-start="13.3" data-duration="4.01" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a05" src="assets/voice/v05.wav" data-start="18.3" data-duration="6.36" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a06" src="assets/voice/v06.wav" data-start="25.7" data-duration="3.63" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a07" src="assets/voice/v07.wav" data-start="30.3" data-duration="2.15" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a08" src="assets/voice/v08.wav" data-start="34.1" data-duration="2.28" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a09" src="assets/voice/v09.wav" data-start="37.6" data-duration="1.84" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a10" src="assets/voice/v10.wav" data-start="41"   data-duration="7.46" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a11" src="assets/voice/v11.wav" data-start="50.3" data-duration="2.73" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a12" src="assets/voice/v12.wav" data-start="53.8" data-duration="6.82" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a13" src="assets/voice/v13.wav" data-start="61.4" data-duration="5.19" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a14" src="assets/voice/v14.wav" data-start="67.8" data-duration="5.73" data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a15" src="assets/voice/v15.wav" data-start="74.4" data-duration="5.8"  data-track-index="10" data-audio-group="voiceover"></audio>
+      <audio id="a16" src="assets/voice/v16.wav" data-start="81.2" data-duration="3.69" data-track-index="10" data-audio-group="voiceover"></audio>
+    </div>
+
+    <script>
+      (function () {
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+        var D = 86.4;
+
+        /* 每一鏡：內容錯峰淡入，佔位框緩推——動態腳本只需要看得出節奏 */
+        var shots = document.querySelectorAll("#root .shot");
+        for (var i = 0; i < shots.length; i++) {
+          var shot = shots[i];
+          var at = parseFloat(shot.getAttribute("data-start"));
+          var dur = parseFloat(shot.getAttribute("data-duration"));
+
+          var slug = shot.querySelector(".slug");
+          var plate = shot.querySelector(".plate");
+          var info = shot.querySelector(".info");
+          var mark = shot.querySelector(".mark");
+
+          if (slug) {
+            tl.fromTo(slug, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.32, ease: "power3.out" }, at);
+          }
+          if (plate) {
+            tl.fromTo(plate, { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, at + 0.08);
+            /* 極緩推進，讓靜態佔位不會看起來像投影片 */
+            tl.fromTo(plate, { scale: 1 }, { scale: 1.012, duration: dur, ease: "none" }, at);
+          }
+          if (info) {
+            tl.fromTo(info, { opacity: 0, x: 18 }, { opacity: 1, x: 0, duration: 0.42, ease: "power3.out" }, at + 0.3);
+          }
+          if (mark) {
+            tl.fromTo(mark, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, at + 1.2);
+          }
+        }
+
+        /* 字幕：跟著旁白進出，這是這支片真正要驗的節奏 */
+        var subs = document.querySelectorAll("#root .sub");
+        for (var j = 0; j < subs.length; j++) {
+          var sub = subs[j];
+          var tin = parseFloat(sub.getAttribute("data-in"));
+          var tout = parseFloat(sub.getAttribute("data-out"));
+          tl.fromTo(sub, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.28, ease: "power2.out" }, Math.max(0, tin - 0.18));
+          tl.to(sub, { opacity: 0, duration: 0.3, ease: "power2.in" }, tout + 0.1);
+        }
+
+        /* 收尾淡出 */
+        tl.to("#root", { opacity: 0, duration: 0.9, ease: "power2.in" }, D - 0.9);
+
+        tl.set({}, {}, D);
+        window.__timelines["main"] = tl;
+      })();
+    </script>
+  </body>
+</html>

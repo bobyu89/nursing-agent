@@ -1,0 +1,100 @@
+<template>
+  <div id="f16-root" data-composition-id="16-walk-away" data-duration="5.6" data-width="1920" data-height="1080">
+    <div class="clip" id="f16-clip" data-start="0" data-duration="5.6" data-track-index="0">
+      <div class="p stage" id="f16-stage"></div>
+      <div class="sub" id="f16-sub">班表照顧好，人就留得住。</div>
+      <div class="p" id="f16-mark">
+        <span class="f16-lg">班</span><span class="f16-tx">班守</span><span class="f16-en">SHIFTGUARD</span>
+      </div>
+    </div>
+
+    <style>
+      #f16-mark {
+        left: 50%; bottom: 232px;
+        transform: translateX(-50%);
+        width: 620px; height: 80px;
+        display: flex; align-items: center; justify-content: center; gap: 22px;
+      }
+      .f16-lg {
+        width: 62px; height: 62px; border-radius: 0;
+        background: #4060ef; color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 32px; font-weight: 900;
+      }
+      .f16-tx { font-size: 46px; font-weight: 900; color: #f8fafc; letter-spacing: .04em; }
+      .f16-en { font-size: 27px; font-weight: 500; color: #dbe4f2; letter-spacing: .2em; }
+    </style>
+
+    <script src="assets/pixel.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        var PX = window.PX, M = PX.pal.morning, BODY = PX.pal.body;
+        var stage = document.getElementById("f16-stage");
+
+        PX.scene.corridor(stage, M, { idPrefix: "f16-t" });
+
+        /* 走廊盡頭現在是亮的——出口，不是黑洞。
+           但要小：一扇門的光，不是一面投影幕。 */
+        PX.rect(stage, 73, 43, 14, 15, M.sunPale, 0.35);
+        PX.rect(stage, 75, 45, 10, 13, M.sunPale, 0.6);
+        PX.rect(stage, 77, 47, 6, 11, M.sunPale, 0.85);
+
+        /* 背影往深處走。像素風的「走遠」＝分段換小，不是連續縮放。 */
+        var g1 = PX.layer(stage, "f16-near", 1);
+        var g1b = PX.layer(stage, "f16-nearB", 0);
+        PX.sprite(g1, PX.spr.nurseWalkA, BODY, 72, 50, 1);
+        PX.sprite(g1b, PX.spr.nurseWalkB, BODY, 72, 50, 1);
+
+        var g2 = PX.layer(stage, "f16-mid", 0);
+        var g2b = PX.layer(stage, "f16-midB", 0);
+        PX.sprite(g2, PX.spr.nurseWalkA, BODY, 74, 47, 0.75);
+        PX.sprite(g2b, PX.spr.nurseWalkB, BODY, 74, 47, 0.75);
+
+        var g3 = PX.layer(stage, "f16-far", 0);
+        PX.sprite(g3, PX.spr.nurseBack, BODY, 76, 45, 0.5);
+
+        var beams = PX.layer(stage, "f16-beams", 1);
+        PX.rect(beams, 60, 40, 40, 50, M.sun, 0.05);
+        PX.rect(beams, 66, 44, 28, 46, M.sun, 0.05);
+
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+
+        /* 走路循環：兩格交替 */
+        var t = 0.2;
+        while (t < 2.5) {
+          tl.set("#f16-near", { opacity: 1 }, t);
+          tl.set("#f16-nearB", { opacity: 0 }, t);
+          tl.set("#f16-near", { opacity: 0 }, t + 0.24);
+          tl.set("#f16-nearB", { opacity: 1 }, t + 0.24);
+          t += 0.48;
+        }
+
+        /* 換到中景尺寸 */
+        tl.set("#f16-near", { opacity: 0 }, 2.6);
+        tl.set("#f16-nearB", { opacity: 0 }, 2.6);
+        var t2 = 2.6;
+        while (t2 < 4.0) {
+          tl.set("#f16-mid", { opacity: 1 }, t2);
+          tl.set("#f16-midB", { opacity: 0 }, t2);
+          tl.set("#f16-mid", { opacity: 0 }, t2 + 0.26);
+          tl.set("#f16-midB", { opacity: 1 }, t2 + 0.26);
+          t2 += 0.52;
+        }
+
+        /* 最遠，然後走進光裡 */
+        tl.set("#f16-mid", { opacity: 0 }, 4.1);
+        tl.set("#f16-midB", { opacity: 0 }, 4.1);
+        tl.set("#f16-far", { opacity: 1 }, 4.1);
+        tl.to("#f16-far", { opacity: 0, duration: 0.9, ease: "power2.in" }, 4.5);
+
+        tl.fromTo("#f16-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }, 0.25);
+        tl.to("#f16-sub", { opacity: 0, duration: 0.4, ease: "power2.in" }, 4.2);
+        tl.fromTo("#f16-mark", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 4.5);
+
+        window.__timelines["16-walk-away"] = tl;
+      })();
+    </script>
+  </div>
+</template>

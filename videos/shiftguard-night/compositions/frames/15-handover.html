@@ -1,0 +1,63 @@
+<template>
+  <div id="f15-root" data-composition-id="15-handover" data-duration="6.7" data-width="1920" data-height="1080">
+    <div class="clip" id="f15-clip" data-start="0" data-duration="6.7" data-track-index="0">
+      <div class="p stage" id="f15-stage"></div>
+      <div class="sub" id="f15-sub">不是替她決定，是讓她的決定，講得出理由。</div>
+    </div>
+
+    <script src="assets/pixel.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        var PX = window.PX, M = PX.pal.morning, BODY = PX.pal.body;
+        var stage = document.getElementById("f15-stage");
+
+        /* 同一個空間，色溫翻過來。這是全片第一次天亮。 */
+        PX.rect(stage, 0, 0, 160, 90, M.wall);
+        PX.rect(stage, 0, 0, 160, 10, M.ceil);
+        PX.rect(stage, 0, 32, 160, 1, M.wallLine);
+
+        /* 百葉窗 */
+        PX.rect(stage, 96, 12, 52, 34, M.wallDark);
+        for (var b = 0; b < 8; b++) {
+          PX.rect(stage, 97, 14 + b * 4, 50, 2, M.sunPale, 0.55);
+        }
+        PX.rect(stage, 96, 12, 52, 1, M.metal);
+        PX.rect(stage, 96, 46, 52, 1, M.metal);
+
+        /* 陽光斜射進來，打在地上成條紋 */
+        var beams = PX.layer(stage, "f15-beams", 1);
+        for (var s = 0; s < 8; s++) {
+          PX.rect(beams, 10 + s * 3, 52 + s * 3, 62, 3, M.sun, 0.09 - s * 0.008);
+        }
+        PX.rect(beams, 20, 50, 76, 40, M.sun, 0.05);
+
+        /* 檯面 */
+        PX.rect(stage, 0, 64, 160, 2, M.counterT);
+        PX.rect(stage, 0, 66, 160, 24, M.counter);
+
+        /* 兩雙手交接板夾——只有手，沒有臉 */
+        var hands = PX.layer(stage, "f15-hands");
+        PX.sprite(hands, PX.spr.handsPass, BODY, 44, 34, 3);
+
+        PX.scene.vignette(stage, M, 0.32);
+
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+
+        /* 板夾遞過去：整組往右移兩格，交接完成 */
+        tl.set("#f15-hands", { x: -PX.U }, 0);
+        tl.set("#f15-hands", { x: 0 }, 2.2);
+        tl.set("#f15-hands", { x: PX.U }, 3.6);
+
+        /* 晨光慢慢變強——一天真的開始了 */
+        tl.fromTo("#f15-beams", { opacity: 0.5 }, { opacity: 1, duration: 5.4, ease: "sine.inOut" }, 0.3);
+
+        tl.fromTo("#f15-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 0.15);
+        tl.to("#f15-sub", { opacity: 0, duration: 0.35, ease: "power2.in" }, 6.15);
+
+        window.__timelines["15-handover"] = tl;
+      })();
+    </script>
+  </div>
+</template>

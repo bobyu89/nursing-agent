@@ -1,0 +1,59 @@
+<template>
+  <div id="f09-root" data-composition-id="09-cold-coffee" data-duration="3.2" data-width="1920" data-height="1080">
+    <div class="clip" id="f09-clip" data-start="0" data-duration="3.2" data-track-index="0">
+      <div class="p stage" id="f09-stage"></div>
+      <div class="sub" id="f09-sub">沒有人回。</div>
+    </div>
+
+    <script src="assets/pixel.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        var PX = window.PX, N = PX.pal.night;
+        var stage = document.getElementById("f09-stage");
+
+        PX.rect(stage, 0, 0, 160, 90, "#101a2e");
+        PX.rect(stage, 0, 52, 160, 38, "#18243e");     /* 檯面 */
+        PX.rect(stage, 0, 52, 160, 1, N.counterT);
+
+        /* 咖啡杯 —— 這鏡沒有熱氣，這就是重點 */
+        PX.rect(stage, 38, 34, 22, 22, N.cup);
+        PX.rect(stage, 40, 34, 18, 3, N.coffee);
+        PX.rect(stage, 40, 37, 18, 1, "#5c4233");      /* 冷掉那圈油膜 */
+        PX.rect(stage, 60, 40, 6, 10, N.cup);
+        PX.rect(stage, 62, 42, 2, 6, "#18243e");
+        PX.rect(stage, 38, 54, 22, 2, N.shadow, 0.5);
+
+        /* 沒打開的便當 */
+        PX.rect(stage, 82, 38, 42, 18, "#2c3a55");
+        PX.rect(stage, 82, 38, 42, 3, "#3b4a6b");
+        PX.rect(stage, 86, 42, 34, 1, "#22304b");
+        PX.rect(stage, 96, 34, 14, 4, "#3b4a6b");      /* 橡皮筋 */
+        PX.rect(stage, 82, 56, 42, 2, N.shadow, 0.5);
+
+        /* 杯壁的水珠 */
+        PX.rect(stage, 41, 44, 1, 2, "#f6f9fd", 0.8);
+        PX.rect(stage, 45, 48, 1, 2, "#f6f9fd", 0.6);
+        PX.rect(stage, 55, 42, 1, 2, "#f6f9fd", 0.5);
+
+        /* 一束斜光 */
+        var beam = PX.layer(stage, "f09-beam", 1);
+        PX.rect(beam, 20, 0, 60, 90, N.lamp, 0.028);
+        PX.rect(beam, 30, 0, 40, 90, N.lamp, 0.022);
+
+        PX.scene.vignette(stage, N, 0.6);
+
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+
+        /* 幾乎不動。這鏡的重點是靜。 */
+        tl.to("#f09-beam", { opacity: 0.75, duration: 3.2, ease: "sine.inOut" }, 0);
+
+        tl.fromTo("#f09-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 0.25);
+        tl.to("#f09-sub", { opacity: 0, duration: 0.3, ease: "power2.in" }, 2.5);
+
+        window.__timelines["09-cold-coffee"] = tl;
+      })();
+    </script>
+  </div>
+</template>

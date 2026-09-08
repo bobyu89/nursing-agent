@@ -1,0 +1,95 @@
+<template>
+  <div id="f02-root" data-composition-id="02-station" data-duration="4" data-width="1920" data-height="1080">
+    <div class="clip" id="f02-clip" data-start="0" data-duration="4" data-track-index="0">
+      <div class="p stage" id="f02-stage"></div>
+      <div class="hud" id="f02-hud">內科 3A · 護理長</div>
+      <div class="sub" id="f02-sub">小夜班還缺一個人。</div>
+    </div>
+
+    <script src="assets/pixel.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        var PX = window.PX, N = PX.pal.night, BODY = PX.pal.body;
+        var stage = document.getElementById("f02-stage");
+
+        PX.scene.station(stage, N, { idPrefix: "f02-fl" });
+
+        /* 護理長：兩層疊放，用透明度切換眨眼 */
+        var g = PX.layer(stage, "f02-nurse");
+        var open = PX.layer(stage, "f02-open", 1);
+        var blink = PX.layer(stage, "f02-blink", 0);
+        g.appendChild(open); g.appendChild(blink);
+        PX.sprite(open, PX.spr.nurseFront, BODY, 62, 36);
+        PX.sprite(blink, PX.spr.nurseFrontBlink, BODY, 62, 36);
+
+        /* 櫃檯畫在人之後，才會蓋住下半身 */
+        PX.scene.counter(stage, N);
+
+        /* 螢幕 */
+        PX.rect(stage, 28, 44, 20, 18, N.metal);
+        PX.rect(stage, 29, 45, 18, 16, N.screen);
+        PX.rect(stage, 36, 62, 4, 2, N.metal);
+        PX.rect(stage, 33, 64, 10, 1, N.metal);
+        PX.rect(stage, 31, 49, 14, 1, "#2b4160");
+        PX.rect(stage, 31, 52, 1, 1, N.screenOn, 1, "f02-blip");
+
+        PX.scene.deskLamp(stage, N, 101, "f02-lamp");
+
+        /* 咖啡與熱氣 */
+        PX.rect(stage, 51, 57, 7, 7, N.cup);
+        PX.rect(stage, 52, 57, 5, 1, N.coffee);
+        PX.rect(stage, 58, 59, 2, 3, N.cup);
+        PX.rect(stage, 53, 54, 1, 2, N.steam, 0.5, "f02-steam1");
+        PX.rect(stage, 55, 53, 1, 2, N.steam, 0.35, "f02-steam2");
+
+        /* 手機平放在檯面 */
+        PX.rect(stage, 88, 60, 11, 4, "#141d33");
+        PX.rect(stage, 89, 61, 9, 2, N.phoneOff, 1, "f02-phone");
+        PX.rect(stage, 83, 56, 21, 10, N.phoneOn, 0, "f02-glow");
+
+        PX.rect(stage, 120, 61, 18, 3, N.paper);
+        PX.rect(stage, 122, 59, 16, 2, "#dde5f1");
+
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+
+        /* 呼吸：整個人上下剛好一個藝術像素 */
+        tl.to("#f02-nurse", { y: PX.U, duration: 1.7, ease: "steps(1)", repeat: 2, yoyo: true }, 0);
+
+        /* 眨眼 */
+        var blinks = [0.9, 2.9];
+        for (var b = 0; b < blinks.length; b++) {
+          tl.set("#f02-blink", { opacity: 1 }, blinks[b]);
+          tl.set("#f02-open", { opacity: 0 }, blinks[b]);
+          tl.set("#f02-blink", { opacity: 0 }, blinks[b] + 0.13);
+          tl.set("#f02-open", { opacity: 1 }, blinks[b] + 0.13);
+        }
+
+        /* 日光燈 */
+        var flick = [[0, 1], [1.55, 0.4], [1.63, 1], [1.76, 0.6], [1.82, 1]];
+        for (var f = 0; f < flick.length; f++) {
+          tl.set("#f02-fl-tube", { opacity: flick[f][1] }, flick[f][0]);
+          tl.set("#f02-fl-g1", { opacity: flick[f][1] }, flick[f][0]);
+          tl.set("#f02-fl-g2", { opacity: flick[f][1] }, flick[f][0]);
+        }
+
+        tl.to("#f02-blip", { x: 13 * PX.U, duration: 2.6, ease: "steps(13)", repeat: 1 }, 0.2);
+        tl.to("#f02-lamp-g1", { opacity: 0.72, duration: 2, ease: "sine.inOut", repeat: 1, yoyo: true }, 0);
+        tl.fromTo("#f02-steam1", { y: 0, opacity: 0.5 }, { y: -5 * PX.U, opacity: 0, duration: 2.4, ease: "steps(5)", repeat: 1 }, 0);
+        tl.fromTo("#f02-steam2", { y: 0, opacity: 0.35 }, { y: -4 * PX.U, opacity: 0, duration: 2.8, ease: "steps(4)", repeat: 0 }, 0.6);
+
+        /* 訊息送出：手機亮起 */
+        tl.set("#f02-phone", { background: N.phoneOn }, 2.5);
+        tl.fromTo("#f02-glow", { opacity: 0 }, { opacity: 0.22, duration: 0.25, ease: "power2.out" }, 2.5);
+
+        tl.fromTo("#f02-hud", { opacity: 0, x: 16 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, 0.1);
+        /* 旁白在總表的絕對時間 5.5s，本鏡從 5.0s 起 → 本地 0.5s */
+        tl.fromTo("#f02-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 0.35);
+        tl.to("#f02-sub", { opacity: 0, duration: 0.3, ease: "power2.in" }, 3.5);
+
+        window.__timelines["02-station"] = tl;
+      })();
+    </script>
+  </div>
+</template>

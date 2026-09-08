@@ -1,0 +1,79 @@
+<template>
+  <div id="f10-root" data-composition-id="10-wide" data-duration="9.5" data-width="1920" data-height="1080">
+    <div class="clip" id="f10-clip" data-start="0" data-duration="9.5" data-track-index="0">
+      <div class="p stage" id="f10-stage"></div>
+      <div class="sub" id="f10-sub">不是沒有人願意。<br />是我不知道，該問誰才不會傷到誰。</div>
+    </div>
+
+    <script src="assets/pixel.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        var PX = window.PX, N = PX.pal.night, BODY = PX.pal.body;
+        var stage = document.getElementById("f10-stage");
+
+        PX.scene.corridor(stage, N, { idPrefix: "f10-t" });
+
+        /* 三個姿勢：坐直 → 沉一格 → 沉兩格且肩線攤開。
+           垮掉不只是變矮，是攤開——最後一格差的就是這個。 */
+        var BLANK = "................";
+        var A = PX.spr.nurseBack;
+        var B = [BLANK].concat(A.slice(0, 19));
+        var C = [BLANK, BLANK].concat(A.slice(0, 18));
+        C[13] = ".WWWWWWWWWWWWWW.";
+        C[14] = ".WWWWWWWWWWWWWW.";
+
+        var g = PX.layer(stage, "f10-nurse");
+        var pa = PX.layer(stage, "f10-a", 1);
+        var pb = PX.layer(stage, "f10-b", 0);
+        var pc = PX.layer(stage, "f10-c", 0);
+        g.appendChild(pa); g.appendChild(pb); g.appendChild(pc);
+        PX.sprite(pa, A, BODY, 72, 42);
+        PX.sprite(pb, B, BODY, 72, 42);
+        PX.sprite(pc, C, BODY, 72, 42);
+
+        /* 櫃檯畫在人之後——她每沉一格就被檯面多吃掉一點 */
+        PX.rect(stage, 54, 60, 52, 2, N.counterT);
+        PX.rect(stage, 54, 62, 52, 10, N.counter);
+        PX.rect(stage, 54, 66, 52, 1, N.shadow, 0.4);
+
+        /* 全畫面唯一的暖色 */
+        PX.rect(stage, 99, 56, 1, 4, N.metal);
+        PX.rect(stage, 97, 54, 5, 1, N.metal);
+        PX.rect(stage, 96, 53, 7, 1, N.metal);
+        PX.rect(stage, 97, 55, 5, 1, N.lamp);
+        var lg = PX.layer(stage, "f10-lamp", 1);
+        PX.rect(lg, 96, 56, 7, 1, N.lamp, 0.14);
+        PX.rect(lg, 95, 57, 9, 1, N.lamp, 0.1);
+        PX.rect(lg, 94, 58, 11, 1, N.lamp, 0.07);
+        PX.rect(lg, 93, 59, 13, 1, N.lamp, 0.05);
+
+        PX.scene.vignette(stage, N, 0.55);
+
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+
+        /* 兩次逐格下沉，對上旁白的兩個句子 */
+        tl.set("#f10-a", { opacity: 0 }, 3.4);
+        tl.set("#f10-b", { opacity: 1 }, 3.4);
+        tl.set("#f10-b", { opacity: 0 }, 6.6);
+        tl.set("#f10-c", { opacity: 1 }, 6.6);
+
+        /* 呼吸比別鏡更慢更淺——她累了 */
+        tl.to("#f10-nurse", { y: PX.U, duration: 2.6, ease: "steps(1)", repeat: 2, yoyo: true }, 0);
+
+        /* 遠處燈管偶爾閃一下，其餘全靜 */
+        var flick = [[0, 0.45], [4.15, 0.16], [4.24, 0.45], [8.3, 0.2], [8.38, 0.45]];
+        for (var f = 0; f < flick.length; f++) {
+          tl.set("#f10-t3", { opacity: flick[f][1] }, flick[f][0]);
+        }
+        tl.to("#f10-lamp", { opacity: 0.7, duration: 3.1, ease: "sine.inOut", repeat: 1, yoyo: true }, 0);
+
+        tl.fromTo("#f10-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, 0.45);
+        tl.to("#f10-sub", { opacity: 0, duration: 0.5, ease: "power2.in" }, 8.3);
+
+        window.__timelines["10-wide"] = tl;
+      })();
+    </script>
+  </div>
+</template>

@@ -1,0 +1,75 @@
+<template>
+  <div id="f06-root" data-composition-id="06-typing" data-duration="4.6" data-width="1920" data-height="1080">
+    <div class="clip" id="f06-clip" data-start="0" data-duration="4.6" data-track-index="0">
+      <div class="p stage" id="f06-stage"></div>
+      <div class="sub" id="f06-sub">誰上次已經幫過我一次了？</div>
+    </div>
+
+    <script src="assets/pixel.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        var PX = window.PX, N = PX.pal.night, BODY = PX.pal.body;
+        var stage = document.getElementById("f06-stage");
+
+        PX.rect(stage, 0, 0, 160, 90, "#0b1424");
+
+        /* 手機螢幕佔滿畫面中央 */
+        PX.rect(stage, 34, 10, 92, 72, "#141d33");
+        PX.rect(stage, 38, 14, 84, 64, "#1b2a44");
+
+        /* 打了幾個字的訊息框——只有色塊，沒有字 */
+        var b1 = PX.rect(stage, 44, 22, 46, 7, N.accent, 0.85, "f06-b1");
+        var b2 = PX.rect(stage, 44, 32, 62, 7, N.accent, 0.85, "f06-b2");
+        var b3 = PX.rect(stage, 44, 42, 34, 7, N.accent, 0.85, "f06-b3");
+
+        /* 游標 */
+        PX.rect(stage, 80, 42, 2, 7, "#dbe4f2", 1, "f06-caret");
+
+        /* 手從下方伸進來——縮小才看得出是手，放大只會被畫面切掉 */
+        var thumb = PX.layer(stage, "f06-thumb");
+        PX.sprite(thumb, PX.spr.handPen, BODY, 56, 58, 2);
+
+        /* 螢幕的光 */
+        var glow = PX.layer(stage, "f06-glow", 1);
+        PX.rect(glow, 28, 6, 104, 80, N.phoneOn, 0.05);
+        PX.scene.vignette(stage, N, 0.55);
+
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+
+        /* 打字：訊息框一句一句長出來 */
+        tl.set("#f06-b1", { width: 0 }, 0);
+        tl.set("#f06-b2", { width: 0 }, 0);
+        tl.set("#f06-b3", { width: 0 }, 0);
+        tl.to("#f06-b1", { width: 46 * PX.U, duration: 0.7, ease: "steps(8)" }, 0.35);
+        tl.to("#f06-b2", { width: 62 * PX.U, duration: 0.9, ease: "steps(10)" }, 1.15);
+        tl.to("#f06-b3", { width: 34 * PX.U, duration: 0.5, ease: "steps(6)" }, 2.15);
+
+        /* 然後刪掉——猶豫的具體形狀 */
+        tl.to("#f06-b3", { width: 0, duration: 0.35, ease: "steps(6)" }, 2.95);
+        tl.to("#f06-b2", { width: 0, duration: 0.5, ease: "steps(10)" }, 3.3);
+
+        /* 游標跟著訊息尾端跳 */
+        tl.set("#f06-caret", { x: -34 * PX.U }, 0);
+        tl.set("#f06-caret", { x: 12 * PX.U, y: -20 * PX.U }, 0.35);
+        tl.set("#f06-caret", { x: 28 * PX.U, y: -10 * PX.U }, 1.15);
+        tl.set("#f06-caret", { x: 0, y: 0 }, 2.15);
+        tl.set("#f06-caret", { x: 28 * PX.U, y: -10 * PX.U }, 2.95);
+        tl.set("#f06-caret", { x: 12 * PX.U, y: -20 * PX.U }, 3.8);
+
+        /* 拇指點擊 */
+        var taps = [0.4, 0.9, 1.25, 1.7, 2.2, 3.0, 3.4];
+        for (var t = 0; t < taps.length; t++) {
+          tl.set("#f06-thumb", { y: -PX.U }, taps[t]);
+          tl.set("#f06-thumb", { y: 0 }, taps[t] + 0.12);
+        }
+
+        tl.fromTo("#f06-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 0.25);
+        tl.to("#f06-sub", { opacity: 0, duration: 0.3, ease: "power2.in" }, 4.15);
+
+        window.__timelines["06-typing"] = tl;
+      })();
+    </script>
+  </div>
+</template>

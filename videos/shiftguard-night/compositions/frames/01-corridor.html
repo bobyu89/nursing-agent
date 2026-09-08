@@ -1,0 +1,38 @@
+<template>
+  <div id="f01-root" data-composition-id="01-corridor" data-duration="5" data-width="1920" data-height="1080">
+    <div class="clip" id="f01-clip" data-start="0" data-duration="5" data-track-index="0">
+      <div class="p stage" id="f01-stage"></div>
+      <div class="hud" id="f01-hud">20:14</div>
+    </div>
+
+    <script src="assets/pixel.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        var PX = window.PX, N = PX.pal.night;
+        var stage = document.getElementById("f01-stage");
+
+        PX.scene.corridor(stage, N, { idPrefix: "f01-t" });
+        PX.scene.vignette(stage, N, 0.5);
+
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+
+        /* 老日光燈：不規則閃爍，時間點寫死（不能有亂數）*/
+        var flick = [[0, 0.85], [1.2, 0.3], [1.28, 0.85], [1.42, 0.5], [1.48, 0.85],
+                     [3.6, 0.25], [3.68, 0.85], [3.8, 0.6], [3.86, 0.85]];
+        for (var i = 0; i < flick.length; i++) {
+          tl.set("#f01-t1", { opacity: flick[i][1] }, flick[i][0]);
+        }
+
+        /* 遠處那支更慢地喘一下 */
+        tl.set("#f01-t3", { opacity: 0.2 }, 2.4);
+        tl.set("#f01-t3", { opacity: 0.45 }, 2.52);
+
+        tl.fromTo("#f01-hud", { opacity: 0, x: 16 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, 0.6);
+
+        window.__timelines["01-corridor"] = tl;
+      })();
+    </script>
+  </div>
+</template>

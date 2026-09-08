@@ -1,0 +1,52 @@
+<template>
+  <div id="f07-root" data-composition-id="07-silence" data-duration="3.8" data-width="1920" data-height="1080">
+    <div class="clip" id="f07-clip" data-start="0" data-duration="3.8" data-track-index="0">
+      <div class="p stage" id="f07-stage"></div>
+      <div class="hud" id="f07-hud">已讀 17</div>
+      <div class="sub" id="f07-sub">然後就是等。</div>
+    </div>
+
+    <script src="assets/pixel.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        var PX = window.PX, N = PX.pal.night;
+        var stage = document.getElementById("f07-stage");
+
+        PX.rect(stage, 0, 0, 160, 90, "#0c1526");
+        PX.rect(stage, 0, 40, 160, 50, "#16223c");      /* 檯面 */
+        PX.rect(stage, 0, 40, 160, 1, N.counterT);
+
+        /* 手機平放，沒有人碰它。小一點、暗一點——
+           它是一支手機，不是一塊發光的板子。 */
+        PX.rect(stage, 64, 48, 32, 24, "#141d33");
+        PX.rect(stage, 66, 50, 28, 20, "#4a86a8", 1, "f07-screen");
+        PX.rect(stage, 66, 50, 28, 3, "#5c9cbe");
+        PX.rect(stage, 78, 71, 4, 1, "#22304b");
+
+        /* 螢幕往外散的光 */
+        var glow = PX.layer(stage, "f07-glow", 1);
+        PX.rect(glow, 58, 43, 44, 34, N.phoneOn, 0.07);
+        PX.rect(glow, 52, 38, 56, 44, N.phoneOn, 0.04);
+        PX.rect(glow, 46, 33, 68, 54, N.phoneOn, 0.022);
+
+        PX.scene.vignette(stage, N, 0.55);
+
+        window.__timelines = window.__timelines || {};
+        var tl = gsap.timeline({ paused: true });
+
+        /* 螢幕逾時暗掉——沒有人碰，它自己暗的 */
+        tl.to("#f07-screen", { opacity: 0.55, duration: 0.9, ease: "steps(3)" }, 1.6);
+        tl.to("#f07-glow", { opacity: 0.45, duration: 0.9, ease: "steps(3)" }, 1.6);
+        tl.to("#f07-screen", { opacity: 0.12, duration: 0.8, ease: "steps(3)" }, 2.7);
+        tl.to("#f07-glow", { opacity: 0.1, duration: 0.8, ease: "steps(3)" }, 2.7);
+
+        tl.fromTo("#f07-hud", { opacity: 0, x: 16 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, 1.0);
+        tl.fromTo("#f07-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 0.25);
+        tl.to("#f07-sub", { opacity: 0, duration: 0.3, ease: "power2.in" }, 2.8);
+
+        window.__timelines["07-silence"] = tl;
+      })();
+    </script>
+  </div>
+</template>
