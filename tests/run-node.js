@@ -28,6 +28,7 @@ Object.assign(globalThis, require('../src/botcore.js'));
 require('./engine.test.js');
 require('./fhir.test.js');
 require('./botcore.test.js');
+require('./linebot-stage1.test.js');
 
 (async () => {
   let pass = 0, fail = 0;

@@ -14,8 +14,15 @@
  *   3. 條件齊全 → 同一份 evaluateGap 引擎排序 → 回覆替補建議前三名
  *      （分數＋依據）＋排除摘要＋平台連結
  *
- * 本檔只負責 Workers 特有的部分：LINE 簽章驗證、reply API、
- * 白名單／頻率限制／告警；訊息組裝全部在 src/botcore.js。
+ * 本檔只負責 Workers 特有的部分：LINE 簽章驗證、reply／push API、
+ * 白名單／頻率限制／告警、D1 與 cron 的接線；訊息組裝全部在 src/botcore.js。
+ *
+ * Stage 1 地基（docs/LINEBOT-STAGE1.md）：綁定 D1 後，
+ *   ・身分：以 identity 表取代 ALLOWED_USERS；未綁定者只能看到綁定說明
+ *   ・資料：人員與班表改讀 D1 快照（空表時回落 data.js 示範資料）
+ *   ・指令：「發碼 N-04」（管理者）、「綁定 N-04 483920」（本人）
+ *   ・cron：每分鐘清過期綁定碼（Phase 1 起掃替班逾時）
+ * 未綁定 D1 時一切行為與 Stage 0 相同——示範部署零成本不變。
  *
  * 治理邊界：機器人提供「建議」，不做指派決定——正式確認與決策留痕在平台。
  * 誠實聲明：示範資料（虛構人員）；解析為確定性關鍵詞規則。
@@ -26,6 +33,7 @@ import rules from '../../src/rules.js';
 import engineMod from '../../src/engine.js';
 import llm from '../../src/llm.js';
 import botcore from '../../src/botcore.js';
+import { createD1Store, userHash } from './store-d1.mjs';
 
 // 依 index.html 的載入語義把全域掛回（與 tests/run-node.js 同一招）
 Object.assign(globalThis, data, rules, engineMod, llm, botcore);
@@ -64,16 +72,38 @@ function overRateLimit(userId) {
   return arr.length > RATE_LIMIT;
 }
 
+/** 管理者名單（ADMIN_USER_ID 逗號分隔可多人）；發碼與安全告警都以此為準 */
+function adminIds(env) {
+  return (env.ADMIN_USER_ID || '').split(',').map((s) => s.trim()).filter(Boolean);
+}
+function isAdmin(env, userId) {
+  return !!userId && adminIds(env).includes(userId);
+}
+
+/** 主動推播（計 LINE 額度）。每一則 push 都要有理由——見設計 §2.3 */
+async function linePush(channelToken, to, messages) {
+  const res = await fetch('https://api.line.me/v2/bot/message/push', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${channelToken}` },
+    body: JSON.stringify({ to, messages }),
+  });
+  if (!res.ok) console.log('LINE push failed:', res.status, await res.text());
+  return res.ok;
+}
+
 async function adminAlert(env, userId, text) {
-  if (!env.ADMIN_USER_ID || alerted.has(userId)) return;
+  const admins = adminIds(env);
+  if (admins.length === 0 || alerted.has(userId)) return;
   alerted.add(userId);
   try {
-    await fetch('https://api.line.me/v2/bot/message/push', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` },
-      body: JSON.stringify({ to: env.ADMIN_USER_ID, messages: [{ type: 'text', text: `【班守｜安全告警】${text}`.slice(0, 1000) }] }),
-    });
+    await linePush(env.LINE_CHANNEL_ACCESS_TOKEN, admins[0],
+      [{ type: 'text', text: `【班守｜安全告警】${text}`.slice(0, 1000) }]);
   } catch (err) { console.log('[SEC] alert-failed', String(err)); }
+}
+
+/** Stage 1：D1 有綁定就建 store，否則 null（示範模式） */
+function makeStore(env) {
+  return env.DB ? createD1Store(env.DB, { auditCanonical: globalThis.auditCanonical }) : null;
 }
 
 /** 台北時區的今天（Workers 跑 UTC；「明天」要以台灣日曆換算） */
@@ -116,15 +146,36 @@ async function lineReply(channelToken, replyToken, text, quickItems) {
 
 /* ── 事件處理（流程與訊息組裝在 src/botcore.js）── */
 
-async function handleEvent(ev, env) {
+async function handleEvent(ev, env, { store, live }) {
   const platformUrl = env.PLATFORM_URL || 'https://bobyu89.github.io/nursing-agent/';
   // LIFF（選配）：wrangler.toml 填入 LIFF_ID 後，入口按鈕改以全高視窗在 LINE 內開啟平台
   const liffUrl = env.LIFF_ID ? `https://liff.line.me/${env.LIFF_ID}` : null;
   const token = env.LINE_CHANNEL_ACCESS_TOKEN;
   const userId = (ev.source && ev.source.userId) || 'unknown';
 
-  /* 第一道：白名單。名單外的使用者拿不到任何功能與人事資訊 */
-  if (!allowedUser(env, userId)) {
+  const nowIso = new Date().toISOString();
+  const textIn = (ev.type === 'message' && ev.message && ev.message.type === 'text')
+    ? String(ev.message.text || '').slice(0, 2000).trim() : '';
+
+  /* 第一道：身分閘。
+   * 有 D1：identity 表為準；未綁定者只允許「綁定」指令，其餘一律回綁定說明。管理者不受限。
+   * 無 D1：維持 Stage 0 的 ALLOWED_USERS 白名單語義。 */
+  if (store) {
+    const identity = await store.getIdentityByUser(userId);
+    if (!identity && !isAdmin(env, userId)) {
+      const cmd = stage1Command(textIn);
+      if (cmd && cmd.kind === 'bind' && ev.replyToken) {
+        const out = await bindFlow({ lineUserId: userId, lineUserHash: userHash(userId),
+          staffId: cmd.staffId, code: cmd.code, now: nowIso, store, db: live });
+        return lineReply(token, ev.replyToken, out.text);
+      }
+      secLog('unbound-user', userHash(userId));
+      if (ev.replyToken && (ev.type === 'message' || ev.type === 'follow' || ev.type === 'postback')) {
+        return lineReply(token, ev.replyToken, BIND_HELP);
+      }
+      return;
+    }
+  } else if (!allowedUser(env, userId)) {
     secLog('blocked-user', userId);
     await adminAlert(env, userId, `名單外使用者嘗試使用機器人：${userId}`);
     if (ev.replyToken && (ev.type === 'message' || ev.type === 'follow' || ev.type === 'postback')) {
@@ -163,27 +214,44 @@ async function handleEvent(ev, env) {
     const p = decodeParams(ev.postback && ev.postback.data);
     if (!p.d) return lineReply(token, ev.replyToken, '這筆通報的日期不明，請重新傳一次請假訊息（例：我明天白班沒辦法上）。');
     if (p.id) {
-      const out = await draftAndFormat(p, platformUrl);
+      const out = await draftAndFormat(p, platformUrl, live);
       return lineReply(token, ev.replyToken, out.text, out.items);
     }
     const ask = askNext(p);
     if (ask) return lineReply(token, ev.replyToken, ask.text, ask.items);
-    const out = evaluateAndFormat(p, platformUrl);
+    const out = evaluateAndFormat(p, platformUrl, live);
     return lineReply(token, ev.replyToken, out.text, out.items);
   }
 
   if (ev.type !== 'message' || !ev.message || ev.message.type !== 'text' || !ev.replyToken) return;
 
-  /* 文字訊息：指令（儀表板／選單）優先，其餘走解析流程 */
-  const text = String(ev.message.text || '').slice(0, 2000);
-  if (DASHBOARD_RE.test(text.trim())) {
-    return lineReplyMessages(token, ev.replyToken, [buildDashboardFlex(platformUrl, liffUrl)]);
+  /* 文字訊息：Stage 1 指令 → 儀表板／選單 → 指令四兄弟 → 解析流程 */
+  const text = textIn;
+  const s1 = stage1Command(text);
+  if (s1) {
+    if (!store) return lineReply(token, ev.replyToken, STORE_DISABLED_TEXT);
+    if (s1.kind === 'issue') {
+      if (!isAdmin(env, userId)) {
+        secLog('issue-denied', userHash(userId));
+        return lineReply(token, ev.replyToken, '「發碼」限管理者使用。');
+      }
+      const out = await issueBindCodeFlow({ staffId: s1.staffId, adminHash: userHash(userId),
+        now: nowIso, store, db: live });
+      return lineReply(token, ev.replyToken, out.text);
+    }
+    // 已綁定者再綁（換代號／換手機）：同一流程，consumeBindCode 保證一碼一用
+    const out = await bindFlow({ lineUserId: userId, lineUserHash: userHash(userId),
+      staffId: s1.staffId, code: s1.code, now: nowIso, store, db: live });
+    return lineReply(token, ev.replyToken, out.text);
   }
-  if (MENU_RE.test(text.trim())) {
+  if (DASHBOARD_RE.test(text)) {
+    return lineReplyMessages(token, ev.replyToken, [buildDashboardFlex(platformUrl, liffUrl, live)]);
+  }
+  if (MENU_RE.test(text)) {
     return lineReplyMessages(token, ev.replyToken, [menuMessage(platformUrl, liffUrl)]);
   }
   // 指令四兄弟：換班預檢／調度棋盤／負荷雷達／使用說明（皆為確定性回覆，未命中回 null）
-  const extra = extraCommand(text.trim(), platformUrl, liffUrl);
+  const extra = extraCommand(text, platformUrl, liffUrl, live);
   if (extra) return lineReply(token, ev.replyToken, extra.text, extra.items);
   globalThis.GAP_EVENT.raisedAt = `${todayTaipei()} 08:00`;   // 「明天」以台灣今天為基準
   globalThis.LLM.mode = 'mock';                                // 恆為確定性解析
@@ -214,7 +282,7 @@ async function handleEvent(ev, env) {
     lines.push('', ask.text);
     return lineReply(token, ev.replyToken, lines.join('\n'), ask.items);
   }
-  const out = evaluateAndFormat(p, platformUrl);
+  const out = evaluateAndFormat(p, platformUrl, live);
   return lineReply(token, ev.replyToken, out.text, out.items);
 }
 
@@ -231,8 +299,30 @@ export default {
     }
     let body;
     try { body = JSON.parse(raw); } catch { return new Response('bad json', { status: 400 }); }
+
+    // Stage 1：一次請求載一次快照；D1 未綁定或表為空 → live 為 undefined，botcore 回落示範資料
+    const store = makeStore(env);
+    let live;
+    if (store) {
+      try {
+        const snap = await store.loadDb();
+        if (!snap.empty) live = snap;
+      } catch (err) { console.log('[D1] loadDb failed, fallback to demo data:', String(err)); }
+    }
+
     await Promise.all((body.events || []).map(
-      (ev) => handleEvent(ev, env).catch((err) => console.log('event error:', err))));
+      (ev) => handleEvent(ev, env, { store, live }).catch((err) => console.log('event error:', err))));
     return new Response('ok', { status: 200 });
+  },
+
+  /** Cron（wrangler.toml [triggers]）：每分鐘一次。Phase 0 只清過期綁定碼；無 D1 直接返回。 */
+  async scheduled(event, env) {
+    const store = makeStore(env);
+    if (!store) return;
+    const nowIso = new Date().toISOString();
+    try {
+      const purged = await store.purgeExpiredBindCodes(nowIso);
+      if (purged) console.log(`[CRON] purged ${purged} expired/used bind codes`);
+    } catch (err) { console.log('[CRON] error:', String(err)); }
   },
 };
