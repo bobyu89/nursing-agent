@@ -13,3 +13,20 @@ LIFF_ID = "2011209447-AlMMDUMl"
 # 機密（不放這裡，部署後用指令設定）：
 #   npx wrangler secret put LINE_CHANNEL_SECRET
 #   npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
+
+# ── Stage 1 地基（docs/LINEBOT-STAGE1.md §2）──────────────────────
+# D1：狀態儲存（身分綁定、班表快照、預班／替班狀態機、留痕鏈）。
+# 整塊註解時 bot 以「無狀態示範模式」運作（與 Stage 0 行為相同，綁定等指令會告知未啟用）。
+# 啟用三步：
+#   1. npx wrangler d1 create shiftguard         → 複製輸出的 database_id
+#   2. 把下面三行取消註解、貼上 database_id
+#   3. npx wrangler d1 execute shiftguard --remote --file=schema.sql
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "shiftguard"
+# database_id = "貼上這裡"
+
+# Cron：每分鐘掃一次逾時（Phase 0 只清過期綁定碼；Phase 1 起掃替班逾時、Phase 2 催繳）。
+# 無 D1 時 scheduled() 直接返回，不耗任何資源。
+[triggers]
+crons = ["* * * * *"]

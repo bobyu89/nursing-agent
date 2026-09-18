@@ -20,9 +20,18 @@ New-Item -ItemType Directory -Force (Join-Path $stage 'cloudflare\linebot') | Ou
 New-Item -ItemType Directory -Force (Join-Path $stage 'src') | Out-Null
 
 Copy-Item (Join-Path $root 'src\*.js') (Join-Path $stage 'src')
-Copy-Item (Join-Path $PSScriptRoot 'worker.mjs')   (Join-Path $stage 'cloudflare\linebot')
+Copy-Item (Join-Path $PSScriptRoot 'worker.mjs')    (Join-Path $stage 'cloudflare\linebot')
+Copy-Item (Join-Path $PSScriptRoot 'store-d1.mjs')  (Join-Path $stage 'cloudflare\linebot')   # Stage 1：D1 store
+Copy-Item (Join-Path $PSScriptRoot 'schema.sql')    (Join-Path $stage 'cloudflare\linebot')   # Stage 1：schema（供 -Schema 用）
 Copy-Item (Join-Path $PSScriptRoot 'wrangler.toml') (Join-Path $stage 'cloudflare\linebot')
 
 Set-Location (Join-Path $stage 'cloudflare\linebot')
 Write-Host "→ 從 ASCII 暫存路徑部署：$stage"
+
+# Stage 1：帶 -Schema 參數時先套 schema（IF NOT EXISTS，重跑安全），再部署
+#   powershell -ExecutionPolicy Bypass -File deploy.ps1 -Schema
+if ($args -contains '-Schema') {
+  Write-Host "→ 套用 D1 schema（shiftguard）"
+  npx wrangler d1 execute shiftguard --remote --file=schema.sql
+}
 npx wrangler deploy

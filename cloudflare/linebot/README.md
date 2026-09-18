@@ -125,6 +125,38 @@ powershell -ExecutionPolicy Bypass -File richmenu.ps1
 誠實取捨：平台頁基於嚴格 CSP 不載入 LIFF SDK，故僅作全螢幕展示；
 指令回覆中的深鏈（#swap 等）維持一般網址——經 LIFF 轉址會遺失錨點。
 
+### 4⅞. Stage 1 地基：D1 狀態儲存（選配，5 分鐘）
+
+沒做這步，bot 就是 Stage 0 的無狀態示範模式——一切照舊、零成本。
+做了這步，身分改以綁定為準、人員與班表改讀雲端快照，後續替班／預班迴路才有地方站。設計見 [docs/LINEBOT-STAGE1.md](../../docs/LINEBOT-STAGE1.md)。
+
+```powershell
+cd cloudflare/linebot
+npx wrangler d1 create shiftguard          # 記下輸出的 database_id
+```
+
+把 `wrangler.toml` 裡 `[[d1_databases]]` 那三行取消註解、貼上 `database_id`，然後：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy.ps1 -Schema     # 套 schema 並部署
+node ..\..\tools\snapshot-to-sql.cjs --out snapshot.sql          # 從 data.js 產生人員／班表快照
+npx wrangler d1 execute shiftguard --remote --file=snapshot.sql  # 上傳快照（全量覆蓋）
+npx wrangler secret put ADMIN_USER_ID                            # 管理者 LINE userId（逗號可多人）
+```
+
+啟用後的行為：
+
+| 誰 | 能做什麼 |
+|---|---|
+| 管理者（`ADMIN_USER_ID`） | `發碼 N-04` → 拿到六位數一次性綁定碼（30 分鐘失效），走院內管道交給本人 |
+| 未綁定的任何人 | 只看得到綁定說明；輸入 `綁定 N-04 483920` 完成綁定 |
+| 已綁定者 | 全部功能；人員與班表來自 D1 快照（快照為空時回落示範資料） |
+
+每一次發碼、綁定、拒絕都是 `audit` 表裡的一筆雜湊鏈留痕；`line_user_id` 只在 `identity` 表存原值（推播要用），留痕一律雜湊。
+cron 每分鐘清一次過期／已用的綁定碼。
+
+> 正式導入時 `snapshot.sql` 的來源改為平台匯出的 JSON（`--json export.json`），匯出端請剔除任何可識別個人之欄位——D1 只存代號。
+
 ## 5. 測試
 
 用手機掃 Messaging API 分頁的 QR code 加好友（會收到歡迎訊息），傳：

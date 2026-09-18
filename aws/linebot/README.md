@@ -4,6 +4,10 @@
 > Cloudflare Workers 免費方案＋平台同一份確定性解析器，免信用卡、10 分鐘部署。
 > 本版（Bedrock 真模型解析）留作理解力升級選項，兩版可隨時切換（換 Webhook URL 即可）。
 
+> ⚠️ **Stage 1 狀態功能（身分綁定、D1 快照、替班／預班迴路）目前只有 Cloudflare 版實作。**
+> 本版仍是 Stage 0 的無狀態示範模式：`botcore.js` 的 `store` 介面留著，
+> 要跟上需以 DynamoDB 實作同一介面——見 [docs/LINEBOT-STAGE1.md](../../docs/LINEBOT-STAGE1.md) §2.1。
+
 > 一句話：**通報入口放在護理人員本來就在用的 LINE，正式決策與留痕留在平台。**
 >
 > ```

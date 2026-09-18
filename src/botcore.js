@@ -84,23 +84,37 @@ function buildGap(p) {
   };
 }
 
+/**
+ * 資料來源注入（Stage 1 地基，docs/LINEBOT-STAGE1.md §2）
+ * 宿主若接了 D1，會傳入 { staff, shifts }；未傳則回落到 data.js 的示範資料。
+ * 只有人員與班表是「活的」——規則庫、班別、單位、證照定義仍是程式碼裡的設定。
+ * 所有讀 STAFF／SHIFTS 的地方一律經過這裡，不直接碰全域。
+ */
+function liveData(db) {
+  return {
+    staff: (db && Array.isArray(db.staff)) ? db.staff : STAFF,
+    shifts: (db && Array.isArray(db.shifts)) ? db.shifts : SHIFTS,
+  };
+}
+
 /** 與平台完全同一份設定的引擎（含四週彈性工時錨點）——bot 所有功能共用 */
-function platformEngine() {
+function platformEngine(db) {
+  const live = liveData(db);
   return createEngine({
-    staff: STAFF, shifts: SHIFTS, shiftTypes: SHIFT_TYPES, roleLevels: ROLE_LEVELS,
+    staff: live.staff, shifts: live.shifts, shiftTypes: SHIFT_TYPES, roleLevels: ROLE_LEVELS,
     ladderLevels: LADDER_LEVELS, certs: CERTS, units: UNITS,
     registry: RULE_REGISTRY, staffingMin: UNIT_MIN_STAFF,
     flexCycleAnchor: FLEX_CYCLE_ANCHOR,
   });
 }
 
-function runEngine(p) {
+function runEngine(p, db) {
   const gap = buildGap(p);
-  return { gap, ...platformEngine().evaluateGap(gap) };
+  return { gap, ...platformEngine(db).evaluateGap(gap) };
 }
 
-function evaluateAndFormat(p, platformUrl) {
-  const { gap, candidates, excluded } = runEngine(p);
+function evaluateAndFormat(p, platformUrl, db) {
+  const { gap, candidates, excluded } = runEngine(p, db);
 
   const head = `【替補建議】${shortDate(gap.date)}（${weekdayOf(gap.date)}）${SHIFT_TYPES[gap.shift].name}｜${UNITS[gap.unit]}\n` +
     `需求：護理師以上${gap.requiredCerts.length ? '＋' + gap.requiredCerts.map((c) => CERTS[c].replace(/\s.*/, '')).join('、') : ''}`;
@@ -150,9 +164,9 @@ function evaluateAndFormat(p, platformUrl) {
 
 /* ── 詢問訊息草稿：平台同一份 llmNotificationDraft，含工時試算與誠實聲明 ── */
 
-async function draftAndFormat(p, platformUrl) {
+async function draftAndFormat(p, platformUrl, db) {
   globalThis.LLM.mode = 'mock';
-  const { gap, candidates } = runEngine(p);
+  const { gap, candidates } = runEngine(p, db);
   const others = candidates.slice(0, 3).filter((c) => c.staff.id !== p.id);
   const backItems = [
     ...others.map((c) => ({
@@ -227,14 +241,10 @@ function flexBar(label, right, pct, color) {
  * 深鏈（#swap 等）維持一般網址：LIFF 會把 # 轉進 liff.state，
  * 平台頁未載入 LIFF SDK（CSP 嚴格、零外部腳本），錨點會丟失——誠實取捨。
  */
-function buildDashboardFlex(platformUrl, liffUrl) {
+function buildDashboardFlex(platformUrl, liffUrl, db) {
   const C = FLEX_C;
-  const eng = createEngine({
-    staff: STAFF, shifts: SHIFTS, shiftTypes: SHIFT_TYPES, roleLevels: ROLE_LEVELS,
-    ladderLevels: LADDER_LEVELS, certs: CERTS, units: UNITS,
-    registry: RULE_REGISTRY, staffingMin: UNIT_MIN_STAFF,
-    flexCycleAnchor: FLEX_CYCLE_ANCHOR,
-  });
+  const eng = platformEngine(db);
+  const live = liveData(db);
   const UNIT = 'MED-3A';
   const gap = eng.workforceGapAnalysis({ dates: WEEK_DATES, demand: UNIT_MIN_STAFF });
   const cap = eng.capabilityAnalysis({ dates: WEEK_DATES, unit: UNIT });
@@ -275,7 +285,7 @@ function buildDashboardFlex(platformUrl, liffUrl) {
   });
   const s1 = RULE_REGISTRY.soft.find((r) => r.code === 'S1');
   const sat = (s1 && s1.param ? s1.param.value : 5);
-  const topStandby = [...STAFF]
+  const topStandby = [...live.staff]
     .sort((a, b) => b.standbyCount30d - a.standbyCount30d || (a.id < b.id ? -1 : 1)).slice(0, 6);
   const maxStandby = Math.max(sat, topStandby.length ? topStandby[0].standbyCount30d : 1);
   const fairBars = topStandby.map((s) => {
@@ -359,7 +369,7 @@ const SWAP_USAGE = [
   '＊必要資格以院內政策（ACLS）檢查；特殊資格請至平台換班簽核頁',
 ].join('\n');
 
-function swapCommand(text, platformUrl) {
+function swapCommand(text, platformUrl, db) {
   if (!/^換班/.test(text)) return null;
   const tokens = text.slice(2).trim().split(/[\s,、⇄]+/).filter(Boolean);
   if (tokens.length === 0) return { text: SWAP_USAGE, items: null };
@@ -373,17 +383,18 @@ function swapCommand(text, platformUrl) {
   const dB = expandDate(dB0);
   if (!dA || !dB) return { text: `日期看不懂（收到「${dA0}」「${dB0}」），請用 8/5 或 2026-08-05 格式。`, items: null };
 
-  const pick = (id, d) => SHIFTS.filter((s) => s.staffId === id && s.date === d);
+  const live = liveData(db);
+  const pick = (id, d) => live.shifts.filter((s) => s.staffId === id && s.date === d);
   const rowsA = pick(A, dA);
   const rowsB = pick(B, dB);
-  if (!STAFF.some((s) => s.id === A)) return { text: `查無人員 ${A}（請用代號，如 N-01）。`, items: null };
-  if (!STAFF.some((s) => s.id === B)) return { text: `查無人員 ${B}（請用代號，如 N-01）。`, items: null };
+  if (!live.staff.some((s) => s.id === A)) return { text: `查無人員 ${A}（請用代號，如 N-01）。`, items: null };
+  if (!live.staff.some((s) => s.id === B)) return { text: `查無人員 ${B}（請用代號，如 N-01）。`, items: null };
   if (!rowsA.length) return { text: `${A} 在 ${shortDate(dA)}（${weekdayOf(dA)}）沒有班次，無班可換。`, items: null };
   if (!rowsB.length) return { text: `${B} 在 ${shortDate(dB)}（${weekdayOf(dB)}）沒有班次，無班可換。`, items: null };
 
   const a = { staffId: A, date: dA, shift: rowsA[0].shift };
   const b = { staffId: B, date: dB, shift: rowsB[0].shift };
-  const r = platformEngine().analyzeSwap(a, b, { requiredCerts: ['ACLS'] });
+  const r = platformEngine(db).analyzeSwap(a, b, { requiredCerts: ['ACLS'] });
   if (r.error) return { text: `無法預檢：${r.error}`, items: null };
 
   const label = (q) => `${shortDate(q.date)}（${weekdayOf(q.date)}）${SHIFT_TYPES[q.shift].name}`;
@@ -409,7 +420,7 @@ function swapCommand(text, platformUrl) {
 const DISPATCH_RE = /^(?:調度|棋盤|借調)(?:\s+(\S+))?(?:\s+(\S+))?$/;
 const SHIFT_WORDS = { D: 'D', 白: 'D', 白班: 'D', E: 'E', 小夜: 'E', 晚班: 'E', N: 'N', 大夜: 'N', 夜班: 'N' };
 
-function dispatchCommand(text, platformUrl) {
+function dispatchCommand(text, platformUrl, db) {
   const m = DISPATCH_RE.exec(text);
   if (!m) return null;
   const date = m[1] ? expandDate(m[1]) : GAP_EVENT.raisedAt.slice(0, 10);
@@ -418,7 +429,7 @@ function dispatchCommand(text, platformUrl) {
     return { text: '用法：調度 [日期] [班別]\n例：調度 8/9 大夜（不帶參數＝示範今日的小夜）', items: null };
   }
 
-  const eng = platformEngine();
+  const eng = platformEngine(db);
   const r = eng.dispatchAnalysis({ date, shift, toUnit: '', demand: UNIT_MIN_STAFF, requiredCerts: ['ACLS'] });
   const MARK = { deficit: '🔴', tight: '🟡', surplus: '🟢' };
   const boardLines = r.board.map((b) => `${MARK[b.status]} ${UNITS[b.unit] || b.unit}　${b.scheduled}／需 ${b.need}` +
@@ -452,9 +463,9 @@ function dispatchCommand(text, platformUrl) {
 
 const RETENTION_RE = /^(?:負荷|留任|雷達)$/;
 
-function retentionCommand(text, platformUrl) {
+function retentionCommand(text, platformUrl, db) {
   if (!RETENTION_RE.test(text)) return null;
-  const led = platformEngine().workloadLedger(WEEK_DATES);
+  const led = platformEngine(db).workloadLedger(WEEK_DATES);
   const flagged = led.staff.filter((x) => x.flags.length > 0);
   const lines = flagged.length
     ? flagged.map((x) => `⚠ ${x.staff.id}（${UNITS[x.staff.unit] || x.staff.unit}）\n` +
@@ -519,10 +530,10 @@ function guideCommand(text, platformUrl, liffUrl) {
 }
 
 /** 四個指令的統一入口：命中回訊息物件，未命中回 null（宿主一行接入） */
-function extraCommand(text, platformUrl, liffUrl) {
-  return swapCommand(text, platformUrl)
-    || dispatchCommand(text, platformUrl)
-    || retentionCommand(text, platformUrl)
+function extraCommand(text, platformUrl, liffUrl, db) {
+  return swapCommand(text, platformUrl, db)
+    || dispatchCommand(text, platformUrl, db)
+    || retentionCommand(text, platformUrl, db)
     || guideCommand(text, platformUrl, liffUrl);
 }
 
@@ -568,6 +579,123 @@ const welcomeText = (platformUrl) => [
   `平台入口：${platformUrl}`,
 ].join('\n');
 
+/* ══ Stage 1 地基：身分綁定與留痕（docs/LINEBOT-STAGE1.md §2.2、§2.4）══════
+ *
+ * 這一段是純邏輯：透過注入的 `store` 存取狀態，本檔不知道 D1 是什麼。
+ * 宿主（cloudflare/linebot/store-d1.mjs）實作以下介面；測試用記憶體假物件即可：
+ *
+ *   store.issueBindCode({ code, staffId, issuedBy, issuedAt, expiresAt })
+ *   store.consumeBindCode(code, nowIso) → { staff_id, expires_at, used_at } | null
+ *       （回傳同時把 used_at 寫入；已用過或不存在回 null）
+ *   store.bindIdentity({ lineUserId, staffId, unit, role, boundAt })
+ *       → { replacedLineUserId: string | null }   （同代號重綁＝換手機，舊帳號失效）
+ *   store.appendAudit({ ts, actor, action, payload })   （雜湊鏈由 store 計算）
+ *
+ * 所有時間為 ISO 字串、由呼叫端注入（`now`），確保可測且與 cron 同一口徑。
+ */
+
+const BIND_CODE_TTL_MIN = 30;
+const ISSUE_RE = /^發碼\s+(N-\d{2})$/;
+const BIND_RE = /^綁定\s+(N-\d{2})\s+(\d{6})$/;
+
+const STORE_DISABLED_TEXT = '此部署尚未啟用資料庫，綁定與狀態功能不可用（示範模式）。';
+
+const BIND_HELP = [
+  '【班守 ShiftGuard】此為院內內部系統，你的 LINE 尚未綁定人員代號。',
+  '請向單位管理者索取一次性綁定碼，然後輸入：',
+  '　綁定 你的代號 六位數綁定碼',
+  '例：綁定 N-04 483920',
+  '',
+  '綁定碼 30 分鐘內有效、用過即作廢；綁定後即可使用全部功能。',
+].join('\n');
+
+/** 六位數綁定碼。rand 可注入（測試用），預設 Math.random。 */
+function genBindCode(rand = Math.random) {
+  let s = '';
+  for (let i = 0; i < 6; i += 1) s += Math.floor(rand() * 10);
+  return s;
+}
+
+/** 把 ISO 時間往後推 n 分鐘（純字串進出，不依賴時區） */
+function isoPlusMinutes(iso, n) {
+  return new Date(new Date(iso).getTime() + n * 60_000).toISOString();
+}
+
+/** 解析 Stage 1 指令：命中回 { kind, ... }，未命中回 null */
+function stage1Command(text) {
+  const t = String(text || '').trim();
+  let m = ISSUE_RE.exec(t);
+  if (m) return { kind: 'issue', staffId: m[1] };
+  m = BIND_RE.exec(t);
+  if (m) return { kind: 'bind', staffId: m[1], code: m[2] };
+  return null;
+}
+
+/**
+ * 發碼（管理者專用；是否為管理者由宿主判定後才呼叫）。
+ * adminHash：管理者 line_user_id 的雜湊——留痕只存雜湊、不存原值。
+ */
+async function issueBindCodeFlow({ staffId, adminHash, now, store, db, rand }) {
+  if (!store) return { text: STORE_DISABLED_TEXT };
+  const staff = liveData(db).staff.find((s) => s.id === staffId);
+  if (!staff) return { text: `查無人員 ${staffId}，未發碼。請確認代號（如 N-04）與人員快照是否已上傳。` };
+  const code = genBindCode(rand);
+  const expiresAt = isoPlusMinutes(now, BIND_CODE_TTL_MIN);
+  await store.issueBindCode({ code, staffId, issuedBy: adminHash, issuedAt: now, expiresAt });
+  await store.appendAudit({ ts: now, actor: null, action: 'bind_code.issued',
+    payload: { staffId, issuedBy: adminHash, expiresAt } });
+  return {
+    text: [
+      `已為 ${staffId}（${UNITS[staff.unit] || staff.unit}）產生綁定碼：`,
+      '',
+      `　${code}`,
+      '',
+      `${BIND_CODE_TTL_MIN} 分鐘內有效、用過即作廢。請以院內管道交給本人，`,
+      `本人輸入「綁定 ${staffId} ${code}」即完成。`,
+    ].join('\n'),
+  };
+}
+
+/**
+ * 綁定（任何人可呼叫；未綁定者也能——這正是它存在的理由）。
+ * lineUserHash 只用於留痕；lineUserId 原值進 identity（推播要用）。
+ */
+async function bindFlow({ lineUserId, lineUserHash, staffId, code, now, store, db }) {
+  if (!store) return { text: STORE_DISABLED_TEXT };
+  const rec = await store.consumeBindCode(code, now);
+  const reject = async (why) => {
+    await store.appendAudit({ ts: now, actor: null, action: 'bind.rejected',
+      payload: { staffId, lineUser: lineUserHash, why } });
+    return { text: '綁定失敗：綁定碼無效、已過期或已使用。請向管理者重新索取。' };
+  };
+  if (!rec) return reject('no-such-or-used');
+  if (rec.staff_id !== staffId) return reject('staff-mismatch');
+  if (rec.expires_at < now) return reject('expired');
+  const staff = liveData(db).staff.find((s) => s.id === staffId);
+  if (!staff) return reject('staff-not-in-snapshot');
+
+  const { replacedLineUserId } = await store.bindIdentity({
+    lineUserId, staffId, unit: staff.unit, role: staff.role, boundAt: now,
+  });
+  await store.appendAudit({ ts: now, actor: staffId, action: 'bind.completed',
+    payload: { staffId, lineUser: lineUserHash, replaced: Boolean(replacedLineUserId) } });
+  return {
+    text: [
+      `已綁定為 ${staffId}（${UNITS[staff.unit] || staff.unit}｜${staff.role}）。`,
+      replacedLineUserId ? '此代號先前綁定的 LINE 帳號已失效（換手機情境）。' : '',
+      '輸入「選單」查看可用功能。',
+    ].filter(Boolean).join('\n'),
+  };
+}
+
+/**
+ * 留痕鏈的規範化字串：hash = sha256(auditCanonical(entry))
+ * 欄位順序固定、以 | 分隔——與平台端 chainValid 同一精神，改任何一筆後續全斷。
+ */
+function auditCanonical({ prevHash, ts, actor, action, payloadJson }) {
+  return [prevHash || '', ts, actor === null || actor === undefined ? '' : actor, action, payloadJson].join('|');
+}
+
 /* 讓 Workers（esbuild）、Lambda（CJS interop）、瀏覽器測試頁與 Node CI 共用 */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -575,5 +703,9 @@ if (typeof module !== 'undefined' && module.exports) {
     evaluateAndFormat, draftAndFormat, buildDashboardFlex,
     DASHBOARD_RE, MENU_RE, GUIDE_RE, menuMessage, welcomeText,
     swapCommand, dispatchCommand, retentionCommand, guideCommand, extraCommand, expandDate,
+    // Stage 1 地基
+    liveData, platformEngine,
+    BIND_CODE_TTL_MIN, BIND_HELP, STORE_DISABLED_TEXT,
+    genBindCode, isoPlusMinutes, stage1Command, issueBindCodeFlow, bindFlow, auditCanonical,
   };
 }
