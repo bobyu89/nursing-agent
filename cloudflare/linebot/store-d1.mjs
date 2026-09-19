@@ -21,6 +21,9 @@ export function userHash(lineUserId) {
   return sha256Hex('line:' + lineUserId).slice(0, 16);
 }
 
+/** 與 botcore.TIERS 同一份順序；store 只用來展開「minTierRank 以上」的層級清單 */
+const TIER_RANK = { staff: 0, head: 1, exec: 2 };
+
 export function createD1Store(db, { auditCanonical }) {
   if (typeof auditCanonical !== 'function') throw new Error('createD1Store 需要 botcore.auditCanonical');
 
@@ -80,6 +83,71 @@ export function createD1Store(db, { auditCanonical }) {
         prev = r.hash;
       }
       return { ok: true, length: results.length, brokenAt: null };
+    },
+
+    /* ── Phase 1：替班迴路（docs/LINEBOT-STAGE1.md §4）────────── */
+    async listIdentities({ unit, minTierRank }) {
+      const tiers = Object.entries(TIER_RANK).filter(([, r]) => r >= (minTierRank || 0)).map(([t]) => t);
+      const marks = tiers.map(() => '?').join(',');
+      const sql = `SELECT line_user_id, staff_id, unit, role, tier FROM identity WHERE tier IN (${marks})` + (unit ? ' AND unit = ?' : '') + ' ORDER BY staff_id';
+      const { results } = await db.prepare(sql).bind(...tiers, ...(unit ? [unit] : [])).all();
+      return results;
+    },
+    async findOpenSubRequest({ unit, date, shift, originalStaffId }) {
+      return db.prepare("SELECT * FROM sub_request WHERE unit = ? AND date = ? AND shift = ? AND original_staff_id IS ? AND state IN ('REPORTED','APPROVED','ASKING') LIMIT 1")
+        .bind(unit, date, shift, originalStaffId).first();
+    },
+    async createSubRequest(r) {
+      await db.prepare(`INSERT INTO sub_request (id, unit, date, shift, required_certs_json, original_staff_id, reason_type,
+          reporter_staff_id, state, candidates_json, timeout_min, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .bind(r.id, r.unit, r.date, r.shift, r.required_certs_json, r.original_staff_id, r.reason_type,
+          r.reporter_staff_id, r.state, r.candidates_json, r.timeout_min, r.created_at).run();
+    },
+    async getSubRequest(id) {
+      return db.prepare('SELECT * FROM sub_request WHERE id = ?').bind(id).first();
+    },
+    async updateSubRequest(id, patch) {
+      const keys = Object.keys(patch);
+      if (!keys.length) return;
+      await db.prepare(`UPDATE sub_request SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`)
+        .bind(...keys.map((k) => patch[k]), id).run();
+    },
+    async listAsks(requestId) {
+      const { results } = await db.prepare('SELECT * FROM sub_ask WHERE request_id = ? ORDER BY seq').bind(requestId).all();
+      return results;
+    },
+    async insertAsk({ requestId, seq, staffId, askedAt, expiredAt }) {
+      await db.prepare('INSERT INTO sub_ask (request_id, seq, staff_id, asked_at, expired_at) VALUES (?,?,?,?,?)')
+        .bind(requestId, seq, staffId, askedAt, expiredAt).run();
+    },
+    /** 原子：只有「仍在等」且問的就是這個人的那筆才會被寫入 */
+    async answerAsk({ requestId, staffId, answer, answeredAt }) {
+      return db.prepare('UPDATE sub_ask SET answer = ?, answered_at = ? WHERE request_id = ? AND staff_id = ? AND answer IS NULL RETURNING request_id, seq, staff_id, answer')
+        .bind(answer, answeredAt, requestId, staffId).first();
+    },
+    async cancelOpenAsk(requestId, nowIso) {
+      return db.prepare("UPDATE sub_ask SET answer = 'cancelled', answered_at = ? WHERE request_id = ? AND answer IS NULL RETURNING request_id, seq, staff_id")
+        .bind(nowIso, requestId).first();
+    },
+    /** 原子：仍在等且已逾時者全部標 timeout；回傳被標的那些（cron 據此逐筆推進） */
+    async expireDueAsks(nowIso) {
+      const { results } = await db.prepare("UPDATE sub_ask SET answer = 'timeout', answered_at = ? WHERE answer IS NULL AND expired_at < ? RETURNING request_id, seq, staff_id")
+        .bind(nowIso, nowIso).all();
+      return results;
+    },
+    /** FILLED 寫回：原班移除＋替補新增（同一批次）、原人請假、替補者代班 +1（§4.2 只在此處 +1） */
+    async applySubstitution({ date, shift, unit, originalStaffId, substituteStaffId, reasonType, now }) {
+      const stmts = [
+        db.prepare('INSERT OR REPLACE INTO shift (staff_id, date, shift, unit, source, written_at) VALUES (?,?,?,?,?,?)')
+          .bind(substituteStaffId, date, shift, unit, 'substitution', now),
+        db.prepare('UPDATE staff SET standby_30d = standby_30d + 1, updated_at = ? WHERE staff_id = ?').bind(now, substituteStaffId),
+      ];
+      if (originalStaffId) {
+        stmts.unshift(db.prepare('DELETE FROM shift WHERE staff_id = ? AND date = ? AND shift = ?').bind(originalStaffId, date, shift));
+        stmts.push(db.prepare('INSERT OR REPLACE INTO leave (staff_id, from_date, to_date, type, source, created_at) VALUES (?,?,?,?,?,?)')
+          .bind(originalStaffId, date, date, reasonType || '缺班', 'substitution', now));
+      }
+      await db.batch(stmts);
     },
 
     /* ── 人員與班表快照 → 引擎用的 db 形狀（與 data.js 相同）──── */

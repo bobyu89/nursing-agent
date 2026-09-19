@@ -34,13 +34,17 @@ function decodeParams(str) {
     u: qs.get('u'),                                  // 單位代碼
     c: qs.has('c') ? qs.get('c') : null,             // 資格代碼逗號串（'' = 明確選了「無需資格」）
     id: qs.get('id'),                                // 產生詢問草稿的對象（候選人代號）
+    r: qs.get('r'),                                  // Phase 1：事由類別（病假／事假…），隨按鈕流程帶著走
+    rq: qs.get('rq'),                                // Phase 1：替班請求代號
+    act: qs.get('act'),                              // Phase 1：approve | reject | skip | accept | decline
+    who: qs.get('who'),                              // Phase 1：略過的候選代號
   };
 }
 
 /* ── 逐步補條件：缺什麼就出哪一組按鈕 ── */
 
 function askNext(p) {
-  const base = { d: p.d, s: p.s, u: p.u, c: p.c };
+  const base = { d: p.d, s: p.s, u: p.u, c: p.c, r: p.r };
   if (!p.s) {
     return {
       text: '缺的是哪一個班別？（點下方按鈕選擇）',
@@ -765,6 +769,284 @@ function auditCanonical({ prevHash, ts, actor, action, payloadJson }) {
   return [prevHash || '', ts, actor === null || actor === undefined ? '' : actor, action, payloadJson].join('|');
 }
 
+/* ══ Phase 1：替班迴路 通報 → 核准 → 逐一問 → 回報（docs/LINEBOT-STAGE1.md §4）══════
+ *
+ * 純邏輯：每個 flow 回 { reply?: {text, items}, pushes: [{ staffId | admin:true, text, items }] }，
+ * 宿主把 staffId 解析成 line_user_id 後推播。決定與訊息都在這裡，宿主不含業務判斷。
+ *
+ * store 介面（Phase 1 新增；cloudflare/linebot/store-d1.mjs 實作，測試用記憶體假物件）：
+ *   store.findOpenSubRequest({ unit, date, shift, originalStaffId }) → row | null
+ *   store.createSubRequest(row)                          store.getSubRequest(id) → row | null
+ *   store.updateSubRequest(id, patch)                    store.listAsks(requestId) → rows（依 seq）
+ *   store.insertAsk({ requestId, seq, staffId, askedAt, expiredAt })
+ *   store.answerAsk({ requestId, staffId, answer, answeredAt }) → row | null
+ *       （原子：只有該請求「仍在等」且 staff 相符的那筆會被寫入並回傳）
+ *   store.cancelOpenAsk(requestId, nowIso) → row | null   （原子：把仍在等的那筆標 cancelled）
+ *   store.expireDueAsks(nowIso) → rows                    （原子：仍在等且逾時的全部標 timeout 並回傳）
+ *   store.listIdentities({ unit, minTierRank }) → rows    （unit 為 null 表示不限單位）
+ *   store.applySubstitution({ date, shift, unit, originalStaffId, substituteStaffId, reasonType, now })
+ *
+ * 紀律（§4.2）：同一時間只有一位候選看得到請求；遲到的接不算數；拒絕與逾時不扣分，
+ * standbyCount30d 只在 FILLED 時對替補者 +1（applySubstitution 內做）。
+ */
+
+const SUB_TOP_N = 5;
+
+/** 請求代號：R＋時間 4 位（base36）＋亂數 2 位；rand 可注入 */
+function genRequestId(nowIso, rand = Math.random) {
+  const t = Math.floor(new Date(nowIso).getTime() / 1000) % (36 ** 4);
+  const A = '0123456789ABCDEFGHJKMNPQRSTUVWXYZ';   // 去掉 I／L／O 避免誤讀
+  let s = 'R' + t.toString(36).toUpperCase().padStart(4, '0');
+  for (let i = 0; i < 2; i += 1) s += A[Math.floor(rand() * A.length)];
+  return s;
+}
+
+/** 逾時分級（§4.4）：依缺班距今小時數。班次起點以台北時間解讀。 */
+function timeoutMinutesFor(gap, nowIso) {
+  const st = SHIFT_TYPES[gap.shift];
+  const start = new Date(`${gap.date}T${(st && st.start) || '00:00'}:00+08:00`).getTime();
+  const hours = (start - new Date(nowIso).getTime()) / 3_600_000;
+  if (hours < 12) return 15;
+  if (hours < 48) return 60;
+  return 240;
+}
+
+function gapLabel(gap) {
+  return `${shortDate(gap.date)}（${weekdayOf(gap.date)}）${SHIFT_TYPES[gap.shift].name}｜${UNITS[gap.unit] || gap.unit}` +
+    (gap.requiredCerts && gap.requiredCerts.length ? `，需 ${gap.requiredCerts.join('、')}` : '');
+}
+
+function gapOf(req) {
+  return { date: req.date, shift: req.shift, unit: req.unit, requiredRole: '護理師',
+    requiredCerts: JSON.parse(req.required_certs_json || '[]'), originalStaffId: req.original_staff_id };
+}
+
+/** 核准用的候選摘要＋按鈕（REPORTED 狀態下重複使用：通報時、略過後） */
+function approvalMessage(req) {
+  const cands = JSON.parse(req.candidates_json || '[]');
+  const gap = gapOf(req);
+  const lines = [
+    `【待核准｜${req.id}】${gapLabel(gap)}`,
+    `通報人：${req.reporter_staff_id}${req.reason_type ? `（${req.reason_type}）` : ''}`,
+    '',
+  ];
+  if (cands.length === 0) {
+    lines.push('⚠ 引擎查無合格候選——核准後會直接標記無人可補，交人工處理。');
+  } else {
+    lines.push(`合格候選 ${cands.length} 位（引擎排序，逐一詢問，每位等 ${req.timeout_min} 分鐘）：`);
+    cands.forEach((c, i) => lines.push(`${i + 1}. ${c.id}　${c.total}／${c.max} 分　${c.why}`));
+  }
+  lines.push('', '核准後機器人才會開口；略過可把某人移出本次序列（留痕）。');
+  const items = [
+    { label: `✅ 核准（${cands.length} 位）`, dataStr: encodeParams({ rq: req.id, act: 'approve' }) },
+    { label: '⛔ 駁回', dataStr: encodeParams({ rq: req.id, act: 'reject' }) },
+    ...cands.slice(0, 8).map((c) => ({ label: `略過 ${c.id}`, dataStr: encodeParams({ rq: req.id, act: 'skip', who: c.id }) })),
+  ];
+  return { text: lines.join('\n'), items };
+}
+
+/** 主管們（同單位 head 以上）；一個都沒有時退到管理者 */
+async function headsOf(store, unit) {
+  const heads = await store.listIdentities({ unit, minTierRank: TIERS.head });
+  if (heads.length) return heads.map((h) => ({ staffId: h.staff_id }));
+  return [{ admin: true }];
+}
+
+/* ── 1. 通報 ── */
+async function reportFlow({ p, reporter, reasonType, now, store, db, rand }) {
+  const gap = { ...buildGap(p), originalStaffId: reporter.staff_id };
+  const dup = await store.findOpenSubRequest({ unit: gap.unit, date: gap.date, shift: gap.shift, originalStaffId: reporter.staff_id });
+  if (dup) {
+    return { reply: { text: `這筆缺班已有進行中的請求（${dup.id}，狀態：${dup.state}），不重複建立。`, items: null }, pushes: [] };
+  }
+  const { candidates } = platformEngine(db).evaluateGap(gap);
+  const cands = candidates.slice(0, SUB_TOP_N).map((c) => ({
+    id: c.staff.id, total: c.score.total, max: c.score.maxTotal,
+    why: [...c.score.breakdown].sort((a, b) => b.points - a.points).slice(0, 2).map((b) => `${b.name} ${b.points}`).join('、'),
+  }));
+  const req = {
+    id: genRequestId(now, rand), unit: gap.unit, date: gap.date, shift: gap.shift,
+    required_certs_json: JSON.stringify(gap.requiredCerts), original_staff_id: reporter.staff_id,
+    reason_type: reasonType || null, reporter_staff_id: reporter.staff_id, state: 'REPORTED',
+    candidates_json: JSON.stringify(cands), timeout_min: timeoutMinutesFor(gap, now), created_at: now,
+  };
+  await store.createSubRequest(req);
+  await store.appendAudit({ ts: now, actor: reporter.staff_id, action: 'sub.reported',
+    payload: { id: req.id, unit: gap.unit, date: gap.date, shift: gap.shift, candidates: cands.map((c) => c.id), timeoutMin: req.timeout_min } });
+
+  const heads = await headsOf(store, gap.unit);
+  const msg = approvalMessage(req);
+  const noHead = heads.length === 1 && heads[0].admin;
+  return {
+    reply: {
+      text: [
+        `已通報 ${req.id}：${gapLabel(gap)}。`,
+        `引擎排出 ${cands.length} 位合格候選，已送護理長核准；核准後機器人會逐一詢問，有結果會通知你。`,
+        noHead ? '（此單位尚無護理長綁定，已改通知管理者。）' : '',
+      ].filter(Boolean).join('\n'),
+      items: null,
+    },
+    pushes: heads.map((h) => ({ ...h, text: msg.text, items: msg.items })),
+  };
+}
+
+/* ── 共用：把第 seq 位候選問出去，或宣告無人可補 ── */
+async function advanceAsk(req, now, store) {
+  const cands = JSON.parse(req.candidates_json || '[]');
+  const asks = await store.listAsks(req.id);
+  const seq = asks.length;
+  const gap = gapOf(req);
+  if (seq >= cands.length) {
+    await store.updateSubRequest(req.id, { state: 'EXHAUSTED', closed_at: now });
+    const tally = asks.reduce((t, a) => { t[a.answer] = (t[a.answer] || 0) + 1; return t; }, {});
+    await store.appendAudit({ ts: now, actor: null, action: 'sub.exhausted', payload: { id: req.id, asked: asks.length, tally } });
+    const summary = `${asks.length} 位皆未接（拒絕 ${tally.decline || 0}、逾時 ${tally.timeout || 0}）`;
+    const heads = await headsOf(store, req.unit);
+    return [
+      ...heads.map((h) => ({ ...h, text: `【無人可補｜${req.id}】${gapLabel(gap)}\n${summary}。請至平台以放寬試算或任務重分配人工處理（決策階梯第 2–3 階）。`, items: null })),
+      { staffId: req.reporter_staff_id, text: `你的通報 ${req.id} 已問完 ${asks.length} 位候選、皆未接，護理長將人工處理。`, items: null },
+    ];
+  }
+  const c = cands[seq];
+  const expiredAt = isoPlusMinutes(now, req.timeout_min);
+  await store.insertAsk({ requestId: req.id, seq, staffId: c.id, askedAt: now, expiredAt });
+  await store.updateSubRequest(req.id, { state: 'ASKING' });
+  await store.appendAudit({ ts: now, actor: null, action: 'sub.asked', payload: { id: req.id, seq, staffId: c.id, expiredAt } });
+  return [{
+    staffId: c.id,
+    text: [
+      `【替班詢問｜${req.id}】${gapLabel(gap)}`,
+      `你符合資格，引擎排序第 ${seq + 1} 位（${c.total}／${c.max} 分：${c.why}）。`,
+      `接嗎？請在 ${req.timeout_min} 分鐘內回覆；逾時會自動問下一位，不影響你的任何評分。`,
+    ].join('\n'),
+    items: [
+      { label: '✅ 接', dataStr: encodeParams({ rq: req.id, act: 'accept' }) },
+      { label: '❌ 不接', dataStr: encodeParams({ rq: req.id, act: 'decline' }) },
+    ],
+  }];
+}
+
+/* ── 2. 核准／略過／駁回（護理長）── */
+function actorMayManage(req, actor) {
+  return TIERS[actor.tier] >= TIERS.exec || (TIERS[actor.tier] >= TIERS.head && actor.unit === req.unit);
+}
+
+async function approveFlow({ rq, actor, now, store }) {
+  const req = await store.getSubRequest(rq);
+  if (!req) return { reply: { text: `查無請求 ${rq}。`, items: null }, pushes: [] };
+  if (!actorMayManage(req, actor)) return { reply: { text: `請求 ${rq} 屬 ${UNITS[req.unit] || req.unit}，需該單位護理長或督導核准。`, items: null }, pushes: [] };
+  if (req.state !== 'REPORTED') return { reply: { text: `請求 ${rq} 目前狀態為 ${req.state}，不可再核准。`, items: null }, pushes: [] };
+  const cands = JSON.parse(req.candidates_json || '[]');
+  await store.updateSubRequest(req.id, { state: 'APPROVED', approved_at: now, approved_by: actor.staff_id });
+  await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'sub.approved',
+    payload: { id: req.id, sequence: cands.map((c) => c.id), selfApproved: actor.staff_id === req.original_staff_id, timeoutMin: req.timeout_min } });
+  const fresh = await store.getSubRequest(req.id);
+  const pushes = await advanceAsk(fresh, now, store);
+  const first = cands[0];
+  return {
+    reply: {
+      text: first
+        ? `已核准 ${req.id}，開始逐一詢問：第 1 位 ${first.id}，等 ${req.timeout_min} 分鐘。每一步都會通知你。`
+        : `已核准 ${req.id}，但無合格候選——已標記無人可補。`,
+      items: null,
+    },
+    pushes,
+  };
+}
+
+async function skipFlow({ rq, who, actor, now, store }) {
+  const req = await store.getSubRequest(rq);
+  if (!req) return { reply: { text: `查無請求 ${rq}。`, items: null }, pushes: [] };
+  if (!actorMayManage(req, actor)) return { reply: { text: `請求 ${rq} 需該單位護理長或督導處理。`, items: null }, pushes: [] };
+  if (req.state !== 'REPORTED') return { reply: { text: `請求 ${rq} 已核准，序列已凍結，不可再略過。`, items: null }, pushes: [] };
+  const cands = JSON.parse(req.candidates_json || '[]');
+  if (!cands.some((c) => c.id === who)) return { reply: { text: `${who} 不在 ${rq} 的候選序列中。`, items: null }, pushes: [] };
+  const next = cands.filter((c) => c.id !== who);
+  await store.updateSubRequest(req.id, { candidates_json: JSON.stringify(next) });
+  await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'sub.skipped', payload: { id: req.id, who, remaining: next.map((c) => c.id) } });
+  const msg = approvalMessage({ ...req, candidates_json: JSON.stringify(next) });
+  return { reply: { text: `已略過 ${who}（留痕）。\n\n${msg.text}`, items: msg.items }, pushes: [] };
+}
+
+async function rejectFlow({ rq, actor, now, store }) {
+  const req = await store.getSubRequest(rq);
+  if (!req) return { reply: { text: `查無請求 ${rq}。`, items: null }, pushes: [] };
+  if (!actorMayManage(req, actor)) return { reply: { text: `請求 ${rq} 需該單位護理長或督導處理。`, items: null }, pushes: [] };
+  if (!['REPORTED', 'APPROVED', 'ASKING'].includes(req.state)) return { reply: { text: `請求 ${rq} 狀態為 ${req.state}，不可駁回。`, items: null }, pushes: [] };
+  const open = await store.cancelOpenAsk(req.id, now);
+  await store.updateSubRequest(req.id, { state: 'REJECTED', closed_at: now });
+  await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'sub.rejected', payload: { id: req.id, cancelledAsk: open ? open.staff_id : null } });
+  const pushes = [{ staffId: req.reporter_staff_id, text: `你的通報 ${req.id}（${gapLabel(gapOf(req))}）護理長已駁回，請直接與護理長聯繫。`, items: null }];
+  if (open) pushes.push({ staffId: open.staff_id, text: `替班詢問 ${req.id} 已由護理長取消，不需回覆。`, items: null });
+  return { reply: { text: `已駁回 ${req.id}。`, items: null }, pushes };
+}
+
+/* ── 3. 候選回覆：接／不接 ── */
+async function answerFlow({ rq, answer, actor, now, store, db }) {
+  const req = await store.getSubRequest(rq);
+  if (!req) return { reply: { text: `查無請求 ${rq}。`, items: null }, pushes: [] };
+  const ask = await store.answerAsk({ requestId: rq, staffId: actor.staff_id, answer, answeredAt: now });
+  if (!ask) {
+    // 沒搶到：不是問你的、已回覆過、已被 cron 標逾時、或請求已結束
+    let why = '這不是目前問你的那一筆。';
+    if (req.state === 'FILLED') why = `此筆已由 ${req.filled_by} 接下，謝謝你。`;
+    else if (['REJECTED', 'CANCELLED', 'EXHAUSTED'].includes(req.state)) why = `此筆已結束（${req.state}），不需回覆。`;
+    else {
+      const asks = await store.listAsks(rq);
+      const mine = asks.filter((a) => a.staff_id === actor.staff_id).at(-1);
+      if (mine && mine.answer === 'timeout') why = '此筆已逾時、已改問下一位，謝謝你。（遲到的回覆不算數，也不影響評分）';
+      else if (mine && mine.answer) why = `你已回覆過（${mine.answer}）。`;
+    }
+    await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'sub.answer_ignored', payload: { id: rq, answer, why } });
+    return { reply: { text: why, items: null }, pushes: [] };
+  }
+
+  if (answer === 'decline') {
+    await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'sub.declined', payload: { id: rq, seq: ask.seq } });
+    const pushes = await advanceAsk(await store.getSubRequest(rq), now, store);
+    return { reply: { text: `已記錄你不接 ${rq}。不影響評分，謝謝回覆。`, items: null }, pushes };
+  }
+
+  // accept：寫回前再驗一次硬性規則（§4.5：候選可能已接了別筆）
+  const gap = gapOf(req);
+  const { candidates } = platformEngine(db).evaluateGap(gap);
+  if (!candidates.some((c) => c.staff.id === actor.staff_id)) {
+    await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'sub.accept_conflict', payload: { id: rq, seq: ask.seq } });
+    const pushes = await advanceAsk(await store.getSubRequest(rq), now, store);
+    return { reply: { text: `抱歉，重新檢核時你已不符合 ${rq} 的硬性規則（可能是班距或工時已變），本筆改問下一位。`, items: null }, pushes };
+  }
+  await store.applySubstitution({ date: req.date, shift: req.shift, unit: req.unit,
+    originalStaffId: req.original_staff_id, substituteStaffId: actor.staff_id, reasonType: req.reason_type, now });
+  await store.updateSubRequest(rq, { state: 'FILLED', filled_by: actor.staff_id, closed_at: now });
+  await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'sub.filled',
+    payload: { id: rq, seq: ask.seq, by: actor.staff_id, original: req.original_staff_id } });
+
+  const asks = await store.listAsks(rq);
+  const skipped = asks.filter((a) => a.answer !== 'accept').map((a) => `${a.staff_id}（${a.answer === 'decline' ? '不接' : '逾時'}）`);
+  const heads = await headsOf(store, req.unit);
+  const label = gapLabel(gap);
+  return {
+    reply: { text: `已確認你接 ${rq}：${label}。班表已更新，護理長與原通報人已收到通知。`, items: null },
+    pushes: [
+      { staffId: req.reporter_staff_id, text: `你 ${label} 的缺班已由 ${actor.staff_id} 接下（${rq}），班表已更新。`, items: null },
+      ...heads.map((h) => ({ ...h, text: `【已補上｜${rq}】${label}\n替補：${actor.staff_id}（序列第 ${ask.seq + 1} 位）${skipped.length ? `\n前面：${skipped.join('、')}` : ''}\n班表已寫回並留痕。`, items: null })),
+    ],
+  };
+}
+
+/* ── 4. cron：逾時掃描 ── */
+async function expireFlow({ now, store }) {
+  const due = await store.expireDueAsks(now);
+  const pushes = [];
+  for (const a of due) {
+    await store.appendAudit({ ts: now, actor: null, action: 'sub.timeout', payload: { id: a.request_id, seq: a.seq, staffId: a.staff_id } });
+    pushes.push({ staffId: a.staff_id, text: `替班詢問 ${a.request_id} 已逾時，改問下一位。不影響你的評分。`, items: null });
+    const req = await store.getSubRequest(a.request_id);
+    if (req && req.state === 'ASKING') pushes.push(...await advanceAsk(req, now, store));
+  }
+  return { expired: due.length, pushes };
+}
+
 /* 讓 Workers（esbuild）、Lambda（CJS interop）、瀏覽器測試頁與 Node CI 共用 */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -778,5 +1060,8 @@ if (typeof module !== 'undefined' && module.exports) {
     genBindCode, isoPlusMinutes, stage1Command, issueBindCodeFlow, bindFlow, auditCanonical,
     TIERS, TIER_LABEL, COMMAND_MIN_TIER, COMMAND_LABEL,
     tierFromWord, classifyCommand, commandAllowed, tierDeniedText,
+    // Phase 1 替班迴路
+    SUB_TOP_N, genRequestId, timeoutMinutesFor, gapLabel, approvalMessage,
+    reportFlow, approveFlow, skipFlow, rejectFlow, answerFlow, expireFlow, advanceAsk,
   };
 }

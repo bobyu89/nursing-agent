@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS sub_request (
   reason_type         TEXT,        -- 病假 | 事假 | 公假 | 其他（不存自由文字）
   reporter_staff_id   TEXT NOT NULL,
   state               TEXT NOT NULL,  -- REPORTED | APPROVED | ASKING | FILLED | EXHAUSTED | REJECTED | CANCELLED
+  candidates_json     TEXT NOT NULL DEFAULT '[]',  -- 通報時引擎排出的候選序列 [{id,total,max,why}]；核准時凍結＝「為什麼是找你不找他」正本
   timeout_min         INTEGER NOT NULL,
   created_at          TEXT NOT NULL,
   approved_at         TEXT,
@@ -113,7 +114,7 @@ CREATE TABLE IF NOT EXISTS sub_ask (
   asked_at    TEXT NOT NULL,
   expired_at  TEXT NOT NULL,
   answered_at TEXT,
-  answer      TEXT,                -- accept | decline | NULL(逾時)
+  answer      TEXT,                -- accept | decline | timeout | cancelled；NULL＝仍在等
   PRIMARY KEY (request_id, seq)
 );
 CREATE INDEX IF NOT EXISTS sub_ask_pending ON sub_ask (expired_at) WHERE answer IS NULL;

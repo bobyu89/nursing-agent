@@ -231,3 +231,247 @@ test('stage1：tierDeniedText 說清楚屬哪一層、你是哪一層——不�
   const t = tierDeniedText('dispatch', 'staff');
   assert(/調度棋盤/.test(t) && /督導／主任以上/.test(t) && /護理師/.test(t), t);
 });
+
+/* ══ Phase 1：替班迴路（§4）══════════════════════════════════════════
+ * 記憶體 store 擴充：請求／詢問／身分清單／寫回，語義與 store-d1 一致（原子 answer／expire）。 */
+function subStore() {
+  const base = memStore();
+  const reqs = new Map();
+  const asks = [];            // {request_id, seq, staff_id, asked_at, expired_at, answered_at, answer}
+  const subs = [];            // applySubstitution 呼叫紀錄
+  const seed = (lineUserId, staffId, unit, tier) => base.idByUser.set(lineUserId, { line_user_id: lineUserId, staff_id: staffId, unit, role: '護理師', tier, bound_at: P0 });
+  return Object.assign(base, {
+    reqs, asks, subs, seed,
+    async listIdentities({ unit, minTierRank }) {
+      return [...base.idByUser.values()].filter((i) => TIERS[i.tier] >= (minTierRank || 0) && (!unit || i.unit === unit));
+    },
+    async getIdentityByStaff(staffId) { return [...base.idByUser.values()].find((i) => i.staff_id === staffId) || null; },
+    async findOpenSubRequest({ unit, date, shift, originalStaffId }) {
+      return [...reqs.values()].find((r) => r.unit === unit && r.date === date && r.shift === shift && r.original_staff_id === originalStaffId && ['REPORTED', 'APPROVED', 'ASKING'].includes(r.state)) || null;
+    },
+    async createSubRequest(r) { reqs.set(r.id, { ...r }); },
+    async getSubRequest(id) { return reqs.get(id) ? { ...reqs.get(id) } : null; },
+    async updateSubRequest(id, patch) { Object.assign(reqs.get(id), patch); },
+    async listAsks(id) { return asks.filter((a) => a.request_id === id).sort((a, b) => a.seq - b.seq).map((a) => ({ ...a })); },
+    async insertAsk({ requestId, seq, staffId, askedAt, expiredAt }) { asks.push({ request_id: requestId, seq, staff_id: staffId, asked_at: askedAt, expired_at: expiredAt, answered_at: null, answer: null }); },
+    async answerAsk({ requestId, staffId, answer, answeredAt }) {
+      const a = asks.find((x) => x.request_id === requestId && x.staff_id === staffId && x.answer === null);
+      if (!a) return null;
+      a.answer = answer; a.answered_at = answeredAt;
+      return { request_id: a.request_id, seq: a.seq, staff_id: a.staff_id, answer: a.answer };
+    },
+    async cancelOpenAsk(requestId, now) {
+      const a = asks.find((x) => x.request_id === requestId && x.answer === null);
+      if (!a) return null;
+      a.answer = 'cancelled'; a.answered_at = now;
+      return { request_id: a.request_id, seq: a.seq, staff_id: a.staff_id };
+    },
+    async expireDueAsks(now) {
+      const due = asks.filter((x) => x.answer === null && x.expired_at < now);
+      due.forEach((a) => { a.answer = 'timeout'; a.answered_at = now; });
+      return due.map((a) => ({ request_id: a.request_id, seq: a.seq, staff_id: a.staff_id }));
+    },
+    async applySubstitution(args) { subs.push(args); },
+  });
+}
+const GAP_P = { d: '2026-08-09', s: 'D', u: 'MED-3A', c: '' };
+const P0 = '2026-08-01T01:00:00.000Z';   // 示範缺班日 8/9 之前一週：逾時落在 >48h 的 4 小時檔
+const rand6 = () => fixedRand([0.5]);
+async function reported(st) {
+  st.seed('Uhead', 'N-01', 'MED-3A', 'head');
+  st.seed('Urep', 'N-05', 'MED-3A', 'staff');
+  const rep = await st.getIdentityByUser('Urep');
+  const out = await reportFlow({ p: GAP_P, reporter: rep, reasonType: '病假', now: P0, store: st, rand: rand6() });
+  const id = /已通報 (R\w{6})/.exec(out.reply.text)[1];
+  return { out, id, rep, head: await st.getIdentityByUser('Uhead') };
+}
+
+test('phase1：通報——建立 REPORTED 請求、候選 ≤5 含理由、逾時分級、推播核准給同單位護理長、留痕', async () => {
+  const st = subStore();
+  const { out, id } = await reported(st);
+  const r = st.reqs.get(id);
+  assertEqual(r.state, 'REPORTED');
+  assertEqual(r.original_staff_id, 'N-05', '原班人員＝通報者');
+  const cands = JSON.parse(r.candidates_json);
+  assert(cands.length > 0 && cands.length <= SUB_TOP_N, '候選 1–5 位');
+  assert(cands.every((c) => c.id && typeof c.total === 'number' && c.why), '每位有代號、分數、理由');
+  assert(!cands.some((c) => c.id === 'N-05'), '原班人員不在候選內');
+  assertEqual(r.timeout_min, 240, '缺班在 >48 小時後 → 4 小時檔');
+  assertEqual(out.pushes.length, 1);
+  assertEqual(out.pushes[0].staffId, 'N-01', '推給同單位護理長');
+  assert(/待核准｜/.test(out.pushes[0].text) && out.pushes[0].items.some((i) => /核准/.test(i.label)) && out.pushes[0].items.some((i) => /駁回/.test(i.label)));
+  assert(out.pushes[0].items.some((i) => i.label === `略過 ${cands[0].id}`), '每位候選有略過鍵');
+  assertEqual(st.audit.at(-1).action, 'sub.reported');
+  assertEqual(st.audit.at(-1).payload.candidates, cands.map((c) => c.id));
+});
+
+test('phase1：通報——同一缺口重複通報不建第二筆；單位無護理長時改推管理者並明說', async () => {
+  const st = subStore();
+  const { id, rep } = await reported(st);
+  const again = await reportFlow({ p: GAP_P, reporter: rep, now: P0, store: st, rand: rand6() });
+  assert(new RegExp(id).test(again.reply.text) && /不重複/.test(again.reply.text));
+  assertEqual(st.reqs.size, 1);
+
+  const st2 = subStore();
+  st2.seed('Urep', 'N-05', 'MED-3A', 'staff');
+  const out = await reportFlow({ p: GAP_P, reporter: await st2.getIdentityByUser('Urep'), now: P0, store: st2, rand: rand6() });
+  assert(out.pushes.length === 1 && out.pushes[0].admin === true, '無護理長 → 推管理者');
+  assert(/尚無護理長綁定/.test(out.reply.text));
+});
+
+test('phase1：核准——需同單位護理長或督導；核准後凍結序列、留痕 sequence、立刻問第 1 位（附接／不接）', async () => {
+  const st = subStore();
+  const { id, head, rep } = await reported(st);
+  const cands = JSON.parse(st.reqs.get(id).candidates_json);
+
+  const byStaff = await approveFlow({ rq: id, actor: rep, now: P0, store: st });
+  assert(/需該單位護理長或督導/.test(byStaff.reply.text) && st.reqs.get(id).state === 'REPORTED', '護理師不得核准');
+  st.seed('Uother', 'N-09', 'SUR-5B', 'head');
+  const otherUnit = await approveFlow({ rq: id, actor: await st.getIdentityByUser('Uother'), now: P0, store: st });
+  assert(/需該單位/.test(otherUnit.reply.text), '別單位的護理長不得核准');
+
+  const ok = await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  assertEqual(st.reqs.get(id).state, 'ASKING');
+  assertEqual(st.reqs.get(id).approved_by, 'N-01');
+  const ap = st.audit.find((a) => a.action === 'sub.approved');
+  assertEqual(ap.payload.sequence, cands.map((c) => c.id), '核准留痕＝完整序列（正本）');
+  assertEqual(ap.payload.selfApproved, false);
+  assertEqual(st.asks.length, 1);
+  assertEqual(st.asks[0].staff_id, cands[0].id, '第 1 位＝序列第 1');
+  assertEqual(st.asks[0].expired_at, isoPlusMinutes(P0, 240));
+  assertEqual(ok.pushes.length, 1);
+  assertEqual(ok.pushes[0].staffId, cands[0].id);
+  assert(ok.pushes[0].items.map((i) => i.label).join() === '✅ 接,❌ 不接');
+  assert(/第 1 位/.test(ok.reply.text));
+
+  const twice = await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  assert(/不可再核准/.test(twice.reply.text));
+});
+
+test('phase1：略過——只在 REPORTED 可用、從序列移除並留痕、回新的核准訊息；核准後不可略過', async () => {
+  const st = subStore();
+  const { id, head } = await reported(st);
+  const before = JSON.parse(st.reqs.get(id).candidates_json);
+  const out = await skipFlow({ rq: id, who: before[0].id, actor: head, now: P0, store: st });
+  const after = JSON.parse(st.reqs.get(id).candidates_json);
+  assertEqual(after.length, before.length - 1);
+  assert(!after.some((c) => c.id === before[0].id));
+  assertEqual(st.audit.at(-1).action, 'sub.skipped');
+  assert(out.reply.items.some((i) => /核准（/.test(i.label)), '回覆帶新的核准按鈕');
+  const nobody = await skipFlow({ rq: id, who: 'N-99', actor: head, now: P0, store: st });
+  assert(/不在/.test(nobody.reply.text));
+  await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  const late = await skipFlow({ rq: id, who: after[0].id, actor: head, now: P0, store: st });
+  assert(/序列已凍結/.test(late.reply.text));
+});
+
+test('phase1：駁回——ASKING 中駁回會取消正在等的詢問、通知該候選與通報人', async () => {
+  const st = subStore();
+  const { id, head } = await reported(st);
+  await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  const asked = st.asks[0].staff_id;
+  const out = await rejectFlow({ rq: id, actor: head, now: P0, store: st });
+  assertEqual(st.reqs.get(id).state, 'REJECTED');
+  assertEqual(st.asks[0].answer, 'cancelled');
+  assert(out.pushes.some((p) => p.staffId === 'N-05' && /駁回/.test(p.text)), '通報人收到駁回');
+  assert(out.pushes.some((p) => p.staffId === asked && /取消/.test(p.text)), '被問的人收到取消');
+});
+
+test('phase1：不接——留痕、不扣分、立刻問下一位；最後一位也不接 → EXHAUSTED，推播護理長與通報人並附統計', async () => {
+  const st = subStore();
+  const { id, head } = await reported(st);
+  await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  const cands = JSON.parse(st.reqs.get(id).candidates_json);
+  for (let i = 0; i < cands.length; i += 1) {
+    st.seed(`Uc${i}`, cands[i].id, 'MED-3A', 'staff');
+    const actor = await st.getIdentityByUser(`Uc${i}`);
+    const out = await answerFlow({ rq: id, answer: 'decline', actor, now: P0, store: st });
+    assert(/不影響評分/.test(out.reply.text));
+    if (i < cands.length - 1) {
+      assertEqual(st.asks.length, i + 2, '問下一位');
+      assertEqual(st.asks[i + 1].staff_id, cands[i + 1].id);
+      assertEqual(out.pushes[0].staffId, cands[i + 1].id);
+    } else {
+      assertEqual(st.reqs.get(id).state, 'EXHAUSTED');
+      assert(out.pushes.some((p) => p.staffId === 'N-01' && /無人可補/.test(p.text) && new RegExp(`拒絕 ${cands.length}`).test(p.text)));
+      assert(out.pushes.some((p) => p.staffId === 'N-05' && /皆未接/.test(p.text)));
+    }
+  }
+  assertEqual(st.subs.length, 0, '從頭到尾沒有寫回班表');
+  assert(st.audit.filter((a) => a.action === 'sub.declined').length === cands.length);
+});
+
+test('phase1：接——寫回班表（原班移除、替補新增、代班 +1）、FILLED、通知通報人與護理長、回覆含前面誰逾時／不接', async () => {
+  const st = subStore();
+  const { id, head } = await reported(st);
+  await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  const cands = JSON.parse(st.reqs.get(id).candidates_json);
+  st.seed('Uc0', cands[0].id, 'MED-3A', 'staff');
+  st.seed('Uc1', cands[1].id, 'MED-3A', 'staff');
+  await answerFlow({ rq: id, answer: 'decline', actor: await st.getIdentityByUser('Uc0'), now: P0, store: st });
+  const out = await answerFlow({ rq: id, answer: 'accept', actor: await st.getIdentityByUser('Uc1'), now: P0, store: st });
+  assertEqual(st.reqs.get(id).state, 'FILLED');
+  assertEqual(st.reqs.get(id).filled_by, cands[1].id);
+  assertEqual(st.subs.length, 1);
+  assertEqual(st.subs[0].originalStaffId, 'N-05');
+  assertEqual(st.subs[0].substituteStaffId, cands[1].id);
+  assertEqual(st.subs[0].date, '2026-08-09');
+  assert(/班表已更新/.test(out.reply.text));
+  assert(out.pushes.some((p) => p.staffId === 'N-05' && new RegExp(`由 ${cands[1].id} 接下`).test(p.text)));
+  const toHead = out.pushes.find((p) => p.staffId === 'N-01');
+  assert(/已補上/.test(toHead.text) && /第 2 位/.test(toHead.text) && new RegExp(`${cands[0].id}（不接）`).test(toHead.text), toHead.text);
+  assertEqual(st.audit.at(-1).action, 'sub.filled');
+});
+
+test('phase1：遲到的接不算數——cron 已標逾時後再按接：不寫回、留痕 answer_ignored、回覆明說', async () => {
+  const st = subStore();
+  const { id, head } = await reported(st);
+  await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  const cands = JSON.parse(st.reqs.get(id).candidates_json);
+  const later = isoPlusMinutes(P0, 241);
+  const ex = await expireFlow({ now: later, store: st });
+  assertEqual(ex.expired, 1);
+  assertEqual(st.asks[0].answer, 'timeout');
+  assertEqual(st.asks[1].staff_id, cands[1].id, '逾時後自動問第 2 位');
+  assert(ex.pushes.some((p) => p.staffId === cands[0].id && /已逾時/.test(p.text)));
+  assert(ex.pushes.some((p) => p.staffId === cands[1].id && /替班詢問/.test(p.text)));
+
+  st.seed('Uc0', cands[0].id, 'MED-3A', 'staff');
+  const late = await answerFlow({ rq: id, answer: 'accept', actor: await st.getIdentityByUser('Uc0'), now: later, store: st });
+  assert(/已逾時/.test(late.reply.text) && /不算數/.test(late.reply.text), late.reply.text);
+  assertEqual(st.subs.length, 0);
+  assertEqual(st.reqs.get(id).state, 'ASKING', '仍在問第 2 位');
+  assertEqual(st.audit.at(-1).action, 'sub.answer_ignored');
+});
+
+test('phase1：不是問你的那一筆——第 2 位在第 1 位還在等時搶答，被拒且不影響序列', async () => {
+  const st = subStore();
+  const { id, head } = await reported(st);
+  await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  const cands = JSON.parse(st.reqs.get(id).candidates_json);
+  st.seed('Uc1', cands[1].id, 'MED-3A', 'staff');
+  const out = await answerFlow({ rq: id, answer: 'accept', actor: await st.getIdentityByUser('Uc1'), now: P0, store: st });
+  assert(/不是目前問你的/.test(out.reply.text));
+  assertEqual(st.asks.length, 1);
+  assertEqual(st.asks[0].answer, null, '第 1 位的詢問不受影響');
+});
+
+test('phase1：核准時無候選 → 直接 EXHAUSTED，不會空轉', async () => {
+  const st = subStore();
+  const { id, head } = await reported(st);
+  await st.updateSubRequest(id, { candidates_json: '[]' });
+  const out = await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  assertEqual(st.reqs.get(id).state, 'EXHAUSTED');
+  assert(/無合格候選/.test(out.reply.text));
+  assertEqual(st.asks.length, 0);
+});
+
+test('phase1：核准訊息的按鈕資料能被 decodeParams 還原（rq／act／who）', () => {
+  const req = { id: 'RTESP01', unit: 'MED-3A', date: '2026-08-09', shift: 'D', required_certs_json: '[]', original_staff_id: 'N-05',
+    reporter_staff_id: 'N-05', reason_type: '病假', timeout_min: 60, candidates_json: JSON.stringify([{ id: 'N-04', total: 100, max: 100, why: 'x' }]) };
+  const m = approvalMessage(req);
+  const parsed = m.items.map((i) => decodeParams(i.dataStr));
+  assertEqual(parsed.map((p) => p.act), ['approve', 'reject', 'skip']);
+  assert(parsed.every((p) => p.rq === 'RTESP01'));
+  assertEqual(parsed[2].who, 'N-04');
+});

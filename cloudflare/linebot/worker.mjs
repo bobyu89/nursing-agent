@@ -162,8 +162,9 @@ async function handleEvent(ev, env, { store, live }) {
    * 無 D1：維持 Stage 0 的 ALLOWED_USERS 白名單語義。 */
   /* 權責層：有 D1 以 identity.tier 為準（管理者視同 exec）；無 D1＝Stage 0 開放模式，一律 exec */
   let tier = 'exec';
+  let identity = null;
   if (store) {
-    const identity = await store.getIdentityByUser(userId);
+    identity = await store.getIdentityByUser(userId);
     if (identity && !isAdmin(env, userId)) tier = identity.tier || 'staff';
     if (!identity && !isAdmin(env, userId)) {
       const cmd = stage1Command(textIn);
@@ -215,6 +216,28 @@ async function handleEvent(ev, env, { store, live }) {
   /* 按鈕回傳：條件逐步補齊 → 齊全即評估；帶 id 則產生詢問草稿 */
   if (ev.type === 'postback' && ev.replyToken) {
     const p = decodeParams(ev.postback && ev.postback.data);
+
+    /* Phase 1：替班請求的按鈕（核准／略過／駁回＝護理長；接／不接＝被問到的人） */
+    if (p.rq) {
+      if (!store || !identity) return lineReply(token, ev.replyToken, store ? BIND_HELP : STORE_DISABLED_TEXT);
+      const ctx = { rq: p.rq, actor: identity, now: nowIso, store, db: live };
+      let out;
+      if (p.act === 'approve' || p.act === 'skip' || p.act === 'reject') {
+        if (!commandAllowed(tier, 'dashboard')) {   // 核准權＝護理長以上（與矩陣 §2.5 一致）
+          return lineReply(token, ev.replyToken, tierDeniedText('dashboard', tier).replace('「儀表板」', '「核准替班」'));
+        }
+        out = p.act === 'approve' ? await approveFlow(ctx)
+          : p.act === 'skip' ? await skipFlow({ ...ctx, who: p.who })
+            : await rejectFlow(ctx);
+      } else if (p.act === 'accept' || p.act === 'decline') {
+        out = await answerFlow({ ...ctx, answer: p.act });
+      } else {
+        return lineReply(token, ev.replyToken, '不認得的動作。');
+      }
+      await dispatchPushes(env, store, out.pushes);
+      return lineReply(token, ev.replyToken, out.reply.text, out.reply.items);
+    }
+
     if (!p.d) return lineReply(token, ev.replyToken, '這筆通報的日期不明，請重新傳一次請假訊息（例：我明天白班沒辦法上）。');
     if (p.id) {
       const out = await draftAndFormat(p, platformUrl, live);
@@ -222,6 +245,16 @@ async function handleEvent(ev, env, { store, live }) {
     }
     const ask = askNext(p);
     if (ask) return lineReply(token, ev.replyToken, ask.text, ask.items);
+    return completeGap(p);
+  }
+
+  /* 條件齊全：有身分＝建立替班請求（Phase 1 迴路）；無 D1＝Stage 0 只回建議 */
+  async function completeGap(p) {
+    if (store && identity) {
+      const out = await reportFlow({ p, reporter: identity, reasonType: p.r || null, now: nowIso, store, db: live });
+      await dispatchPushes(env, store, out.pushes);
+      return lineReply(token, ev.replyToken, out.reply.text, out.reply.items);
+    }
     const out = evaluateAndFormat(p, platformUrl, live);
     return lineReply(token, ev.replyToken, out.text, out.items);
   }
@@ -275,9 +308,11 @@ async function handleEvent(ev, env, { store, live }) {
   const p = {
     d: ex.date && ex.date.value ? ex.date.value : null,
     s: ex.shift && ex.shift.value ? ex.shift.value : null,
-    u: ex.unit && ex.unit.value ? ex.unit.value : null,
+    // 通報者的單位由身分帶入（identity.unit），訊息有寫才覆蓋——少問一題
+    u: (ex.unit && ex.unit.value) ? ex.unit.value : (identity ? identity.unit : null),
     c: ex.requiredCerts && Array.isArray(ex.requiredCerts.value) && ex.requiredCerts.value.length
       ? ex.requiredCerts.value.join(',') : null,
+    r: ex.reason && ex.reason.value ? ex.reason.value : null,
   };
 
   if (!p.d) {
@@ -291,8 +326,29 @@ async function handleEvent(ev, env, { store, live }) {
     lines.push('', ask.text);
     return lineReply(token, ev.replyToken, lines.join('\n'), ask.items);
   }
-  const out = evaluateAndFormat(p, platformUrl, live);
-  return lineReply(token, ev.replyToken, out.text, out.items);
+  return completeGap(p);
+}
+
+/** Phase 1：把 flow 回傳的 pushes（staffId 或 admin）解析成 line_user_id 後推播。查無綁定者記 log、不擋流程。 */
+async function dispatchPushes(env, store, pushes) {
+  for (const m of pushes || []) {
+    const msg = { type: 'text', text: String(m.text || '').slice(0, 4900) };
+    if (m.items && m.items.length) {
+      msg.quickReply = { items: m.items.map(({ label, dataStr }) => ({
+        type: 'action', action: { type: 'postback', label: label.slice(0, 20), data: dataStr, displayText: label } })) };
+    }
+    let targets = [];
+    if (m.admin) targets = adminIds(env);
+    else if (m.staffId) {
+      const id = await store.getIdentityByStaff(m.staffId);
+      if (id) targets = [id.line_user_id];
+      else console.log(`[PUSH] ${m.staffId} 未綁定，訊息未送出`);
+    }
+    for (const to of targets) {
+      try { await linePush(env.LINE_CHANNEL_ACCESS_TOKEN, to, [msg]); }
+      catch (err) { console.log('[PUSH] failed:', String(err)); }
+    }
+  }
 }
 
 export default {
@@ -332,6 +388,10 @@ export default {
     try {
       const purged = await store.purgeExpiredBindCodes(nowIso);
       if (purged) console.log(`[CRON] purged ${purged} expired/used bind codes`);
+      // Phase 1：替班詢問逾時 → 標 timeout、問下一位（或宣告無人可補）
+      const out = await expireFlow({ now: nowIso, store });
+      if (out.expired) console.log(`[CRON] ${out.expired} ask(s) timed out, ${out.pushes.length} push(es)`);
+      await dispatchPushes(env, store, out.pushes);
     } catch (err) { console.log('[CRON] error:', String(err)); }
   },
 };
