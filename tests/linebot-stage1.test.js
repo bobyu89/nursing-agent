@@ -58,12 +58,23 @@ test('stage1：同一條件下，注入只有原班人員的快照 → 引擎零
 
 /* ── 指令解析與綁定碼 ── */
 
-test('stage1：stage1Command 只命中「發碼 N-xx」與「綁定 N-xx 六碼」', () => {
+test('stage1：stage1Command 命中「發碼 N-xx」與「綁定 N-xx 六碼」——手機打字的各種排版都要認得', () => {
   assertEqual(stage1Command('發碼 N-04'), { kind: 'issue', staffId: 'N-04' });
   assertEqual(stage1Command('  綁定 N-04 483920 '), { kind: 'bind', staffId: 'N-04', code: '483920' });
+  // 真實使用者會打出來的變體（2026-09-19 實機第一次綁定就卡在這）
+  const want = { kind: 'bind', staffId: 'N-01', code: '078318' };
+  for (const v of ['綁定N-01 078318', '綁定 n-01 078318', '綁定 N01 078318', '綁定 N-1 078318',
+    '綁定 N-01　078318', '綁定 N-01 ０７８３１８', '綁定 N-01 078318。', '綁定：N-01 078318',
+    '綁定 Ｎ－01 078318', '綁定 N-01,078318']) {
+    assertEqual(stage1Command(v), want, `應認得：${JSON.stringify(v)}`);
+  }
+  assertEqual(stage1Command('發碼n4'), { kind: 'issue', staffId: 'N-04' }, '發碼同樣寬鬆並補零');
+  // 語義不符的仍不命中
   assertEqual(stage1Command('綁定 N-04 48392'), null, '五碼不命中');
-  assertEqual(stage1Command('綁定 N-4 483920'), null, '代號格式不符不命中');
+  assertEqual(stage1Command('綁定 N-04 4839201'), null, '七碼不命中');
+  assertEqual(stage1Command('綁定 N-123 483920'), null, '三位代號不命中');
   assertEqual(stage1Command('儀表板'), null);
+  assertEqual(stage1Command('我明天綁定不了'), null, '句中出現關鍵字不命中');
   assertEqual(stage1Command(''), null);
 });
 

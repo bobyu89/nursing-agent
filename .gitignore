@@ -25,3 +25,4 @@ private/
 
 # 影片音訊波形快取（建置產物）
 videos/**/.waveform-cache/
+cloudflare/linebot/snapshot.sql

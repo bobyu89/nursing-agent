@@ -595,8 +595,21 @@ const welcomeText = (platformUrl) => [
  */
 
 const BIND_CODE_TTL_MIN = 30;
-const ISSUE_RE = /^發碼\s+(N-\d{2})$/;
-const BIND_RE = /^綁定\s+(N-\d{2})\s+(\d{6})$/;
+/* 寬鬆解析：手機上打字會有全形數字、沒空格、小寫 n、漏連字號、句尾標點——
+ * 先正規化再比對，代號一律還原成 N-兩位。命中與否只看語義，不看排版。 */
+const ISSUE_RE = /^發碼[:：]?\s*n-?(\d{1,2})$/i;
+const BIND_RE = /^綁定[:：]?\s*n-?(\d{1,2})[\s,，、]+(\d{6})$/i;
+
+function normalizeCmdText(text) {
+  return String(text || '')
+    .replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xFF10 + 0x30))   // 全形數字 → 半形
+    .replace(/[Ｎｎ]/g, 'N')                                                             // 全形 N
+    .replace(/[－—–]/g, '-')                                                             // 各種橫線 → 連字號
+    .replace(/[　\t]/g, ' ')                                                         // 全形空白 → 半形
+    .replace(/[。．.!！]+$/g, '')                                                         // 句尾標點
+    .trim();
+}
+const padStaffId = (n) => 'N-' + String(Number(n)).padStart(2, '0');
 
 const STORE_DISABLED_TEXT = '此部署尚未啟用資料庫，綁定與狀態功能不可用（示範模式）。';
 
@@ -623,11 +636,11 @@ function isoPlusMinutes(iso, n) {
 
 /** 解析 Stage 1 指令：命中回 { kind, ... }，未命中回 null */
 function stage1Command(text) {
-  const t = String(text || '').trim();
+  const t = normalizeCmdText(text);
   let m = ISSUE_RE.exec(t);
-  if (m) return { kind: 'issue', staffId: m[1] };
+  if (m) return { kind: 'issue', staffId: padStaffId(m[1]) };
   m = BIND_RE.exec(t);
-  if (m) return { kind: 'bind', staffId: m[1], code: m[2] };
+  if (m) return { kind: 'bind', staffId: padStaffId(m[1]), code: m[2] };
   return null;
 }
 
