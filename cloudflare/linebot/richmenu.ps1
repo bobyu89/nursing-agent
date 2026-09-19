@@ -298,7 +298,13 @@ foreach ($m in $MENUS) {
 if ($ImageOnly) { Write-Host '（-ImageOnly：不呼叫 LINE API，先開圖檔確認樣式）'; exit 0 }
 
 # ── 2. 取得 token ────────────────────────────────────────────────
+Write-Host ''
+Write-Host '→ 圖已畫好，但選單還沒建立：接下來需要 Channel access token 呼叫 LINE API。'
 if (-not $Token) {
+  # 非互動環境（stdin 被重導、由其他程式呼叫）會在 Read-Host 無聲卡死——直接說清楚並中止
+  if ([Console]::IsInputRedirected) {
+    throw '沒有 token 且目前不是互動式視窗，無法提示輸入。請在 PowerShell 視窗裡執行本腳本並貼上 token，或先設定 $env:LINE_CHANNEL_ACCESS_TOKEN 再執行。'
+  }
   $sec = Read-Host '貼上 LINE Channel access token（LINE Developers → Messaging API）' -AsSecureString
   $Token = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
     [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
