@@ -160,8 +160,11 @@ async function handleEvent(ev, env, { store, live }) {
   /* 第一道：身分閘。
    * 有 D1：identity 表為準；未綁定者只允許「綁定」指令，其餘一律回綁定說明。管理者不受限。
    * 無 D1：維持 Stage 0 的 ALLOWED_USERS 白名單語義。 */
+  /* 權責層：有 D1 以 identity.tier 為準（管理者視同 exec）；無 D1＝Stage 0 開放模式，一律 exec */
+  let tier = 'exec';
   if (store) {
     const identity = await store.getIdentityByUser(userId);
+    if (identity && !isAdmin(env, userId)) tier = identity.tier || 'staff';
     if (!identity && !isAdmin(env, userId)) {
       const cmd = stage1Command(textIn);
       if (cmd && cmd.kind === 'bind' && ev.replyToken) {
@@ -235,7 +238,7 @@ async function handleEvent(ev, env, { store, live }) {
         secLog('issue-denied', userHash(userId));
         return lineReply(token, ev.replyToken, '「發碼」限管理者使用。');
       }
-      const out = await issueBindCodeFlow({ staffId: s1.staffId, adminHash: userHash(userId),
+      const out = await issueBindCodeFlow({ staffId: s1.staffId, tierWord: s1.tierWord, adminHash: userHash(userId),
         now: nowIso, store, db: live });
       return lineReply(token, ev.replyToken, out.text);
     }
@@ -243,6 +246,12 @@ async function handleEvent(ev, env, { store, live }) {
     const out = await bindFlow({ lineUserId: userId, lineUserHash: userHash(userId),
       staffId: s1.staffId, code: s1.code, now: nowIso, store, db: live });
     return lineReply(token, ev.replyToken, out.text);
+  }
+  /* 權責閘（docs/LINEBOT-STAGE1.md §2.5）：指令歸類 → 查矩陣 → 不足時誠實回覆，不假裝指令不存在 */
+  const cmdKey = classifyCommand(text);
+  if (!commandAllowed(tier, cmdKey)) {
+    secLog('tier-denied', `${userHash(userId)} ${tier} ${cmdKey}`);
+    return lineReply(token, ev.replyToken, tierDeniedText(cmdKey, tier));
   }
   if (DASHBOARD_RE.test(text)) {
     return lineReplyMessages(token, ev.replyToken, [buildDashboardFlex(platformUrl, liffUrl, live)]);

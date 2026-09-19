@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS identity (
   line_user_id TEXT PRIMARY KEY,
   staff_id     TEXT NOT NULL UNIQUE,
   unit         TEXT NOT NULL,
-  role         TEXT NOT NULL,
+  role         TEXT NOT NULL,             -- 職級（引擎判資格用）：護佐 | 護理師 | 資深護理師
+  tier         TEXT NOT NULL DEFAULT 'staff',  -- 權責層（bot 判權限用）：staff | head | exec，管理者發碼時授權
   bound_at     TEXT NOT NULL
 );
 
@@ -18,6 +19,7 @@ CREATE TABLE IF NOT EXISTS identity (
 CREATE TABLE IF NOT EXISTS bind_code (
   code       TEXT PRIMARY KEY,
   staff_id   TEXT NOT NULL,
+  tier       TEXT NOT NULL DEFAULT 'staff',   -- 發碼時授權的權責層，綁定時原樣進 identity
   issued_by  TEXT NOT NULL,        -- 管理者 line_user_id 的雜湊
   issued_at  TEXT NOT NULL,
   expires_at TEXT NOT NULL,
