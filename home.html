@@ -429,6 +429,20 @@
     .rung b { flex: none; }
     .rung + .rung { border-top: 1px dashed hsl(228 26% 26% / .55); }
 
+    /* LINE 兩條迴路（#loops）：卡片內的步驟清單，與決策階梯同一家族的虛線分隔＋圓號碼 */
+    .loop-steps { list-style: none; margin: 4px 0 0; padding: 0; counter-reset: ls; }
+    .loop-steps li {
+      position: relative; padding: 7px 0 7px 32px; counter-increment: ls;
+      font-size: 13.5px; line-height: 1.7; color: var(--muted-foreground);
+    }
+    .loop-steps li::before {
+      content: counter(ls); position: absolute; left: 0; top: 9px;
+      width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center;
+      background: rgba(255,255,255,.08); color: var(--accent); font-size: 11px; font-weight: 500;
+    }
+    .loop-steps li + li { border-top: 1px dashed hsl(228 26% 26% / .55); }
+    .loop-steps b { color: var(--foreground); font-weight: 500; }
+
     /* 守守登場：結尾 CTA 上方，漂浮＋眨眼 */
     .mascot { display: flex; justify-content: center; margin-bottom: 4px; }
     .mascot svg { animation: bob 3.8s ease-in-out infinite; filter: drop-shadow(0 12px 28px rgba(64,96,239,.35)); }
@@ -544,6 +558,7 @@
       <a href="#position">我們做什麼</a>
       <a href="#roles">角色收益</a>
       <a href="#features">功能</a>
+      <a href="#loops">LINE 迴路</a>
       <a href="#clock">2027 死線</a>
       <a href="#pricing">導入方案</a>
       <a href="#faq">FAQ</a>
@@ -797,6 +812,50 @@
   </div>
 </section>
 
+<!-- ══ LINE 兩條迴路（下一步）════════════════════════ -->
+<section class="section" id="loops">
+  <h2 class="reveal">下一步：把兩條迴路搬進 LINE。</h2>
+  <p class="lead reveal">大家本來就在 LINE 上。預班、催繳、臨時請假、找替補——這些現在靠護理長一通一通打的電話，會變成機器人在跑的迴路。<b>決定權還是在人，機器人只負責跑腿。</b></p>
+  <div class="grid g2">
+    <div class="liquid-glass card reveal">
+      <h3>迴路一：預班 → 催繳 → 生成 → 審核</h3>
+      <ol class="loop-steps">
+        <li>護理長開啟下月預班，機器人推播全單位</li>
+        <li>各自回覆想休哪幾天，截止前可改，最後一次為準</li>
+        <li>截止前三天、前一天，<b>只催還沒回的人</b></li>
+        <li>逾期視同無預假——催了幾次、什麼時候，全部留痕</li>
+        <li>引擎依預假與規則庫生成草稿，排不出的格子誠實標出，不硬塞</li>
+        <li>護理長審核、公告。改班表在平台改，不在 LINE 裡改</li>
+      </ol>
+    </div>
+    <div class="liquid-glass card reveal">
+      <h3>迴路二：通報 → 核准 → 逐一問 → 回報</h3>
+      <ol class="loop-steps">
+        <li>同仁通報「今晚大夜不能來」，引擎當場排出合格候選與排除原因</li>
+        <li><b>護理長先核准</b>候選名單，機器人才開口</li>
+        <li><b>一次只問一個人</b>：接、不接、或逾時，才問下一位</li>
+        <li>接了：寫回班表、留痕、同步通知護理長與原通報人</li>
+        <li>全部沒接：回到護理長人工處理——就是上面決策階梯的第 2、3 階</li>
+      </ol>
+    </div>
+  </div>
+  <div class="grid g3" style="margin-top:14px">
+    <div class="liquid-glass card reveal">
+      <h3>護理長先核准</h3>
+      <p>核准後的候選序列寫入留痕——那份序列就是「為什麼是找你不找他」的正本。護理長能刪人、調順序、改逾時，<b>但不能加入被規則排除的人</b>；要加，回平台用放寬試算看代價。</p>
+    </div>
+    <div class="liquid-glass card reveal">
+      <h3>一次只問一個人</h3>
+      <p>同時問前三個，就變成「誰先搶到」，排序的意義被速度蓋掉。逐一問慢一點，但排序的意義完整保留——速度用逾時分級補：今晚就缺等 15 分鐘，三天後的缺等 4 小時。</p>
+    </div>
+    <div class="liquid-glass card reveal">
+      <h3>拒絕不扣分</h3>
+      <p>代班次數只在真的接了才 +1；拒絕與逾時不影響任何評分。遲到的「接」也不算數——逾時後才按，回「已由他人接下」並留痕。這是政策，不是實作細節。</p>
+    </div>
+  </div>
+  <p class="sec-note reveal">規劃中（Stage 1）。目前機器人仍只給建議、不主動聯絡任何人；地基（身分綁定、伺服器端班表、留痕鏈）已部署，兩條迴路依設計文件分階段實作——<a href="https://github.com/bobyu89/nursing-agent/blob/main/docs/LINEBOT-STAGE1.md" style="border-bottom:1px solid var(--accent)">docs/LINEBOT-STAGE1.md</a> 公開可讀。</p>
+</section>
+
 <!-- ══ 法規時鐘 ═════════════════════════════════ -->
 <section class="section" id="clock">
   <h2 class="reveal">2027 年 5 月 20 日。</h2>
@@ -883,7 +942,8 @@
   <div class="liquid-glass honest reveal">
     <b>誠實聲明</b>——本站為教學展示：所有人員、班表、請假資料皆為虛構（代號 N-01～N-11），
     不含任何病患資料；本頁行業數據為公開資訊之概述、導入方案為示範規劃；訊息解析為確定性關鍵詞規則（非真實模型），理解力有限但離線可跑、可驗證；
-    Agent 不臆測缺漏欄位、不自行放寬規則、不代替主管決定，通知一律停在草稿。
+    Agent 不臆測缺漏欄位、不自行放寬規則、不代替主管決定，通知一律停在草稿；
+    「把兩條迴路搬進 LINE」為下一階段規劃（設計已公開、地基已部署），機器人主動詢問替補一事尚未上線。
   </div>
 </section>
 
