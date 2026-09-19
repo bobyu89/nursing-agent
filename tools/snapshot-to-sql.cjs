@@ -4,8 +4,10 @@
  *   （預設）src/data.js 的 STAFF／SHIFTS——示範資料，用來把 D1 開機、跑通綁定與儀表板
  *   --json <path>  由平台匯出的 { staff:[...], shifts:[...] } JSON（形狀與 data.js 相同）
  *
- * 輸出：純 SQL 到 stdout（或 --out <file>）。全量覆蓋語義：先 DELETE 三張表再 INSERT，
- * 一個交易內完成——快照就是快照，不做增量合併（Stage 3 平台改讀 D1 即時資料後，本工具退場）。
+ * 輸出：純 SQL 到 stdout（或 --out <file>）。全量覆蓋語義：先 DELETE 三張表再 INSERT。
+ * 不寫 BEGIN／COMMIT——D1 拒絕 SQL 交易語句，`d1 execute --file` 本身就把整批當原子批次執行；
+ * 本機 sqlite 驗證時亦以 executescript 整批跑。快照就是快照，不做增量合併
+ * （Stage 3 平台改讀 D1 即時資料後，本工具退場）。
  *
  * 用法：
  *   node tools/snapshot-to-sql.cjs --out cloudflare/linebot/snapshot.sql
@@ -44,7 +46,6 @@ const out = [];
 
 out.push('-- snapshot.sql — 由 tools/snapshot-to-sql.cjs 產生於 ' + now);
 out.push('-- 全量覆蓋：staff / shift / leave 三張表');
-out.push('BEGIN TRANSACTION;');
 out.push('DELETE FROM leave; DELETE FROM shift; DELETE FROM staff;');
 
 for (const s of staff) {
@@ -69,7 +70,6 @@ for (const r of shifts) {
     [q(r.staffId), q(r.date), q(r.shift), q(r.unit), q('imported'), q(now)].join(', ') + ');'
   );
 }
-out.push('COMMIT;');
 
 const sql = out.join('\n') + '\n';
 const outPath = opt('--out');

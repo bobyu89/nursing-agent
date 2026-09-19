@@ -1,4 +1,4 @@
-# deploy.ps1 — 班守 LINE bot Worker 一鍵部署（繞開中文路徑地雷）
+﻿# deploy.ps1 — 班守 LINE bot Worker 一鍵部署（繞開中文路徑地雷）
 #
 # 為什麼需要這支：wrangler 的 esbuild 打包步驟在含 CJK 字元的路徑
 # （本專案位於「AI職涯營」資料夾）會直接以 exit 9／127 失敗，連錯誤訊息都不給；
