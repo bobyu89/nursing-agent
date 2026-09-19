@@ -13,21 +13,21 @@ function memStore() {
   const audit = [];
   return {
     codes, idByUser, audit,
-    async issueBindCode({ code, staffId, issuedBy, issuedAt, expiresAt }) {
-      codes.set(code, { staff_id: staffId, issued_by: issuedBy, issued_at: issuedAt, expires_at: expiresAt, used_at: null });
+    async issueBindCode({ code, staffId, tier, issuedBy, issuedAt, expiresAt }) {
+      codes.set(code, { staff_id: staffId, tier: tier || 'staff', issued_by: issuedBy, issued_at: issuedAt, expires_at: expiresAt, used_at: null });
     },
     async consumeBindCode(code, nowIso) {
       const r = codes.get(code);
       if (!r || r.used_at) return null;
       r.used_at = nowIso;
-      return { staff_id: r.staff_id, expires_at: r.expires_at, used_at: r.used_at };
+      return { staff_id: r.staff_id, tier: r.tier, expires_at: r.expires_at, used_at: r.used_at };
     },
     async getIdentityByUser(u) { return idByUser.get(u) || null; },
-    async bindIdentity({ lineUserId, staffId, unit, role, boundAt }) {
+    async bindIdentity({ lineUserId, staffId, unit, role, tier, boundAt }) {
       let replacedLineUserId = null;
       for (const [u, id] of idByUser) if (id.staff_id === staffId && u !== lineUserId) { replacedLineUserId = u; idByUser.delete(u); }
       idByUser.delete(lineUserId);
-      idByUser.set(lineUserId, { line_user_id: lineUserId, staff_id: staffId, unit, role, bound_at: boundAt });
+      idByUser.set(lineUserId, { line_user_id: lineUserId, staff_id: staffId, unit, role, tier: tier || 'staff', bound_at: boundAt });
       return { replacedLineUserId };
     },
     async appendAudit(e) { audit.push(e); return 'h' + audit.length; },
@@ -59,7 +59,8 @@ test('stage1：同一條件下，注入只有原班人員的快照 → 引擎零
 /* ── 指令解析與綁定碼 ── */
 
 test('stage1：stage1Command 命中「發碼 N-xx」與「綁定 N-xx 六碼」——手機打字的各種排版都要認得', () => {
-  assertEqual(stage1Command('發碼 N-04'), { kind: 'issue', staffId: 'N-04' });
+  assertEqual(stage1Command('發碼 N-04'), { kind: 'issue', staffId: 'N-04', tierWord: '' });
+  assertEqual(stage1Command('發碼 N-04 護理長'), { kind: 'issue', staffId: 'N-04', tierWord: '護理長' }, '第二個字詞是權責層');
   assertEqual(stage1Command('  綁定 N-04 483920 '), { kind: 'bind', staffId: 'N-04', code: '483920' });
   // 真實使用者會打出來的變體（2026-09-19 實機第一次綁定就卡在這）
   const want = { kind: 'bind', staffId: 'N-01', code: '078318' };
@@ -68,7 +69,7 @@ test('stage1：stage1Command 命中「發碼 N-xx」與「綁定 N-xx 六碼」�
     '綁定 Ｎ－01 078318', '綁定 N-01,078318']) {
     assertEqual(stage1Command(v), want, `應認得：${JSON.stringify(v)}`);
   }
-  assertEqual(stage1Command('發碼n4'), { kind: 'issue', staffId: 'N-04' }, '發碼同樣寬鬆並補零');
+  assertEqual(stage1Command('發碼n4'), { kind: 'issue', staffId: 'N-04', tierWord: '' }, '發碼同樣寬鬆並補零');
   // 語義不符的仍不命中
   assertEqual(stage1Command('綁定 N-04 48392'), null, '五碼不命中');
   assertEqual(stage1Command('綁定 N-04 4839201'), null, '七碼不命中');
@@ -176,4 +177,57 @@ test('stage1：auditCanonical 欄位順序固定、系統動作 actor 為空字�
   assertEqual(auditCanonical({ ...base, actor: null }), `abc|${T0}||bind.completed|{"a":1}`, 'cron 等系統動作 actor 為空');
   assertEqual(auditCanonical({ ...base, prevHash: '' }).startsWith('|'), true, '創世筆 prevHash 為空');
   assert(auditCanonical(base) !== auditCanonical({ ...base, payloadJson: '{"a":2}' }), 'payload 變即變');
+});
+
+/* ── 權責層與權限矩陣（§2.5）── */
+
+test('stage1：權限矩陣——三層照抄平台 ROLES，上級涵蓋下級', () => {
+  const allowed = (t) => Object.keys(COMMAND_MIN_TIER).filter((k) => commandAllowed(t, k)).sort();
+  assertEqual(allowed('staff'), ['guide', 'menu', 'report', 'swap'], '護理師：通報、換班、選單、說明');
+  assertEqual(allowed('head'), ['dashboard', 'guide', 'menu', 'report', 'swap'], '護理長：多儀表板');
+  assertEqual(allowed('exec'), ['dashboard', 'dispatch', 'guide', 'menu', 'report', 'retention', 'swap'], '督導：全部');
+  assert(!commandAllowed('staff', 'dispatch') && !commandAllowed('head', 'retention'), '護理師不得調度、護理長不得看負荷');
+  assert(!commandAllowed('nobody', 'menu') && !commandAllowed('exec', 'unknown'), '未知層級或未知指令一律拒');
+});
+
+test('stage1：classifyCommand 把每句話歸到矩陣的一個鍵，非指令一律視為通報', () => {
+  assertEqual(['儀表板', '戰情', '負荷', '雷達', '調度 ICU N', '換班 N-01 8/3 N-02 8/5', '選單', 'help', '使用說明']
+    .map(classifyCommand), ['dashboard', 'dashboard', 'retention', 'retention', 'dispatch', 'swap', 'menu', 'menu', 'guide']);
+  assertEqual(classifyCommand('我明天大夜不能來'), 'report');
+});
+
+test('stage1：發碼可授權權責層——省略＝護理師、護理長／督導／主任各自對應、不認得的字直接拒', async () => {
+  const r = () => fixedRand([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]);
+  const st = memStore();
+  const a = await issueBindCodeFlow({ staffId: 'N-04', tierWord: '', adminHash: 'adm', now: T0, store: st, rand: r() });
+  assert(/權責層：護理師/.test(a.text), a.text);
+  assertEqual(st.codes.get('123456').tier, 'staff');
+  assertEqual(st.audit.at(-1).payload.tier, 'staff', '發碼留痕記 tier');
+
+  const st2 = memStore();
+  const b = await issueBindCodeFlow({ staffId: 'N-04', tierWord: '護理長', adminHash: 'adm', now: T0, store: st2, rand: r() });
+  assert(/權責層：護理長/.test(b.text));
+  assertEqual(st2.codes.get('123456').tier, 'head');
+
+  const st3 = memStore();
+  await issueBindCodeFlow({ staffId: 'N-04', tierWord: '主任', adminHash: 'adm', now: T0, store: st3, rand: r() });
+  assertEqual(st3.codes.get('123456').tier, 'exec', '「主任」與「督導」同義');
+
+  const st4 = memStore();
+  const d = await issueBindCodeFlow({ staffId: 'N-04', tierWord: '院長', adminHash: 'adm', now: T0, store: st4, rand: r() });
+  assert(/不認得/.test(d.text) && st4.codes.size === 0 && st4.audit.length === 0, '不認得的層級：不發碼、不留痕、說清楚可用選項');
+});
+
+test('stage1：綁定把碼上的 tier 帶進 identity 與留痕，回覆明示權責層', async () => {
+  const st = memStore();
+  await issueBindCodeFlow({ staffId: 'N-04', tierWord: '督導', adminHash: 'adm', now: T0, store: st, rand: fixedRand([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]) });
+  const out = await bindFlow({ lineUserId: 'U1', lineUserHash: 'h1', staffId: 'N-04', code: '123456', now: T0, store: st });
+  assert(/權責層：督導／主任/.test(out.text), out.text);
+  assertEqual(st.idByUser.get('U1').tier, 'exec');
+  assertEqual(st.audit.at(-1).payload.tier, 'exec');
+});
+
+test('stage1：tierDeniedText 說清楚屬哪一層、你是哪一層——不假裝指令不存在', () => {
+  const t = tierDeniedText('dispatch', 'staff');
+  assert(/調度棋盤/.test(t) && /督導／主任以上/.test(t) && /護理師/.test(t), t);
 });

@@ -27,32 +27,32 @@ export function createD1Store(db, { auditCanonical }) {
   return {
     /* ── 身分 ─────────────────────────────────────── */
     async getIdentityByUser(lineUserId) {
-      return db.prepare('SELECT line_user_id, staff_id, unit, role, bound_at FROM identity WHERE line_user_id = ?')
+      return db.prepare('SELECT line_user_id, staff_id, unit, role, tier, bound_at FROM identity WHERE line_user_id = ?')
         .bind(lineUserId).first();
     },
     async getIdentityByStaff(staffId) {
-      return db.prepare('SELECT line_user_id, staff_id, unit, role, bound_at FROM identity WHERE staff_id = ?')
+      return db.prepare('SELECT line_user_id, staff_id, unit, role, tier, bound_at FROM identity WHERE staff_id = ?')
         .bind(staffId).first();
     },
-    async bindIdentity({ lineUserId, staffId, unit, role, boundAt }) {
+    async bindIdentity({ lineUserId, staffId, unit, role, tier, boundAt }) {
       const prev = await this.getIdentityByStaff(staffId);
       const replacedLineUserId = prev && prev.line_user_id !== lineUserId ? prev.line_user_id : null;
       await db.batch([
         db.prepare('DELETE FROM identity WHERE staff_id = ? OR line_user_id = ?').bind(staffId, lineUserId),
-        db.prepare('INSERT INTO identity (line_user_id, staff_id, unit, role, bound_at) VALUES (?, ?, ?, ?, ?)')
-          .bind(lineUserId, staffId, unit, role, boundAt),
+        db.prepare('INSERT INTO identity (line_user_id, staff_id, unit, role, tier, bound_at) VALUES (?, ?, ?, ?, ?, ?)')
+          .bind(lineUserId, staffId, unit, role, tier || 'staff', boundAt),
       ]);
       return { replacedLineUserId };
     },
 
     /* ── 綁定碼 ───────────────────────────────────── */
-    async issueBindCode({ code, staffId, issuedBy, issuedAt, expiresAt }) {
-      await db.prepare('INSERT INTO bind_code (code, staff_id, issued_by, issued_at, expires_at) VALUES (?, ?, ?, ?, ?)')
-        .bind(code, staffId, issuedBy, issuedAt, expiresAt).run();
+    async issueBindCode({ code, staffId, tier, issuedBy, issuedAt, expiresAt }) {
+      await db.prepare('INSERT INTO bind_code (code, staff_id, tier, issued_by, issued_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(code, staffId, tier || 'staff', issuedBy, issuedAt, expiresAt).run();
     },
     /** 原子消耗：只有 used_at 仍為 NULL 的那一筆會被標記並回傳；否則 null */
     async consumeBindCode(code, nowIso) {
-      return db.prepare('UPDATE bind_code SET used_at = ? WHERE code = ? AND used_at IS NULL RETURNING staff_id, expires_at, used_at')
+      return db.prepare('UPDATE bind_code SET used_at = ? WHERE code = ? AND used_at IS NULL RETURNING staff_id, tier, expires_at, used_at')
         .bind(nowIso, code).first();
     },
     async purgeExpiredBindCodes(nowIso) {

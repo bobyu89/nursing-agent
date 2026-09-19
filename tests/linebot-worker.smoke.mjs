@@ -84,9 +84,9 @@ await worker.fetch(signed([textEv(OTHER, '發碼 N-05')]), envD1);
 step('未綁定者輸入「發碼」→ 一樣只回綁定說明（不洩漏指令存在）', replyText().includes('尚未綁定人員代號'), replyText().slice(0, 80));
 
 /* ── 3. 管理者發碼 ── */
-await worker.fetch(signed([textEv(ADMIN, '發碼 N-04')]), envD1);
+await worker.fetch(signed([textEv(ADMIN, '發碼 N-04 護理長')]), envD1);
 const codeMatch = /　(\d{6})/.exec(replyText());
-step('管理者「發碼 N-04」→ 回六位數碼', !!codeMatch, replyText());
+step('管理者「發碼 N-04 護理長」→ 回六位數碼、標明權責層', !!codeMatch && /權責層：護理長/.test(replyText()), replyText());
 const code = codeMatch && codeMatch[1];
 step('D1 bind_code 有這筆、未使用', !!db.prepare('SELECT 1 FROM bind_code WHERE code = ? AND used_at IS NULL').get(code));
 
@@ -94,7 +94,7 @@ step('D1 bind_code 有這筆、未使用', !!db.prepare('SELECT 1 FROM bind_code
 await worker.fetch(signed([textEv(USER, `綁定 N-04 ${code}`)]), envD1);
 step('本人「綁定 N-04 <碼>」→ 已綁定', /已綁定為 N-04/.test(replyText()), replyText());
 const idRow = db.prepare('SELECT * FROM identity WHERE line_user_id = ?').get(USER);
-step('identity 表寫入 N-04，且只有代號沒有姓名', idRow && idRow.staff_id === 'N-04' && !JSON.stringify(idRow).includes('name'));
+step('identity 表寫入 N-04（tier=head），且只有代號沒有姓名', idRow && idRow.staff_id === 'N-04' && idRow.tier === 'head' && !JSON.stringify(idRow).includes('name'));
 
 /* ── 5. 綁定後儀表板可用，且資料來自 D1 ── */
 calls.length = 0;
@@ -119,6 +119,31 @@ step('OTHER 未被綁定', !db.prepare('SELECT 1 FROM identity WHERE line_user_i
 await worker.fetch(signed([textEv(USER, '發碼 N-05')]), envD1);
 step('已綁定的非管理者「發碼」→ 限管理者', /限管理者/.test(replyText()), replyText());
 
+/* ── 7½. 權責閘：staff 不得調度、exec 可以；管理者發碼可授權 ── */
+{
+  await worker.fetch(signed([textEv(ADMIN, '發碼 N-02')]), envD1);            // 預設 staff
+  const c2 = /　(\d{6})/.exec(replyText())[1];
+  await worker.fetch(signed([textEv(OTHER, `綁定 N-02 ${c2}`)]), envD1);
+  step('N-02 以預設權責層綁定 → identity.tier = staff', db.prepare('SELECT tier FROM identity WHERE staff_id = ?').get('N-02')?.tier === 'staff');
+  await worker.fetch(signed([textEv(OTHER, '調度')]), envD1);
+  step('staff 輸入「調度」→ 誠實拒絕並說明屬督導視角', /調度棋盤.*督導／主任以上/.test(replyText()), replyText());
+  await worker.fetch(signed([textEv(OTHER, '儀表板')]), envD1);
+  step('staff 輸入「儀表板」→ 拒絕（屬護理長以上）', /儀表板.*護理長以上/.test(replyText()), replyText());
+  await worker.fetch(signed([textEv(OTHER, '換班')]), envD1);
+  step('staff 輸入「換班」→ 允許（回用法說明）', /換班/.test(replyText()) && !/視角/.test(replyText()), replyText().slice(0, 60));
+
+  const EXEC = 'Uexec0000000000000000000000000000';
+  await worker.fetch(signed([textEv(ADMIN, '發碼 N-03 督導')]), envD1);
+  const c3 = /　(\d{6})/.exec(replyText())[1];
+  await worker.fetch(signed([textEv(EXEC, `綁定 N-03 ${c3}`)]), envD1);
+  step('管理者「發碼 N-03 督導」→ 綁定後 identity.tier = exec', db.prepare('SELECT tier FROM identity WHERE staff_id = ?').get('N-03')?.tier === 'exec');
+  calls.length = 0;
+  await worker.fetch(signed([textEv(EXEC, '調度')]), envD1);
+  step('exec 輸入「調度」→ 放行', !/視角/.test(replyText()), replyText().slice(0, 60));
+  await worker.fetch(signed([textEv(ADMIN, '發碼 N-05 院長')]), envD1);
+  step('不認得的權責層字詞 → 拒絕發碼並列出可用選項', /不認得/.test(replyText()), replyText());
+}
+
 /* ── 8. cron 清碼 ── */
 await worker.scheduled({}, envD1);
 step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE code = ?').get(code));
@@ -128,9 +153,9 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   const { createD1Store } = await import(pathToFileURL(path.join(ROOT, 'cloudflare/linebot/store-d1.mjs')).href);
   const store = createD1Store(d1Like(db), { auditCanonical: globalThis.auditCanonical });
   const v = await store.verifyAuditChain();
-  step(`留痕鏈完整（${v.length} 筆）`, v.ok && v.length === 3, JSON.stringify(v));
+  step(`留痕鏈完整（${v.length} 筆）`, v.ok && v.length === 7, JSON.stringify(v));
   const actions = db.prepare('SELECT action FROM audit ORDER BY id').all().map((r) => r.action);
-  step('留痕動作序列正確', JSON.stringify(actions) === JSON.stringify(['bind_code.issued', 'bind.completed', 'bind.rejected']), JSON.stringify(actions));
+  step('留痕動作序列正確', JSON.stringify(actions) === JSON.stringify(['bind_code.issued', 'bind.completed', 'bind.rejected', 'bind_code.issued', 'bind.completed', 'bind_code.issued', 'bind.completed']), JSON.stringify(actions));
   // 竄改一筆 → 鏈斷
   db.prepare("UPDATE audit SET payload_json = '{\"tampered\":true}' WHERE id = 1").run();
   const v2 = await store.verifyAuditChain();

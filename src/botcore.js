@@ -584,10 +584,10 @@ const welcomeText = (platformUrl) => [
  * 這一段是純邏輯：透過注入的 `store` 存取狀態，本檔不知道 D1 是什麼。
  * 宿主（cloudflare/linebot/store-d1.mjs）實作以下介面；測試用記憶體假物件即可：
  *
- *   store.issueBindCode({ code, staffId, issuedBy, issuedAt, expiresAt })
- *   store.consumeBindCode(code, nowIso) → { staff_id, expires_at, used_at } | null
+ *   store.issueBindCode({ code, staffId, tier, issuedBy, issuedAt, expiresAt })
+ *   store.consumeBindCode(code, nowIso) → { staff_id, tier, expires_at, used_at } | null
  *       （回傳同時把 used_at 寫入；已用過或不存在回 null）
- *   store.bindIdentity({ lineUserId, staffId, unit, role, boundAt })
+ *   store.bindIdentity({ lineUserId, staffId, unit, role, tier, boundAt })
  *       → { replacedLineUserId: string | null }   （同代號重綁＝換手機，舊帳號失效）
  *   store.appendAudit({ ts, actor, action, payload })   （雜湊鏈由 store 計算）
  *
@@ -597,8 +597,59 @@ const welcomeText = (platformUrl) => [
 const BIND_CODE_TTL_MIN = 30;
 /* 寬鬆解析：手機上打字會有全形數字、沒空格、小寫 n、漏連字號、句尾標點——
  * 先正規化再比對，代號一律還原成 N-兩位。命中與否只看語義，不看排版。 */
-const ISSUE_RE = /^發碼[:：]?\s*n-?(\d{1,2})$/i;
+const ISSUE_RE = /^發碼[:：]?\s*n-?(\d{1,2})(?:\s+(\S+))?$/i;   // 第 2 組：權責層（可省略）
 const BIND_RE = /^綁定[:：]?\s*n-?(\d{1,2})[\s,，、]+(\d{6})$/i;
+
+/* ── 權責層（tier）與權限矩陣：docs/LINEBOT-STAGE1.md §2.5 ─────────────
+ * 職級（role）判資格是引擎的事；權責層判權限是 bot 的事，由管理者發碼時授權。
+ * 三層照抄平台 ROLES：staff 護理師 → head 護理長 → exec 督導／主任，上級涵蓋下級。 */
+const TIERS = { staff: 0, head: 1, exec: 2 };
+const TIER_LABEL = { staff: '護理師', head: '護理長', exec: '督導／主任' };
+const TIER_WORDS = { 護理師: 'staff', 護理長: 'head', 督導: 'exec', 主任: 'exec', 督導主任: 'exec' };
+
+/** 發碼時的權責層字詞 → tier；省略＝staff；不認得＝null（呼叫端回錯） */
+function tierFromWord(w) {
+  if (w === undefined || w === null || w === '') return 'staff';
+  return TIER_WORDS[String(w).trim()] || null;
+}
+
+/** 指令 → 所需最低權責層（矩陣的唯一真相來源；圖文選單與閘門都從這裡生） */
+const COMMAND_MIN_TIER = {
+  menu: 'staff', guide: 'staff', report: 'staff', swap: 'staff',
+  dashboard: 'head',
+  retention: 'exec', dispatch: 'exec',
+};
+const COMMAND_LABEL = {
+  menu: '選單', guide: '使用說明', report: '通報缺班', swap: '換班預檢',
+  dashboard: '儀表板', retention: '負荷雷達', dispatch: '調度棋盤',
+};
+
+/** 把一句文字歸類成指令鍵；非指令的一律視為通報（report） */
+function classifyCommand(text) {
+  const t = String(text || '').trim();
+  if (DASHBOARD_RE.test(t)) return 'dashboard';
+  if (MENU_RE.test(t)) return 'menu';
+  if (GUIDE_RE.test(t)) return 'guide';
+  if (/^換班/.test(t)) return 'swap';
+  if (DISPATCH_RE.test(t)) return 'dispatch';
+  if (RETENTION_RE.test(t)) return 'retention';
+  return 'report';
+}
+
+function commandAllowed(tier, key) {
+  const need = COMMAND_MIN_TIER[key];
+  if (need === undefined) return false;
+  return (TIERS[tier] ?? -1) >= TIERS[need];
+}
+
+/** 權限不足的誠實回覆：說清楚屬哪一層、你是哪一層，不假裝指令不存在 */
+function tierDeniedText(key, tier) {
+  const need = COMMAND_MIN_TIER[key];
+  return [
+    `「${COMMAND_LABEL[key] || key}」屬${TIER_LABEL[need]}以上視角；你目前的權責層是${TIER_LABEL[tier] || tier}。`,
+    '需要調整權責請找管理者重新發碼、重新綁定（會留痕）。',
+  ].join('\n');
+}
 
 function normalizeCmdText(text) {
   return String(text || '')
@@ -638,7 +689,7 @@ function isoPlusMinutes(iso, n) {
 function stage1Command(text) {
   const t = normalizeCmdText(text);
   let m = ISSUE_RE.exec(t);
-  if (m) return { kind: 'issue', staffId: padStaffId(m[1]) };
+  if (m) return { kind: 'issue', staffId: padStaffId(m[1]), tierWord: m[2] || '' };
   m = BIND_RE.exec(t);
   if (m) return { kind: 'bind', staffId: padStaffId(m[1]), code: m[2] };
   return null;
@@ -648,18 +699,22 @@ function stage1Command(text) {
  * 發碼（管理者專用；是否為管理者由宿主判定後才呼叫）。
  * adminHash：管理者 line_user_id 的雜湊——留痕只存雜湊、不存原值。
  */
-async function issueBindCodeFlow({ staffId, adminHash, now, store, db, rand }) {
+async function issueBindCodeFlow({ staffId, tierWord, adminHash, now, store, db, rand }) {
   if (!store) return { text: STORE_DISABLED_TEXT };
+  const tier = tierFromWord(tierWord);
+  if (!tier) {
+    return { text: `權責層「${tierWord}」不認得。可用：護理長、督導（或主任）；省略＝護理師。例：發碼 ${staffId} 護理長` };
+  }
   const staff = liveData(db).staff.find((s) => s.id === staffId);
   if (!staff) return { text: `查無人員 ${staffId}，未發碼。請確認代號（如 N-04）與人員快照是否已上傳。` };
   const code = genBindCode(rand);
   const expiresAt = isoPlusMinutes(now, BIND_CODE_TTL_MIN);
-  await store.issueBindCode({ code, staffId, issuedBy: adminHash, issuedAt: now, expiresAt });
+  await store.issueBindCode({ code, staffId, tier, issuedBy: adminHash, issuedAt: now, expiresAt });
   await store.appendAudit({ ts: now, actor: null, action: 'bind_code.issued',
-    payload: { staffId, issuedBy: adminHash, expiresAt } });
+    payload: { staffId, tier, issuedBy: adminHash, expiresAt } });
   return {
     text: [
-      `已為 ${staffId}（${UNITS[staff.unit] || staff.unit}）產生綁定碼：`,
+      `已為 ${staffId}（${UNITS[staff.unit] || staff.unit}｜權責層：${TIER_LABEL[tier]}）產生綁定碼：`,
       '',
       `　${code}`,
       '',
@@ -687,14 +742,15 @@ async function bindFlow({ lineUserId, lineUserHash, staffId, code, now, store, d
   const staff = liveData(db).staff.find((s) => s.id === staffId);
   if (!staff) return reject('staff-not-in-snapshot');
 
+  const tier = TIERS[rec.tier] !== undefined ? rec.tier : 'staff';
   const { replacedLineUserId } = await store.bindIdentity({
-    lineUserId, staffId, unit: staff.unit, role: staff.role, boundAt: now,
+    lineUserId, staffId, unit: staff.unit, role: staff.role, tier, boundAt: now,
   });
   await store.appendAudit({ ts: now, actor: staffId, action: 'bind.completed',
-    payload: { staffId, lineUser: lineUserHash, replaced: Boolean(replacedLineUserId) } });
+    payload: { staffId, tier, lineUser: lineUserHash, replaced: Boolean(replacedLineUserId) } });
   return {
     text: [
-      `已綁定為 ${staffId}（${UNITS[staff.unit] || staff.unit}｜${staff.role}）。`,
+      `已綁定為 ${staffId}（${UNITS[staff.unit] || staff.unit}｜${staff.role}｜權責層：${TIER_LABEL[tier]}）。`,
       replacedLineUserId ? '此代號先前綁定的 LINE 帳號已失效（換手機情境）。' : '',
       '輸入「選單」查看可用功能。',
     ].filter(Boolean).join('\n'),
@@ -720,5 +776,7 @@ if (typeof module !== 'undefined' && module.exports) {
     liveData, platformEngine,
     BIND_CODE_TTL_MIN, BIND_HELP, STORE_DISABLED_TEXT,
     genBindCode, isoPlusMinutes, stage1Command, issueBindCodeFlow, bindFlow, auditCanonical,
+    TIERS, TIER_LABEL, COMMAND_MIN_TIER, COMMAND_LABEL,
+    tierFromWord, classifyCommand, commandAllowed, tierDeniedText,
   };
 }
