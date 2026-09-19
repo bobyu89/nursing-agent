@@ -183,9 +183,10 @@ test('stage1：auditCanonical 欄位順序固定、系統動作 actor 為空字�
 
 test('stage1：權限矩陣——三層照抄平台 ROLES，上級涵蓋下級', () => {
   const allowed = (t) => Object.keys(COMMAND_MIN_TIER).filter((k) => commandAllowed(t, k)).sort();
-  assertEqual(allowed('staff'), ['guide', 'menu', 'report', 'swap'], '護理師：通報、換班、選單、說明');
-  assertEqual(allowed('head'), ['dashboard', 'guide', 'menu', 'report', 'swap'], '護理長：多儀表板');
-  assertEqual(allowed('exec'), ['dashboard', 'dispatch', 'guide', 'menu', 'report', 'retention', 'swap'], '督導：全部');
+  const base = ['bindguide', 'guide', 'menu', 'myask', 'report', 'reportguide', 'swap', 'whoami'];
+  assertEqual(allowed('staff'), base, '護理師：通報、換班、選單、說明、我的邀請、我是誰');
+  assertEqual(allowed('head'), [...base, 'dashboard', 'manage', 'pending'].sort(), '護理長：多儀表板、待核准、調整');
+  assertEqual(allowed('exec'), [...base, 'dashboard', 'dispatch', 'manage', 'pending', 'retention'].sort(), '督導：全部');
   assert(!commandAllowed('staff', 'dispatch') && !commandAllowed('head', 'retention'), '護理師不得調度、護理長不得看負荷');
   assert(!commandAllowed('nobody', 'menu') && !commandAllowed('exec', 'unknown'), '未知層級或未知指令一律拒');
 });
@@ -300,7 +301,7 @@ test('phase1：通報——建立 REPORTED 請求、候選 ≤5 含理由、逾�
   assertEqual(out.pushes.length, 1);
   assertEqual(out.pushes[0].staffId, 'N-01', '推給同單位護理長');
   assert(/待核准｜/.test(out.pushes[0].text) && out.pushes[0].items.some((i) => /核准/.test(i.label)) && out.pushes[0].items.some((i) => /駁回/.test(i.label)));
-  assert(out.pushes[0].items.some((i) => i.label === `略過 ${cands[0].id}`), '每位候選有略過鍵');
+  assert(out.pushes[0].items.some((i) => /調整/.test(i.label)), '核准訊息附「調整」鍵（略過／置頂／逾時在調整選單裡）');
   assertEqual(st.audit.at(-1).action, 'sub.reported');
   assertEqual(st.audit.at(-1).payload.candidates, cands.map((c) => c.id));
 });
@@ -467,11 +468,162 @@ test('phase1：核准時無候選 → 直接 EXHAUSTED，不會空轉', async ()
 });
 
 test('phase1：核准訊息的按鈕資料能被 decodeParams 還原（rq／act／who）', () => {
-  const req = { id: 'RTESP01', unit: 'MED-3A', date: '2026-08-09', shift: 'D', required_certs_json: '[]', original_staff_id: 'N-05',
+  const req = { id: 'RTEST01', unit: 'MED-3A', date: '2026-08-09', shift: 'D', required_certs_json: '[]', original_staff_id: 'N-05',
     reporter_staff_id: 'N-05', reason_type: '病假', timeout_min: 60, candidates_json: JSON.stringify([{ id: 'N-04', total: 100, max: 100, why: 'x' }]) };
   const m = approvalMessage(req);
   const parsed = m.items.map((i) => decodeParams(i.dataStr));
-  assertEqual(parsed.map((p) => p.act), ['approve', 'reject', 'skip']);
-  assert(parsed.every((p) => p.rq === 'RTESP01'));
-  assertEqual(parsed[2].who, 'N-04');
+  assertEqual(parsed.map((p) => p.act), ['approve', 'reject', 'adjust']);
+  assert(parsed.every((p) => p.rq === 'RTEST01'));
+  const adj = adjustMessage(req).items.map((i) => decodeParams(i.dataStr));
+  assertEqual(adj.map((p) => p.act), ['skip', 'timeout', 'timeout', 'timeout'], '單一候選：略過×1、置頂×0、逾時×3');
+  assertEqual(adj[0].who, 'N-04');
+  assertEqual(adj[1].who, '15');
+});
+
+/* ══ Phase 1.5：調整（略過／置頂／調序／逾時）＋ 常駐指令（§4.3、§2.4）══════════════ */
+function subStore15() {
+  const st = subStore();
+  return Object.assign(st, {
+    async listSubRequests({ unit, state }) {
+      return [...st.reqs.values()].filter((r) => (!unit || r.unit === unit) && (!state || r.state === state))
+        .sort((a, b) => (a.created_at < b.created_at ? -1 : 1)).map((r) => ({ ...r }));
+    },
+    async findOpenAskFor(staffId, now) {
+      const a = st.asks.find((x) => x.staff_id === staffId && x.answer === null && x.expired_at > now);
+      return a ? { ...a } : null;
+    },
+  });
+}
+async function reported15() {
+  const st = subStore15();
+  const r = await reported(st);
+  return { st, ...r };
+}
+
+test('phase15：phase15Command 認得「調序」與「逾時」，代號寬鬆、請求代號轉大寫；其餘 null', () => {
+  assertEqual(phase15Command('調序 RLVS0GG N-08 n4 N-2'), { kind: 'reorder', rq: 'RLVS0GG', order: ['N-08', 'N-04', 'N-02'] });
+  assertEqual(phase15Command('逾時 rlvs0gg 30'), { kind: 'timeout', rq: 'RLVS0GG', minutes: 30 });
+  assertEqual(phase15Command('調序 RLVS0GG'), null, '沒給順序不命中');
+  assertEqual(phase15Command('逾時 RLVS0GG 三十'), null);
+  assertEqual(phase15Command('我明天調序不了'), null);
+});
+
+test('phase15：核准訊息三鍵（核准／駁回／調整）；調整選單＝略過×n＋置頂×(n−1)＋逾時三檔，且不超過 LINE 的 13 顆', () => {
+  const mk = (n) => ({ id: 'RTEST02', unit: 'MED-3A', date: '2026-08-09', shift: 'D', required_certs_json: '[]', original_staff_id: 'N-05',
+    reporter_staff_id: 'N-05', reason_type: null, timeout_min: 60,
+    candidates_json: JSON.stringify(Array.from({ length: n }, (_, i) => ({ id: `N-0${i + 1}`, total: 90, max: 100, why: 'x' }))) });
+  assertEqual(approvalMessage(mk(5)).items.map((i) => decodeParams(i.dataStr).act), ['approve', 'reject', 'adjust']);
+  const adj5 = adjustMessage(mk(5)).items;
+  assertEqual(adj5.length, 12);
+  assertEqual(adj5.map((i) => decodeParams(i.dataStr).act), [...Array(5).fill('skip'), ...Array(4).fill('top'), 'timeout', 'timeout', 'timeout']);
+  assert(!adj5.some((i) => decodeParams(i.dataStr).act === 'top' && decodeParams(i.dataStr).who === 'N-01'), '第 1 位沒有置頂鍵');
+  assertEqual(adjustMessage(mk(1)).items.length, 4, '單一候選：略過 1＋逾時 3');
+  assert(/調序 RTEST02/.test(adjustMessage(mk(2)).text) && /逾時 RTEST02/.test(adjustMessage(mk(2)).text), '文字指令提示含請求代號');
+});
+
+test('phase15：置頂——移到第 1 位、其餘相對順序不變、留痕 before／after、回新的核准訊息；第 1 位置頂為 no-op', async () => {
+  const { st, id, head } = await reported15();
+  const before = JSON.parse(st.reqs.get(id).candidates_json).map((c) => c.id);
+  const who = before[2];
+  const out = await topFlow({ rq: id, who, actor: head, now: P0, store: st });
+  const after = JSON.parse(st.reqs.get(id).candidates_json).map((c) => c.id);
+  assertEqual(after, [who, ...before.filter((x) => x !== who)]);
+  assertEqual(st.audit.at(-1).action, 'sub.reordered');
+  assertEqual(st.audit.at(-1).payload, { id, how: 'top', who, before, after });
+  assert(/置頂/.test(out.reply.text) && out.reply.items.map((i) => decodeParams(i.dataStr).act).join() === 'approve,reject,adjust');
+  const noop = await topFlow({ rq: id, who, actor: head, now: P0, store: st });
+  assert(/已經是第 1 位/.test(noop.reply.text) && st.audit.at(-1).payload.who === who, 'no-op 不再留痕');
+  const nobody = await topFlow({ rq: id, who: 'N-99', actor: head, now: P0, store: st });
+  assert(/不在/.test(nobody.reply.text));
+});
+
+test('phase15：調序——列出的照給定順序在前、未列的照原相對順序在後；未知代號整筆拒絕', async () => {
+  const { st, id, head } = await reported15();
+  const before = JSON.parse(st.reqs.get(id).candidates_json).map((c) => c.id);
+  const out = await reorderFlow({ rq: id, order: [before[3], before[1]], actor: head, now: P0, store: st });
+  const after = JSON.parse(st.reqs.get(id).candidates_json).map((c) => c.id);
+  assertEqual(after, [before[3], before[1], ...before.filter((x) => x !== before[3] && x !== before[1])]);
+  assertEqual(st.audit.at(-1).payload.how, 'reorder');
+  assert(/已調序/.test(out.reply.text));
+  const bad = await reorderFlow({ rq: id, order: ['N-99', before[0]], actor: head, now: P0, store: st });
+  assert(/N-99 不在/.test(bad.reply.text));
+  assertEqual(JSON.parse(st.reqs.get(id).candidates_json).map((c) => c.id), after, '拒絕時序列不動');
+});
+
+test('phase15：逾時——5–720 整數分鐘，留痕 before／after；越界拒絕；核准後不可再調', async () => {
+  const { st, id, head } = await reported15();
+  const out = await timeoutFlow({ rq: id, minutes: 30, actor: head, now: P0, store: st });
+  assertEqual(st.reqs.get(id).timeout_min, 30);
+  assertEqual(st.audit.at(-1).action, 'sub.timeout_changed');
+  assertEqual(st.audit.at(-1).payload, { id, before: 240, after: 30 });
+  assert(/每位等 30 分鐘/.test(out.reply.text));
+  for (const bad of [4, 721, 1.5, 'x']) {
+    const r = await timeoutFlow({ rq: id, minutes: bad, actor: head, now: P0, store: st });
+    assert(/5–720/.test(r.reply.text), `應拒絕 ${bad}`);
+  }
+  assertEqual(st.reqs.get(id).timeout_min, 30, '拒絕時不動');
+  await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  assertEqual(st.asks[0].expired_at, isoPlusMinutes(P0, 30), '核准後第 1 位的期限用新的逾時');
+  const late = await timeoutFlow({ rq: id, minutes: 60, actor: head, now: P0, store: st });
+  assert(/序列已凍結/.test(late.reply.text));
+});
+
+test('phase15：調整的權限與狀態閘——護理師、別單位護理長、已核准的請求都進不了', async () => {
+  const { st, id, head, rep } = await reported15();
+  assert(/需該單位/.test((await adjustFlow({ rq: id, actor: rep, store: st })).reply.text));
+  st.seed('Uother', 'N-09', 'SUR-5B', 'head');
+  assert(/需該單位/.test((await adjustFlow({ rq: id, actor: await st.getIdentityByUser('Uother'), store: st })).reply.text));
+  const ok = await adjustFlow({ rq: id, actor: head, store: st });
+  assert(/【調整｜/.test(ok.reply.text) && ok.reply.items.length === 12);
+  await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  assert(/序列已凍結/.test((await adjustFlow({ rq: id, actor: head, store: st })).reply.text));
+});
+
+test('phase15：待核准——只列本單位 REPORTED、第一筆附核准鍵、多筆時列出其餘代號；督導看全院；沒有時誠實說', async () => {
+  const { st, id, head, rep } = await reported15();
+  const none = await pendingFlow({ actor: head, store: st });
+  assert(/待核准 1 筆/.test(none.reply.text) && new RegExp(id).test(none.reply.text) && none.reply.items[0].label.includes('核准'));
+  // 第二筆（同一人另一班別）
+  await reportFlow({ p: { ...GAP_P, s: 'E' }, reporter: rep, now: isoPlusMinutes(P0, 1), store: st, rand: rand6() });
+  const two = await pendingFlow({ actor: head, store: st });
+  assert(/待核准 2 筆/.test(two.reply.text) && /另有 1 筆/.test(two.reply.text), two.reply.text);
+  // 別單位的護理長看不到
+  st.seed('Uother', 'N-09', 'SUR-5B', 'head');
+  const other = await pendingFlow({ actor: await st.getIdentityByUser('Uother'), store: st });
+  assert(/沒有待核准/.test(other.reply.text));
+  // 督導看全院
+  st.seed('Uexec', 'N-10', 'SUR-5B', 'exec');
+  const ex = await pendingFlow({ actor: await st.getIdentityByUser('Uexec'), store: st });
+  assert(/待核准 2 筆/.test(ex.reply.text));
+  // 核准後就不在清單
+  await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  assert(/待核准 1 筆/.test((await pendingFlow({ actor: head, store: st })).reply.text));
+});
+
+test('phase15：我的邀請——重送正在等我回覆的那一筆（附接／不接、剩餘分鐘）；沒有或已逾時則誠實說', async () => {
+  const { st, id, head } = await reported15();
+  await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  const first = st.asks[0].staff_id;
+  st.seed('Uc0', first, 'MED-3A', 'staff');
+  const me = await st.getIdentityByUser('Uc0');
+  const out = await myAskFlow({ actor: me, now: isoPlusMinutes(P0, 10), store: st });
+  assert(/替班詢問｜/.test(out.reply.text) && /約 230 分鐘/.test(out.reply.text), out.reply.text);
+  assertEqual(out.reply.items.map((i) => decodeParams(i.dataStr).act), ['accept', 'decline']);
+  const expired = await myAskFlow({ actor: me, now: isoPlusMinutes(P0, 241), store: st });
+  assert(/沒有等你回覆/.test(expired.reply.text), '逾時的不再列為邀請');
+  st.seed('Ux', 'N-11', 'MED-3A', 'staff');
+  assert(/沒有等你回覆/.test((await myAskFlow({ actor: await st.getIdentityByUser('Ux'), now: P0, store: st })).reply.text));
+});
+
+test('phase15：我是誰／綁定回傳——whoamiText 含代號、單位、職級、權責層；bindFlow 回傳 bound 供宿主掛選單', async () => {
+  const st = memStore();
+  await issueBindCodeFlow({ staffId: 'N-04', tierWord: '護理長', adminHash: 'adm', now: T0, store: st, rand: fixedRand([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]) });
+  const b = await bindFlow({ lineUserId: 'U1', lineUserHash: 'h1', staffId: 'N-04', code: '123456', now: T0, store: st });
+  assertEqual(b.bound, { staffId: 'N-04', tier: 'head', replacedLineUserId: null });
+  const who = whoamiText(st.idByUser.get('U1'), false);
+  assert(/N-04/.test(who) && /護理師/.test(who) && /權責層：護理長/.test(who) && /2026-09-19/.test(who), who);
+  assert(/管理者/.test(whoamiText(null, true)));
+  assertEqual(whoamiText(null, false), BIND_HELP);
+  const g = reportGuideMessage();
+  assert(g.items.length === 3 && g.items.every((i) => i.text && !i.dataStr), '通報引導用 message 型按鈕');
 });

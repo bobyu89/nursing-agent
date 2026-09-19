@@ -43,7 +43,7 @@ function d1Like(sqlite) {
 /* ── LINE 呼叫錄影 ── */
 const calls = [];
 globalThis.fetch = async (url, init) => {
-  calls.push({ url: String(url), body: JSON.parse(init.body) });
+  calls.push({ url: String(url), method: (init && init.method) || 'GET', body: init && init.body ? JSON.parse(init.body) : null });
   return { ok: true, status: 200, async text() { return ''; } };
 };
 const lastReply = () => calls.filter((c) => c.url.endsWith('/reply')).at(-1)?.body.messages[0];
@@ -64,7 +64,8 @@ const snapshotSql = execFileSync(process.execPath, [path.join(ROOT, 'tools/snaps
 db.exec(snapshotSql);
 
 const worker = (await import(pathToFileURL(path.join(ROOT, 'cloudflare/linebot/worker.mjs')).href)).default;
-const envD1 = { LINE_CHANNEL_SECRET: SECRET, LINE_CHANNEL_ACCESS_TOKEN: 'tok', ADMIN_USER_ID: ADMIN, DB: d1Like(db) };
+const envD1 = { LINE_CHANNEL_SECRET: SECRET, LINE_CHANNEL_ACCESS_TOKEN: 'tok', ADMIN_USER_ID: ADMIN, DB: d1Like(db),
+  RICHMENU_STAFF: 'RM_STAFF', RICHMENU_HEAD: 'RM_HEAD', RICHMENU_EXEC: 'RM_EXEC' };
 const envDemo = { LINE_CHANNEL_SECRET: SECRET, LINE_CHANNEL_ACCESS_TOKEN: 'tok' };
 
 let n = 0;
@@ -180,7 +181,7 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   const cands = JSON.parse(row.candidates_json);
 
   await worker.fetch(signed([pb(OTHER, encodeParams({ rq, act: 'approve' }), 2)]), envD1);
-  step('通報者（staff）自己按核准 → 權責閘擋下', /核准替班.*護理長以上/.test(replyText()), replyText());
+  step('通報者（staff）自己按核准 → 權責閘擋下', /核准／調整替班.*護理長以上/.test(replyText()), replyText());
 
   const u1 = await bindAs(cands[0].id, 'Ucand1000000000000000000000000000');
   const u2 = await bindAs(cands[1].id, 'Ucand2000000000000000000000000000');
@@ -243,6 +244,84 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
     && pushes().some((b) => b.to === OTHER && /駁回/.test(b.messages[0].text)));
 }
 
+/* ── 8¾. Phase 1.5：綁定掛選單／換手機解除；調整（置頂、逾時、文字調序）；待核准；我的邀請；我是誰；通報引導 ── */
+{
+  // 本段對同一使用者連發十幾則；worker 的頻率限制（10 則/分/人）是正確行為，
+  // 測試把 Date.now 每次前進 7 秒，讓限制器看到的是分散在幾分鐘內的訊息
+  const realNow = Date.now; let skew = 0;
+  Date.now = () => realNow() + (skew += 7000);
+  const pb = (userId, data, tag) => ({ type: 'postback', replyToken: 'pc' + tag, source: { userId }, postback: { data } });
+  const rm = () => calls.filter((c) => /\/richmenu/.test(c.url)).map((c) => `${c.method} ${c.url.replace('https://api.line.me/v2/bot/user/', '')}`);
+  const issue = async (cmd) => { await worker.fetch(signed([textEv(ADMIN, cmd)]), envD1); return /　(\d{6})/.exec(replyText())[1]; };
+
+  // 綁定 → 掛該 tier 選單
+  const U6 = 'Ustaff6000000000000000000000000000';
+  const c6 = await issue('發碼 N-06');
+  calls.length = 0;
+  await worker.fetch(signed([textEv(U6, `綁定 N-06 ${c6}`)]), envD1);
+  step('綁定成功 → POST 掛 staff 選單給本人', rm().includes(`POST ${U6}/richmenu/RM_STAFF`) && /下方選單已切換/.test(replyText()), JSON.stringify(rm()));
+  // 換手機：舊帳號解除、新帳號掛（這次升護理長）
+  const U6b = 'Ustaff6b00000000000000000000000000';
+  const c6b = await issue('發碼 N-06 護理長');
+  calls.length = 0;
+  await worker.fetch(signed([textEv(U6b, `綁定 N-06 ${c6b}`)]), envD1);
+  step('換手機＋升權責層 → DELETE 舊帳號選單、POST 新帳號 head 選單', rm().includes(`DELETE ${U6}/richmenu`) && rm().includes(`POST ${U6b}/richmenu/RM_HEAD`), JSON.stringify(rm()));
+
+  // 我是誰／綁定說明／通報引導
+  await worker.fetch(signed([textEv(U6b, '我是誰')]), envD1);
+  step('「我是誰」→ 代號、單位、職級、權責層', /N-06/.test(replyText()) && /權責層：護理長/.test(replyText()), replyText());
+  await worker.fetch(signed([textEv(ADMIN, '我是誰')]), envD1);
+  step('管理者未綁定「我是誰」→ 說明是管理者', /管理者/.test(replyText()), replyText());
+  await worker.fetch(signed([textEv(U6b, '通報缺班')]), envD1);
+  step('「通報缺班」→ 引導＋三個 message 型範例鍵', /直接用一句話/.test(replyText()) && lastReply().quickReply.items.every((i) => i.action.type === 'message'), JSON.stringify(lastReply()).slice(0, 120));
+  await worker.fetch(signed([textEv('Unobody00000000000000000000000000', '綁定說明')]), envD1);
+  step('未綁定者「綁定說明」→ 綁定說明', /尚未綁定/.test(replyText()));
+
+  // 新通報（N-02 大夜）→ 調整
+  await worker.fetch(signed([textEv(OTHER, '我 8/9 大夜不能來')]), envD1);
+  const nc = lastReply().quickReply.items.find((i) => /無需/.test(i.action.label));
+  await worker.fetch(signed([pb(OTHER, nc.action.data, 1)]), envD1);
+  const rq3 = (/已通報 (R\w{6})/.exec(replyText()) || [])[1];
+  step('第三筆通報建立', !!rq3, replyText().slice(0, 80));
+  const cands3 = () => JSON.parse(db.prepare('SELECT candidates_json FROM sub_request WHERE id = ?').get(rq3).candidates_json).map((c) => c.id);
+  const before = cands3();
+  await worker.fetch(signed([pb(USER, encodeParams({ rq: rq3, act: 'adjust' }), 2)]), envD1);
+  step('護理長按「調整」→ 調整選單（略過／置頂／逾時）', /【調整｜/.test(replyText()) && lastReply().quickReply.items.length === Math.min(before.length, 5) + Math.min(before.length, 5) - 1 + 3, replyText().slice(0, 80));
+  await worker.fetch(signed([pb(USER, encodeParams({ rq: rq3, act: 'top', who: before[2] }), 3)]), envD1);
+  step('置頂第 3 位 → 序列變更、回新的核准訊息', cands3()[0] === before[2] && /置頂/.test(replyText()) && lastReply().quickReply.items.length === 3, JSON.stringify(cands3()));
+  await worker.fetch(signed([pb(USER, encodeParams({ rq: rq3, act: 'timeout', who: '15' }), 4)]), envD1);
+  step('逾時按鈕 15 → timeout_min=15', db.prepare('SELECT timeout_min FROM sub_request WHERE id = ?').get(rq3).timeout_min === 15, replyText().slice(0, 60));
+  await worker.fetch(signed([textEv(USER, `逾時 ${rq3} 30`)]), envD1);
+  step('文字「逾時 R… 30」→ 30', db.prepare('SELECT timeout_min FROM sub_request WHERE id = ?').get(rq3).timeout_min === 30, replyText().slice(0, 60));
+  await worker.fetch(signed([textEv(USER, `調序 ${rq3} ${before[1]} ${before[0]}`)]), envD1);
+  step('文字「調序 R… B A」→ B、A 在前，其餘照舊', cands3()[0] === before[1] && cands3()[1] === before[0], JSON.stringify(cands3()));
+  await worker.fetch(signed([textEv(OTHER, `調序 ${rq3} ${before[0]}`)]), envD1);
+  step('staff 打「調序」→ 權責閘擋下', /核准／調整替班.*護理長以上/.test(replyText()), replyText());
+
+  // 待核准
+  await worker.fetch(signed([textEv(USER, '待核准')]), envD1);
+  step('「待核准」→ 列出本單位 REPORTED（含 rq3）並附核准鍵', new RegExp(rq3).test(replyText()) && lastReply().quickReply.items.some((i) => /核准/.test(i.action.label)), replyText().slice(0, 100));
+  await worker.fetch(signed([textEv(OTHER, '待核准')]), envD1);
+  step('staff 打「待核准」→ 權責閘擋下', /待核准.*護理長以上/.test(replyText()), replyText());
+
+  // 核准 → 第 1 位＝調序後的第 1 位，期限＝30 分；我的邀請
+  const firstId = cands3()[0];
+  const Uf = 'Ufirst000000000000000000000000000';
+  if (!db.prepare('SELECT 1 FROM identity WHERE staff_id = ?').get(firstId)) {
+    const cf = await issue(`發碼 ${firstId}`);
+    await worker.fetch(signed([textEv(Uf, `綁定 ${firstId} ${cf}`)]), envD1);
+  }
+  const uFirst = db.prepare('SELECT line_user_id FROM identity WHERE staff_id = ?').get(firstId).line_user_id;
+  await worker.fetch(signed([pb(USER, encodeParams({ rq: rq3, act: 'approve' }), 5)]), envD1);
+  const ask3 = db.prepare('SELECT * FROM sub_ask WHERE request_id = ? AND seq = 0').get(rq3);
+  step('核准後第 1 位＝調序後的第 1 位，期限＝asked_at＋30 分', ask3.staff_id === firstId && (new Date(ask3.expired_at) - new Date(ask3.asked_at)) === 30 * 60000, JSON.stringify(ask3));
+  await worker.fetch(signed([textEv(uFirst, '我的邀請')]), envD1);
+  step('「我的邀請」→ 重送該筆詢問，附接／不接、剩餘分鐘', new RegExp(rq3).test(replyText()) && /還有約/.test(replyText()) && lastReply().quickReply.items.length === 2, replyText().slice(0, 100));
+  await worker.fetch(signed([textEv(U6b, '我的邀請')]), envD1);
+  step('沒被問到的人「我的邀請」→ 誠實說沒有', /沒有等你回覆/.test(replyText()));
+  Date.now = realNow;
+}
+
 /* ── 9. 留痕鏈 ── */
 {
   const { createD1Store } = await import(pathToFileURL(path.join(ROOT, 'cloudflare/linebot/store-d1.mjs')).href);
@@ -252,7 +331,7 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   const actions = db.prepare('SELECT action FROM audit ORDER BY id').all().map((r) => r.action);
   step('留痕動作序列正確（前 7 筆為綁定；Phase 1 的 reported→approved→asked→declined→asked→filled 依序在後）',
     JSON.stringify(actions.slice(0, 7)) === JSON.stringify(['bind_code.issued', 'bind.completed', 'bind.rejected', 'bind_code.issued', 'bind.completed', 'bind_code.issued', 'bind.completed'])
-    && ['sub.reported', 'sub.approved', 'sub.asked', 'sub.declined', 'sub.asked', 'sub.filled', 'sub.timeout', 'sub.answer_ignored', 'sub.rejected'].every((k) => actions.includes(k)), JSON.stringify(actions));
+    && ['sub.reported', 'sub.approved', 'sub.asked', 'sub.declined', 'sub.asked', 'sub.filled', 'sub.timeout', 'sub.answer_ignored', 'sub.rejected', 'sub.reordered', 'sub.timeout_changed'].every((k) => actions.includes(k)), JSON.stringify(actions));
   // 竄改一筆 → 鏈斷
   db.prepare("UPDATE audit SET payload_json = '{\"tampered\":true}' WHERE id = 1").run();
   const v2 = await store.verifyAuditChain();

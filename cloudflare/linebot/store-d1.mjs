@@ -112,6 +112,19 @@ export function createD1Store(db, { auditCanonical }) {
       await db.prepare(`UPDATE sub_request SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`)
         .bind(...keys.map((k) => patch[k]), id).run();
     },
+    /** Phase 1.5：待核准清單（unit 為 null＝全院）；依建立時間 */
+    async listSubRequests({ unit, state }) {
+      const conds = []; const args = [];
+      if (unit) { conds.push('unit = ?'); args.push(unit); }
+      if (state) { conds.push('state = ?'); args.push(state); }
+      const { results } = await db.prepare(`SELECT * FROM sub_request${conds.length ? ' WHERE ' + conds.join(' AND ') : ''} ORDER BY created_at`).bind(...args).all();
+      return results;
+    },
+    /** Phase 1.5：正在等某人回覆、且未逾時的那一筆 */
+    async findOpenAskFor(staffId, nowIso) {
+      return db.prepare('SELECT * FROM sub_ask WHERE staff_id = ? AND answer IS NULL AND expired_at > ? ORDER BY asked_at DESC LIMIT 1')
+        .bind(staffId, nowIso).first();
+    },
     async listAsks(requestId) {
       const { results } = await db.prepare('SELECT * FROM sub_ask WHERE request_id = ? ORDER BY seq').bind(requestId).all();
       return results;

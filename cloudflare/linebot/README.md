@@ -88,13 +88,21 @@ cd cloudflare/linebot; npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
 回 LINE Developers → Messaging API 分頁 → **Webhook URL** 填步驟 2 的 workers.dev 網址
 → **Verify**（應顯示 Success）→ 開啟 **Use webhook**。
 
-### 4½. 底部固定按鈕（圖文選單 Rich Menu，一鍵腳本）
+### 4½. 底部固定按鈕（圖文選單 Rich Menu，四份依權責層，一鍵腳本）
 
-讓聊天室下方常駐六格大按鈕（戰情儀表板／換班預檢／調度棋盤／負荷雷達／通報缺班／開啟平台），
-底部另有一條「使用說明」細長列——第一次用的人點它就拿到完整教學與照著打的按鈕。
-本目錄的 `richmenu.ps1` 會自動：用 Windows 內建 GDI+ 畫出與平台同視覺的 2500×1686 選單圖
-（「開啟平台」格由班守 IP「守守」（北極熊）坐鎮——幾何與 `assets/logo.svg` 同一份，GDI+ 手工重繪）→
-呼叫 Rich Menu API 建立選單 → 上傳圖片 → 設為所有人的預設選單 → 清掉舊版（安全換版）。
+聊天室下方常駐六格大按鈕＋一條細長列。Stage 1 起選單**依權責層分四份**（設計 §2.4）：
+
+| 版本 | 六格 | 誰看到 |
+|---|---|---|
+| unbound | 如何綁定／使用說明／開啟平台／通報缺班・換班預檢・我的邀請（標「綁定後可用」） | 全體預設，未綁定者 |
+| staff | 通報缺班／換班預檢／我的邀請／我是誰／功能選單／開啟平台 | 綁定為護理師者 |
+| head | 戰情儀表板／待核准／通報缺班／換班簽核／我的邀請／開啟平台 | 綁定為護理長者 |
+| exec | 戰情儀表板／調度棋盤／負荷雷達／待核准／換班預檢／開啟平台 | 綁定為督導／主任者 |
+
+格子＝§2.5 權限矩陣該層打勾的指令；Worker 在**綁定成功那一刻**依 tier 把對應選單掛給本人（換手機時舊帳號解除、退回預設）。
+本目錄的 `richmenu.ps1` 會自動：用 Windows 內建 GDI+ 畫出四張與平台同視覺的 2500×1686 選單圖
+（「開啟平台」格由班守 IP「守守」（北極熊）坐鎮）→ 逐份呼叫 Rich Menu API 建立 → 上傳圖片 →
+unbound 設為全體預設 → 清掉舊版（安全換版）→ **印出三個 id，貼進 `wrangler.toml` 的 `[vars]` 後重新部署。**
 「開啟平台」的動作在腳本頂端設定了 `$LIFF_ID`（與 `wrangler.toml` 同步）時走
 `liff.line.me` 全高視窗，與 bot 按鈕行為一致；清空則退回一般網址：
 
@@ -104,7 +112,8 @@ powershell -ExecutionPolicy Bypass -File richmenu.ps1
 
 執行時會提示貼上 **Channel access token**（LINE Developers → Messaging API；請用原本那組——
 重新 Issue 會讓 Worker 裡的舊 token 失效，屆時記得同步 `npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN`）。
-只想預覽圖片：加 `-ImageOnly`。改文案或格子後重跑即可換版，Worker 程式不用動。
+只想預覽圖片：加 `-ImageOnly`（產生 `richmenu-unbound/staff/head/exec.png`）。改文案或格子後重跑即可換版；
+換版後 id 會變，記得更新 `wrangler.toml` 再部署。已綁定的既有使用者重新綁定一次即掛上新版。
 
 原理：圖文選單只是「代替使用者送出文字／開連結」的介面層——按格子等於輸入指令文字，
 由 Worker 的指令路由接手。不想用腳本的話，manager.line.biz → 圖文選單也能手動建立
