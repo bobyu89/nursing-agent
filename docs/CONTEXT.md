@@ -263,3 +263,18 @@ mock 模式以關鍵詞規則比對訊息，**只回報有依據的欄位**，�
 引擎內不讀取任何全域資料。注入的是同一份參照：規則庫調整與寫回即時生效。
 同一份 `src/engine.js` 在瀏覽器（index.html）、測試（tests.html 與 CI 的 Node runner）
 與未來的 Lambda 端點上運行，行為必須一致——這由 `tests/engine.test.js` 保證。
+
+## LINE 替班迴路的語義（Stage 1 Phase 1）
+
+實作在 `src/botcore.js`「Phase 1」段落，設計在 [LINEBOT-STAGE1.md](LINEBOT-STAGE1.md) §4。
+
+| 詞彙 | 定義 |
+|---|---|
+| **替班請求（sub_request）** | 一筆由通報產生的迴路實例：REPORTED → APPROVED → ASKING → FILLED／EXHAUSTED；或於任一階段 REJECTED。原班人員＝通報者。 |
+| **候選序列** | 通報當下 `evaluateGap` 排出的前 5 位（含分數與理由），核准時凍結——**核准留痕裡的序列就是「為什麼是找你不找他」的正本**。護理長核准前可略過某人（留痕），不可加入引擎排除的人。 |
+| **逐一問** | 同一時間只有一位候選看得到請求。第 i 位回覆或逾時後，第 i+1 位才被問。 |
+| **逾時分級** | 依缺班距今：< 12 小時 15 分鐘；12–48 小時 60 分鐘；> 48 小時 4 小時。班次起點以台北時間解讀。 |
+| **遲到的接** | 已被標逾時（或請求已結束）後才按「接」——**不算數**，留痕 `sub.answer_ignored`，不寫回。 |
+| **拒絕不扣分** | `standbyCount30d` 只在 FILLED 時對替補者 +1；拒絕、逾時、取消都不影響任何評分。 |
+| **寫回** | FILLED 時同一批次：原班人員該日該班從 `shift` 移除、替補者新增（`source='substitution'`）、原班人員 `leave` 一筆、替補者代班 +1。寫回前重跑一次硬性規則，不再合格者視同不接、改問下一位。 |
+| **自核** | 護理長本人缺班：Stage 1 允許自核，`approved_by == original_staff_id`，留痕 `selfApproved=true`。 |
