@@ -620,17 +620,26 @@ function tierFromWord(w) {
 /** 指令 → 所需最低權責層（矩陣的唯一真相來源；圖文選單與閘門都從這裡生） */
 const COMMAND_MIN_TIER = {
   menu: 'staff', guide: 'staff', report: 'staff', swap: 'staff',
-  dashboard: 'head',
+  myask: 'staff', whoami: 'staff', reportguide: 'staff', bindguide: 'staff',
+  dashboard: 'head', pending: 'head', manage: 'head',
   retention: 'exec', dispatch: 'exec',
 };
 const COMMAND_LABEL = {
   menu: '選單', guide: '使用說明', report: '通報缺班', swap: '換班預檢',
-  dashboard: '儀表板', retention: '負荷雷達', dispatch: '調度棋盤',
+  myask: '我的邀請', whoami: '我是誰', reportguide: '通報引導', bindguide: '綁定說明',
+  dashboard: '儀表板', pending: '待核准', manage: '核准／調整替班',
+  retention: '負荷雷達', dispatch: '調度棋盤',
 };
 
 /** 把一句文字歸類成指令鍵；非指令的一律視為通報（report） */
 function classifyCommand(text) {
   const t = String(text || '').trim();
+  if (PENDING_RE.test(t)) return 'pending';
+  if (MYASK_RE.test(t)) return 'myask';
+  if (WHOAMI_RE.test(t)) return 'whoami';
+  if (REPORT_GUIDE_RE.test(t)) return 'reportguide';
+  if (BIND_GUIDE_RE.test(t)) return 'bindguide';
+  if (phase15Command(t)) return 'manage';
   if (DASHBOARD_RE.test(t)) return 'dashboard';
   if (MENU_RE.test(t)) return 'menu';
   if (GUIDE_RE.test(t)) return 'guide';
@@ -756,8 +765,9 @@ async function bindFlow({ lineUserId, lineUserHash, staffId, code, now, store, d
     text: [
       `已綁定為 ${staffId}（${UNITS[staff.unit] || staff.unit}｜${staff.role}｜權責層：${TIER_LABEL[tier]}）。`,
       replacedLineUserId ? '此代號先前綁定的 LINE 帳號已失效（換手機情境）。' : '',
-      '輸入「選單」查看可用功能。',
+      '下方選單已切換為你的身分版本；輸入「選單」也可查看可用功能。',
     ].filter(Boolean).join('\n'),
+    bound: { staffId, tier, replacedLineUserId },   // 宿主據此掛對應 tier 的圖文選單、解除舊帳號的
   };
 }
 
@@ -836,11 +846,11 @@ function approvalMessage(req) {
     lines.push(`合格候選 ${cands.length} 位（引擎排序，逐一詢問，每位等 ${req.timeout_min} 分鐘）：`);
     cands.forEach((c, i) => lines.push(`${i + 1}. ${c.id}　${c.total}／${c.max} 分　${c.why}`));
   }
-  lines.push('', '核准後機器人才會開口；略過可把某人移出本次序列（留痕）。');
+  lines.push('', '核准後機器人才會開口，序列即凍結；要略過、置頂、改逾時，先按「調整」（每一步留痕）。');
   const items = [
     { label: `✅ 核准（${cands.length} 位）`, dataStr: encodeParams({ rq: req.id, act: 'approve' }) },
     { label: '⛔ 駁回', dataStr: encodeParams({ rq: req.id, act: 'reject' }) },
-    ...cands.slice(0, 8).map((c) => ({ label: `略過 ${c.id}`, dataStr: encodeParams({ rq: req.id, act: 'skip', who: c.id }) })),
+    { label: '✎ 調整', dataStr: encodeParams({ rq: req.id, act: 'adjust' }) },
   ];
   return { text: lines.join('\n'), items };
 }
@@ -1047,6 +1057,190 @@ async function expireFlow({ now, store }) {
   return { expired: due.length, pushes };
 }
 
+/* ══ Phase 1.5：護理長的「調整」＋ 依身分的常駐指令（docs/LINEBOT-STAGE1.md §4.3、§2.4）══════
+ *
+ * 調整只在 REPORTED 可做（核准後序列凍結）：
+ *   ・略過（skip，Phase 1 已有）／置頂（top）——按鈕；調序（reorder）——文字指令「調序 R… N-04 N-08」
+ *   ・逾時三檔按鈕（15／60／240）；任意分鐘——文字指令「逾時 R… 30」（5–720）
+ *   每一次調整都留痕 before／after，並回新的核准訊息。
+ *
+ * 常駐指令（圖文選單格子送出的文字）：
+ *   ・待核准（head+）：列出本單位 REPORTED 請求，附第一筆的核准按鈕——推播被滑掉也找得回來
+ *   ・我的邀請：把「正在等你回覆」的替班詢問重送一次（含接／不接）
+ *   ・我是誰：回綁定身分與權責層
+ *   ・通報缺班：引導＋三個可直接送出的範例句
+ *   ・綁定說明：未綁定者的入口（任何人可用）
+ *
+ * store 新增：store.listSubRequests({ unit, state })、store.findOpenAskFor(staffId, nowIso)
+ */
+
+const TIMEOUT_PRESETS = [15, 60, 240];
+const TIMEOUT_MIN = 5, TIMEOUT_MAX = 720;
+
+const REORDER_RE = /^調序\s+(R[0-9A-Z]{6})((?:\s+n-?\d{1,2})+)$/i;
+const TIMEOUT_RE = /^逾時\s+(R[0-9A-Z]{6})\s+(\d{1,3})$/i;
+const PENDING_RE = /^(待核准|待核|核准清單)$/;
+const MYASK_RE = /^(我的邀請|我的替班邀請|邀請)$/;
+const WHOAMI_RE = /^(我是誰|我的身分|綁定狀態)$/;
+const REPORT_GUIDE_RE = /^(通報缺班|通報|我要通報|請假通報)$/;
+const BIND_GUIDE_RE = /^(綁定說明|如何綁定|怎麼綁定)$/;
+
+/** 文字版管理指令：命中回 { kind, rq, ... }，未命中 null */
+function phase15Command(text) {
+  const t = normalizeCmdText(text);
+  let m = REORDER_RE.exec(t);
+  if (m) return { kind: 'reorder', rq: m[1].toUpperCase(), order: m[2].trim().split(/\s+/).map((w) => padStaffId(w.replace(/^n-?/i, ''))) };
+  m = TIMEOUT_RE.exec(t);
+  if (m) return { kind: 'timeout', rq: m[1].toUpperCase(), minutes: Number(m[2]) };
+  return null;
+}
+
+/** 調整選單：略過×n、置頂×(n−1)、逾時三檔（≤ 12 顆，LINE 上限 13） */
+function adjustMessage(req) {
+  const cands = JSON.parse(req.candidates_json || '[]');
+  const items = [
+    ...cands.slice(0, 5).map((c) => ({ label: `略過 ${c.id}`, dataStr: encodeParams({ rq: req.id, act: 'skip', who: c.id }) })),
+    ...cands.slice(1, 5).map((c) => ({ label: `置頂 ${c.id}`, dataStr: encodeParams({ rq: req.id, act: 'top', who: c.id }) })),
+    ...TIMEOUT_PRESETS.map((m) => ({ label: `逾時 ${m} 分`, dataStr: encodeParams({ rq: req.id, act: 'timeout', who: String(m) }) })),
+  ];
+  return {
+    text: [
+      `【調整｜${req.id}】目前序列：${cands.map((c, i) => `${i + 1}.${c.id}`).join('　')}｜每位等 ${req.timeout_min} 分鐘`,
+      '',
+      '略過＝移出本次序列；置頂＝移到第 1 位；逾時＝改每位等候分鐘。每一步都留痕。',
+      '也可以直接打：「調序 ' + req.id + ' N-04 N-08」（完整順序）、「逾時 ' + req.id + ' 30」（任意分鐘）。',
+      '調整完回上一則按「核准」。',
+    ].join('\n'),
+    items,
+  };
+}
+
+async function loadAdjustable(rq, actor, store) {
+  const req = await store.getSubRequest(rq);
+  if (!req) return { err: { text: `查無請求 ${rq}。`, items: null } };
+  if (!actorMayManage(req, actor)) return { err: { text: `請求 ${rq} 需該單位護理長或督導處理。`, items: null } };
+  if (req.state !== 'REPORTED') return { err: { text: `請求 ${rq} 已核准，序列已凍結，不可再調整。`, items: null } };
+  return { req };
+}
+
+async function adjustFlow({ rq, actor, store }) {
+  const { req, err } = await loadAdjustable(rq, actor, store);
+  if (err) return { reply: err, pushes: [] };
+  return { reply: adjustMessage(req), pushes: [] };
+}
+
+/** 置頂：把 who 移到第 1 位，其餘相對順序不變 */
+async function topFlow({ rq, who, actor, now, store }) {
+  const { req, err } = await loadAdjustable(rq, actor, store);
+  if (err) return { reply: err, pushes: [] };
+  const cands = JSON.parse(req.candidates_json || '[]');
+  const idx = cands.findIndex((c) => c.id === who);
+  if (idx < 0) return { reply: { text: `${who} 不在 ${rq} 的候選序列中。`, items: null }, pushes: [] };
+  if (idx === 0) return { reply: { text: `${who} 已經是第 1 位。`, items: adjustMessage(req).items }, pushes: [] };
+  const next = [cands[idx], ...cands.filter((_, i) => i !== idx)];
+  await store.updateSubRequest(rq, { candidates_json: JSON.stringify(next) });
+  await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'sub.reordered',
+    payload: { id: rq, how: 'top', who, before: cands.map((c) => c.id), after: next.map((c) => c.id) } });
+  const msg = approvalMessage({ ...req, candidates_json: JSON.stringify(next) });
+  return { reply: { text: `已把 ${who} 置頂（留痕）。\n\n${msg.text}`, items: msg.items }, pushes: [] };
+}
+
+/** 調序：文字指令給完整或部分順序；有列的照順序排前面，沒列的照原相對順序接在後面 */
+async function reorderFlow({ rq, order, actor, now, store }) {
+  const { req, err } = await loadAdjustable(rq, actor, store);
+  if (err) return { reply: err, pushes: [] };
+  const cands = JSON.parse(req.candidates_json || '[]');
+  const ids = cands.map((c) => c.id);
+  const unknown = order.filter((id) => !ids.includes(id));
+  if (unknown.length) return { reply: { text: `${unknown.join('、')} 不在 ${rq} 的候選序列中（序列：${ids.join('、')}）。`, items: null }, pushes: [] };
+  const uniq = [...new Set(order)];
+  const next = [...uniq.map((id) => cands.find((c) => c.id === id)), ...cands.filter((c) => !uniq.includes(c.id))];
+  await store.updateSubRequest(rq, { candidates_json: JSON.stringify(next) });
+  await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'sub.reordered',
+    payload: { id: rq, how: 'reorder', before: ids, after: next.map((c) => c.id) } });
+  const msg = approvalMessage({ ...req, candidates_json: JSON.stringify(next) });
+  return { reply: { text: `已調序（留痕）：${next.map((c, i) => `${i + 1}.${c.id}`).join('　')}\n\n${msg.text}`, items: msg.items }, pushes: [] };
+}
+
+/** 改逾時：5–720 分鐘 */
+async function timeoutFlow({ rq, minutes, actor, now, store }) {
+  const { req, err } = await loadAdjustable(rq, actor, store);
+  if (err) return { reply: err, pushes: [] };
+  const m = Number(minutes);
+  if (!Number.isInteger(m) || m < TIMEOUT_MIN || m > TIMEOUT_MAX) {
+    return { reply: { text: `逾時需為 ${TIMEOUT_MIN}–${TIMEOUT_MAX} 的整數分鐘（收到：${minutes}）。`, items: null }, pushes: [] };
+  }
+  await store.updateSubRequest(rq, { timeout_min: m });
+  await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'sub.timeout_changed', payload: { id: rq, before: req.timeout_min, after: m } });
+  const msg = approvalMessage({ ...req, timeout_min: m });
+  return { reply: { text: `逾時已改為每位等 ${m} 分鐘（原 ${req.timeout_min}，留痕）。\n\n${msg.text}`, items: msg.items }, pushes: [] };
+}
+
+/* ── 常駐指令 ── */
+
+/** 待核准：本單位（exec 為全院）的 REPORTED 請求；第一筆附核准按鈕 */
+async function pendingFlow({ actor, store }) {
+  const unit = TIERS[actor.tier] >= TIERS.exec ? null : actor.unit;
+  const rows = await store.listSubRequests({ unit, state: 'REPORTED' });
+  if (!rows.length) return { reply: { text: `目前沒有待核准的替班請求${unit ? `（${UNITS[unit] || unit}）` : ''}。`, items: null }, pushes: [] };
+  const first = approvalMessage(rows[0]);
+  const more = rows.length > 1
+    ? `\n\n另有 ${rows.length - 1} 筆待核准：${rows.slice(1).map((r) => `${r.id}（${gapLabel(gapOf(r))}）`).join('；')}。處理完第一筆再輸入「待核准」。`
+    : '';
+  return { reply: { text: `待核准 ${rows.length} 筆。\n\n${first.text}${more}`, items: first.items }, pushes: [] };
+}
+
+/** 我的邀請：重送「正在等你回覆」的那一筆 */
+async function myAskFlow({ actor, now, store }) {
+  const a = await store.findOpenAskFor(actor.staff_id, now);
+  if (!a) return { reply: { text: '目前沒有等你回覆的替班詢問。', items: null }, pushes: [] };
+  const req = await store.getSubRequest(a.request_id);
+  const cands = JSON.parse(req.candidates_json || '[]');
+  const c = cands[a.seq] || { total: '?', max: '?', why: '' };
+  const left = Math.max(0, Math.round((new Date(a.expired_at) - new Date(now)) / 60_000));
+  return {
+    reply: {
+      text: [
+        `【替班詢問｜${req.id}】${gapLabel(gapOf(req))}`,
+        `你符合資格，引擎排序第 ${a.seq + 1} 位（${c.total}／${c.max} 分：${c.why}）。`,
+        `還有約 ${left} 分鐘可回覆；逾時會自動問下一位，不影響你的任何評分。`,
+      ].join('\n'),
+      items: [
+        { label: '✅ 接', dataStr: encodeParams({ rq: req.id, act: 'accept' }) },
+        { label: '❌ 不接', dataStr: encodeParams({ rq: req.id, act: 'decline' }) },
+      ],
+    },
+    pushes: [],
+  };
+}
+
+/** 我是誰 */
+function whoamiText(identity, isAdminUser) {
+  if (!identity) return isAdminUser ? '你是管理者（未綁定人員代號）。輸入「發碼 N-xx」可為同仁發綁定碼。' : BIND_HELP;
+  return [
+    `你是 ${identity.staff_id}（${UNITS[identity.unit] || identity.unit}｜${identity.role}｜權責層：${TIER_LABEL[identity.tier] || identity.tier}）`,
+    isAdminUser ? '同時是管理者。' : '',
+    `綁定於 ${String(identity.bound_at || '').replace('T', ' ').slice(0, 16)}`,
+  ].filter(Boolean).join('\n');
+}
+
+/** 通報引導：三個可直接送出的範例（message 型快速按鈕） */
+function reportGuideMessage() {
+  return {
+    text: [
+      '要通報缺班，直接用一句話告訴我：日期、班別，以及原因（可省略）。',
+      '例如「我明天白班不能來」「我 9/25 大夜發燒沒辦法上」。',
+      '單位會從你的身分帶入；沒寫到的條件我會用按鈕問你——不臆測。',
+      '條件齊全後會建立替班請求、送護理長核准，有結果會通知你。',
+    ].join('\n'),
+    items: [
+      { label: '我明天白班不能來', text: '我明天白班不能來' },
+      { label: '我明天小夜不能來', text: '我明天小夜不能來' },
+      { label: '我後天大夜不能來', text: '我後天大夜不能來' },
+    ],
+  };
+}
+
 /* 讓 Workers（esbuild）、Lambda（CJS interop）、瀏覽器測試頁與 Node CI 共用 */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -1063,5 +1257,9 @@ if (typeof module !== 'undefined' && module.exports) {
     // Phase 1 替班迴路
     SUB_TOP_N, genRequestId, timeoutMinutesFor, gapLabel, approvalMessage,
     reportFlow, approveFlow, skipFlow, rejectFlow, answerFlow, expireFlow, advanceAsk,
+    // Phase 1.5 調整＋常駐指令
+    TIMEOUT_PRESETS, phase15Command, adjustMessage, adjustFlow, topFlow, reorderFlow, timeoutFlow,
+    pendingFlow, myAskFlow, whoamiText, reportGuideMessage,
+    PENDING_RE, MYASK_RE, WHOAMI_RE, REPORT_GUIDE_RE, BIND_GUIDE_RE,
   };
 }

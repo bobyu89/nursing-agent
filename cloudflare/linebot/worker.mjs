@@ -131,17 +131,47 @@ async function lineReplyMessages(channelToken, replyToken, messages) {
 }
 
 /** 回覆文字訊息（可含快速回覆按鈕） */
+/** botcore 的 items → LINE quickReply：{label, dataStr}＝postback；{label, text}＝直接送出文字 */
+function quickReplyOf(items) {
+  return { items: items.map(({ label, dataStr, text }) => ({
+    type: 'action',
+    action: dataStr !== undefined
+      ? { type: 'postback', label: label.slice(0, 20), data: dataStr, displayText: label }
+      : { type: 'message', label: label.slice(0, 20), text },
+  })) };
+}
+
 async function lineReply(channelToken, replyToken, text, quickItems) {
   const message = { type: 'text', text: text.slice(0, 4900) };
-  if (quickItems && quickItems.length) {
-    message.quickReply = {
-      items: quickItems.map(({ label, dataStr }) => ({
-        type: 'action',
-        action: { type: 'postback', label: label.slice(0, 20), data: dataStr, displayText: label },
-      })),
-    };
-  }
+  if (quickItems && quickItems.length) message.quickReply = quickReplyOf(quickItems);
   return lineReplyMessages(channelToken, replyToken, [message]);
+}
+
+/* ── 圖文選單依權責層掛載（docs/LINEBOT-STAGE1.md §2.4）──
+ * wrangler.toml [vars] RICHMENU_STAFF／RICHMENU_HEAD／RICHMENU_EXEC 填 richmenu.ps1 印出的 id；
+ * 未設定＝不掛（沿用全體預設選單），不影響任何流程。 */
+function richMenuIdFor(env, tier) {
+  return ({ staff: env.RICHMENU_STAFF, head: env.RICHMENU_HEAD, exec: env.RICHMENU_EXEC })[tier] || null;
+}
+async function lineRichMenuLink(channelToken, userId, richMenuId) {
+  const res = await fetch(`https://api.line.me/v2/bot/user/${userId}/richmenu/${richMenuId}`, {
+    method: 'POST', headers: { authorization: `Bearer ${channelToken}` } });
+  if (!res.ok) console.log('LINE richmenu link failed:', res.status, await res.text());
+  return res.ok;
+}
+async function lineRichMenuUnlink(channelToken, userId) {
+  const res = await fetch(`https://api.line.me/v2/bot/user/${userId}/richmenu`, {
+    method: 'DELETE', headers: { authorization: `Bearer ${channelToken}` } });
+  if (!res.ok && res.status !== 404) console.log('LINE richmenu unlink failed:', res.status, await res.text());
+}
+/** 綁定成功後：本人掛該 tier 的選單；換手機時舊帳號解除（退回全體預設＝未綁定選單） */
+async function applyRichMenu(env, userId, bound) {
+  const token = env.LINE_CHANNEL_ACCESS_TOKEN;
+  try {
+    if (bound.replacedLineUserId) await lineRichMenuUnlink(token, bound.replacedLineUserId);
+    const id = richMenuIdFor(env, bound.tier);
+    if (id) await lineRichMenuLink(token, userId, id);
+  } catch (err) { console.log('[RICHMENU] apply failed:', String(err)); }
 }
 
 /* ── 事件處理（流程與訊息組裝在 src/botcore.js）── */
@@ -171,6 +201,7 @@ async function handleEvent(ev, env, { store, live }) {
       if (cmd && cmd.kind === 'bind' && ev.replyToken) {
         const out = await bindFlow({ lineUserId: userId, lineUserHash: userHash(userId),
           staffId: cmd.staffId, code: cmd.code, now: nowIso, store, db: live });
+        if (out.bound) await applyRichMenu(env, userId, out.bound);
         return lineReply(token, ev.replyToken, out.text);
       }
       secLog('unbound-user', userHash(userId));
@@ -222,13 +253,16 @@ async function handleEvent(ev, env, { store, live }) {
       if (!store || !identity) return lineReply(token, ev.replyToken, store ? BIND_HELP : STORE_DISABLED_TEXT);
       const ctx = { rq: p.rq, actor: identity, now: nowIso, store, db: live };
       let out;
-      if (p.act === 'approve' || p.act === 'skip' || p.act === 'reject') {
-        if (!commandAllowed(tier, 'dashboard')) {   // 核准權＝護理長以上（與矩陣 §2.5 一致）
-          return lineReply(token, ev.replyToken, tierDeniedText('dashboard', tier).replace('「儀表板」', '「核准替班」'));
+      if (['approve', 'skip', 'reject', 'adjust', 'top', 'timeout'].includes(p.act)) {
+        if (!commandAllowed(tier, 'manage')) {      // 核准／調整權＝護理長以上（矩陣 §2.5）
+          return lineReply(token, ev.replyToken, tierDeniedText('manage', tier));
         }
         out = p.act === 'approve' ? await approveFlow(ctx)
           : p.act === 'skip' ? await skipFlow({ ...ctx, who: p.who })
-            : await rejectFlow(ctx);
+            : p.act === 'reject' ? await rejectFlow(ctx)
+              : p.act === 'adjust' ? await adjustFlow(ctx)
+                : p.act === 'top' ? await topFlow({ ...ctx, who: p.who })
+                  : await timeoutFlow({ ...ctx, minutes: Number(p.who) });
       } else if (p.act === 'accept' || p.act === 'decline') {
         out = await answerFlow({ ...ctx, answer: p.act });
       } else {
@@ -275,9 +309,10 @@ async function handleEvent(ev, env, { store, live }) {
         now: nowIso, store, db: live });
       return lineReply(token, ev.replyToken, out.text);
     }
-    // 已綁定者再綁（換代號／換手機）：同一流程，consumeBindCode 保證一碼一用
+    // 已綁定者再綁（換代號／換手機／升權責層）：同一流程，consumeBindCode 保證一碼一用
     const out = await bindFlow({ lineUserId: userId, lineUserHash: userHash(userId),
       staffId: s1.staffId, code: s1.code, now: nowIso, store, db: live });
+    if (out.bound) await applyRichMenu(env, userId, out.bound);
     return lineReply(token, ev.replyToken, out.text);
   }
   /* 權責閘（docs/LINEBOT-STAGE1.md §2.5）：指令歸類 → 查矩陣 → 不足時誠實回覆，不假裝指令不存在 */
@@ -285,6 +320,23 @@ async function handleEvent(ev, env, { store, live }) {
   if (!commandAllowed(tier, cmdKey)) {
     secLog('tier-denied', `${userHash(userId)} ${tier} ${cmdKey}`);
     return lineReply(token, ev.replyToken, tierDeniedText(cmdKey, tier));
+  }
+  /* Phase 1.5：常駐指令（圖文選單格子）與文字版管理指令 */
+  if (cmdKey === 'bindguide') return lineReply(token, ev.replyToken, identity ? `你已綁定為 ${identity.staff_id}。\n\n${BIND_HELP}` : BIND_HELP);
+  if (cmdKey === 'whoami') return lineReply(token, ev.replyToken, whoamiText(identity, isAdmin(env, userId)));
+  if (cmdKey === 'reportguide') { const g = reportGuideMessage(); return lineReply(token, ev.replyToken, g.text, g.items); }
+  if (store && identity) {
+    if (cmdKey === 'pending') { const o = await pendingFlow({ actor: identity, store }); return lineReply(token, ev.replyToken, o.reply.text, o.reply.items); }
+    if (cmdKey === 'myask') { const o = await myAskFlow({ actor: identity, now: nowIso, store }); return lineReply(token, ev.replyToken, o.reply.text, o.reply.items); }
+    if (cmdKey === 'manage') {
+      const c = phase15Command(text);
+      const o = c.kind === 'reorder'
+        ? await reorderFlow({ rq: c.rq, order: c.order, actor: identity, now: nowIso, store })
+        : await timeoutFlow({ rq: c.rq, minutes: c.minutes, actor: identity, now: nowIso, store });
+      return lineReply(token, ev.replyToken, o.reply.text, o.reply.items);
+    }
+  } else if (['pending', 'myask', 'manage'].includes(cmdKey)) {
+    return lineReply(token, ev.replyToken, store ? BIND_HELP : STORE_DISABLED_TEXT);
   }
   if (DASHBOARD_RE.test(text)) {
     return lineReplyMessages(token, ev.replyToken, [buildDashboardFlex(platformUrl, liffUrl, live)]);
@@ -333,10 +385,7 @@ async function handleEvent(ev, env, { store, live }) {
 async function dispatchPushes(env, store, pushes) {
   for (const m of pushes || []) {
     const msg = { type: 'text', text: String(m.text || '').slice(0, 4900) };
-    if (m.items && m.items.length) {
-      msg.quickReply = { items: m.items.map(({ label, dataStr }) => ({
-        type: 'action', action: { type: 'postback', label: label.slice(0, 20), data: dataStr, displayText: label } })) };
-    }
+    if (m.items && m.items.length) msg.quickReply = quickReplyOf(m.items);
     let targets = [];
     if (m.admin) targets = adminIds(env);
     else if (m.staffId) {
