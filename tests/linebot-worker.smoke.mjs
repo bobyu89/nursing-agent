@@ -499,6 +499,97 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   globalThis.Date = RealDate;
 }
 
+/* ── 8¹¹⁄₁₂. Phase 3：「平台」簽章連結 → /api/session → /api/snapshot 依範圍；日曆頁的 /api/prebook；「設定需求」 ── */
+{
+  const RealDate = Date; let skew = 0;
+  class FakeDate extends RealDate { constructor(...a) { super(...(a.length ? a : [FakeDate.now()])); } static now() { return RealDate.now() + (skew += 7000); } }
+  globalThis.Date = FakeDate;
+  const api = (path, init) => worker.fetch(new Request('https://x' + path, { headers: { origin: 'https://bobyu89.github.io' }, ...init }), envD1);
+  const uriOf = () => (lastReply().quickReply?.items || []).map((i) => i.action).filter((a) => a.type === 'uri').map((a) => a.uri);
+
+  // 「平台」→ 兩個 uri 按鈕（index.html／prebook.html），各帶本人專屬 #t=
+  await worker.fetch(signed([textEv(USER, '平台')]), envD1);                        // USER＝N-04 head MED-3A
+  let uris = uriOf();
+  step('護理長「平台」→ 回開啟平台／預假日曆兩個連結，皆帶 #t= 簽章', /平台登入.*N-04/.test(replyText()) && uris.length === 2 && uris.every((u) => /#t=[\w-]+\.[\w-]+$/.test(u)) && /index\.html#t=/.test(uris[0]) && /prebook\.html#t=/.test(uris[1]), JSON.stringify(uris));
+  const linkHead = /#t=(.+)$/.exec(uris[0])[1];
+  await worker.fetch(signed([textEv(OTHER, '登入平台')]), envD1);                    // OTHER＝N-02 staff
+  const linkStaff = /#t=(.+)$/.exec(uriOf()[0])[1];
+  step('兩個人的連結不同（token 含代號）', linkHead !== linkStaff);
+
+  // OPTIONS／CORS
+  let res = await api('/api/snapshot', { method: 'OPTIONS' });
+  step('OPTIONS /api/* → 204 並回 CORS 給平台來源', res.status === 204 && res.headers.get('access-control-allow-origin') === 'https://bobyu89.github.io', `${res.status} ${res.headers.get('access-control-allow-origin')}`);
+  res = await worker.fetch(new Request('https://x/api/snapshot', { method: 'OPTIONS', headers: { origin: 'https://evil.example' } }), envD1);
+  step('陌生來源 → CORS 只回平台來源（瀏覽器會擋）', res.headers.get('access-control-allow-origin') === 'https://bobyu89.github.io');
+
+  // link → session
+  res = await api('/api/session?t=bad.token');
+  step('壞的 link token → 401', res.status === 401 && /無效|逾時/.test((await res.json()).message));
+  res = await api(`/api/session?t=${linkHead}`);
+  const sessHead = await res.json();
+  step('護理長的 link → session（12 小時）＋身分', res.status === 200 && /^[\w-]+\.[\w-]+$/.test(sessHead.session) && sessHead.identity.staff_id === 'N-04' && sessHead.identity.tier === 'head' && sessHead.exp - Date.now() > 11 * 3600000, JSON.stringify(sessHead).slice(0, 200));
+  step('留痕 platform.login', db.prepare("SELECT COUNT(*) AS n FROM audit WHERE action = 'platform.login'").get().n === 1);
+  res = await api(`/api/session?t=${sessHead.session}`);
+  step('拿 session 當 link 用 → 401（種類不同）', res.status === 401);
+  res = await api(`/api/session?t=${linkStaff}`);
+  const sessStaff = (await res.json()).session;
+
+  // snapshot 依範圍
+  res = await api('/api/snapshot');
+  step('沒帶 session 的 /api/snapshot → 401', res.status === 401);
+  res = await api('/api/snapshot', { headers: { origin: 'https://bobyu89.github.io', authorization: `Bearer ${sessHead.session}` } });
+  const snapHead = await res.json();
+  const medN = db.prepare("SELECT COUNT(*) AS n FROM staff WHERE unit = 'MED-3A'").get().n;
+  step(`護理長的快照：只有本單位（${medN} 人）、班次全在本單位、含 leaves`, res.status === 200 && snapHead.scope === 'MED-3A' && snapHead.staff.length === medN && snapHead.staff.every((s) => s.unit === 'MED-3A' && Array.isArray(s.leaves)) && snapHead.shifts.every((s) => s.unit === 'MED-3A') && snapHead.shifts.length > 0, JSON.stringify({ scope: snapHead.scope, staff: snapHead.staff.length, shifts: snapHead.shifts.length }));
+  step('快照只有代號沒有姓名', !JSON.stringify(snapHead.staff).includes('"name"'));
+  const EXEC3 = 'Uexec0000000000000000000000000000';                                  // N-03 exec（前面已綁）
+  await worker.fetch(signed([textEv(EXEC3, '平台')]), envD1);
+  const linkExec = /#t=(.+)$/.exec(uriOf()[0])[1];
+  const sessExec = (await (await api(`/api/session?t=${linkExec}`)).json()).session;
+  res = await api('/api/snapshot', { headers: { origin: 'https://bobyu89.github.io', authorization: `Bearer ${sessExec}` } });
+  const snapExec = await res.json();
+  const allN = db.prepare('SELECT COUNT(*) AS n FROM staff').get().n;
+  step(`督導的快照：全院（${allN} 人）、scope=null`, snapExec.scope === null && snapExec.staff.length === allN, JSON.stringify({ scope: snapExec.scope, staff: snapExec.staff.length }));
+
+  // 設定需求（3a）→ 之後生成用它
+  await worker.fetch(signed([textEv(OTHER, '設定需求 D2 E1 N1')]), envD1);
+  step('護理師「設定需求」→ 權責閘擋下', /生成需求.*護理長以上/.test(replyText()), replyText());
+  await worker.fetch(signed([textEv(USER, '設定需求 D2 E1 N1')]), envD1);
+  step('護理長「設定需求 D2 E1 N1」→ 已設定，寫 setting', /已設定 內科病房 3A 的生成需求：白班2／小夜1／大夜1/.test(replyText()) && db.prepare("SELECT value FROM setting WHERE key = 'req.MED-3A'").get().value === '{"D":2,"E":1,"N":1}', replyText());
+  await worker.fetch(signed([textEv(USER, '需求')]), envD1);
+  step('「需求」→ 顯示目前值', /白班2／小夜1／大夜1/.test(replyText()) && !/尚未設定/.test(replyText()), replyText());
+
+  // 日曆頁：開 12 月預班 → 公告的按鈕帶本人連結 → GET/POST /api/prebook 走同一套驗證
+  calls.length = 0;
+  await worker.fetch(signed([textEv(USER, '開啟預班 12月')]), envD1);
+  const announce = calls.filter((c) => c.url.endsWith('/push')).map((c) => c.body).find((b) => b.to === OTHER);
+  const calUri = announce && announce.messages[0].quickReply.items.map((i) => i.action).find((a) => a.type === 'uri');
+  step('預班公告推播給 N-02 的「用日曆挑」按鈕帶 N-02 專屬連結', !!calUri && /prebook\.html#t=/.test(calUri.uri), JSON.stringify(announce && announce.messages[0].quickReply));
+  const linkCal = /#t=(.+)$/.exec(calUri.uri)[1];
+  const sessCal = (await (await api(`/api/session?t=${linkCal}`)).json());
+  step('公告連結換到的 session 是 N-02 本人', sessCal.identity && sessCal.identity.staff_id === 'N-02');
+  const hs = { origin: 'https://bobyu89.github.io', authorization: `Bearer ${sessCal.session}` };
+  res = await api('/api/prebook', { headers: hs });
+  let pb = await res.json();
+  step('GET /api/prebook → 12 月週期 OPEN、上限 4、自己 PENDING', pb.cycle && pb.cycle.month === '2026-12' && pb.cycle.open && pb.cycle.max_days === 4 && pb.request.state === 'PENDING', JSON.stringify(pb).slice(0, 200));
+  res = await api('/api/prebook', { method: 'POST', headers: hs, body: JSON.stringify({ dates: ['2026-12-01', '2026-12-02', '2026-12-03', '2026-12-04', '2026-12-05'] }) });
+  pb = await res.json();
+  step('POST 五天 → 422 最多 4 天（同一套驗證）', res.status === 422 && /最多 4 天/.test(pb.message), `${res.status} ${pb.message}`);
+  res = await api('/api/prebook', { method: 'POST', headers: hs, body: JSON.stringify({ dates: ['2026-12-24', '2026-12-03'] }) });
+  pb = await res.json();
+  step('POST 兩天 → 200、SUBMITTED、日期排序', res.status === 200 && pb.ok && pb.request.state === 'SUBMITTED' && JSON.stringify(pb.request.dates) === '["2026-12-03","2026-12-24"]', JSON.stringify(pb));
+  step('D1 的 prebook_request 與 LINE 指令寫的是同一列', JSON.parse(db.prepare("SELECT dates_json FROM prebook_request WHERE cycle_id = 'MED-3A:2026-12' AND staff_id = 'N-02'").get().dates_json).length === 2);
+  step('留痕 prebook.submitted 由 API 走同一條路', db.prepare("SELECT COUNT(*) AS n FROM audit WHERE action = 'prebook.submitted'").get().n >= 2);
+  res = await api('/api/prebook', { method: 'POST', headers: hs, body: JSON.stringify({ dates: [] }) });
+  pb = await res.json();
+  step('POST 空陣列 → 「預假 無」', res.status === 200 && /不需要預假/.test(pb.message) && pb.request.dates.length === 0, JSON.stringify(pb));
+  await worker.fetch(signed([textEv(OTHER, '我的預假')]), envD1);
+  step('「我的預假」（週期 OPEN）→ 附「用日曆改」連結', uriOf().length === 1 && /prebook\.html#t=/.test(uriOf()[0]), JSON.stringify(uriOf()));
+  res = await api('/api/nope', { headers: hs });
+  step('未知 API → 404', res.status === 404);
+  globalThis.Date = RealDate;
+}
+
 /* ── 9. 留痕鏈 ── */
 {
   const { createD1Store } = await import(pathToFileURL(path.join(ROOT, 'cloudflare/linebot/store-d1.mjs')).href);
@@ -509,7 +600,8 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   step('留痕動作序列正確（前 7 筆為綁定；Phase 1 替班與 Phase 2 預班的每一步都在）',
     JSON.stringify(actions.slice(0, 7)) === JSON.stringify(['bind_code.issued', 'bind.completed', 'bind.rejected', 'bind_code.issued', 'bind.completed', 'bind_code.issued', 'bind.completed'])
     && ['sub.reported', 'sub.approved', 'sub.asked', 'sub.declined', 'sub.asked', 'sub.filled', 'sub.timeout', 'sub.answer_ignored', 'sub.rejected', 'sub.reordered', 'sub.timeout_changed',
-      'prebook.opened', 'prebook.submitted', 'prebook.reminded', 'prebook.closed', 'prebook.generated', 'prebook.held', 'prebook.published'].every((k) => actions.includes(k)), JSON.stringify(actions));
+      'prebook.opened', 'prebook.submitted', 'prebook.reminded', 'prebook.closed', 'prebook.generated', 'prebook.held', 'prebook.published',
+      'richmenu.built', 'platform.login', 'req.changed'].every((k) => actions.includes(k)), JSON.stringify(actions));
   // 竄改一筆 → 鏈斷
   db.prepare("UPDATE audit SET payload_json = '{\"tampered\":true}' WHERE id = 1").run();
   const v2 = await store.verifyAuditChain();

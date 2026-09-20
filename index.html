@@ -52,7 +52,7 @@
   </button>
   <div class="top-title" id="top-title">系統入口</div>
   <div class="topbar-right">
-    <span class="badge badge-demo">模擬資料 · 非真實人員</span>
+    <span class="badge badge-demo" id="data-badge">模擬資料 · 非真實人員</span>
     <span class="badge badge-llm" id="llm-mode-badge">LLM 模式：載入中</span>
   </div>
 </header>
@@ -716,6 +716,8 @@
 
 <!-- anime.js v4（官方 UMD 打包，MIT，vendored 於 assets/ 以符合 CSP self 與離線雙擊）-->
 <script src="assets/anime.umd.min.js"></script>
+<script src="src/config.js"></script>
+<script src="src/live.js"></script>
 <script src="src/data.js"></script>
 <script src="src/rules.js"></script>
 <script src="src/engine.js"></script>

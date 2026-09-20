@@ -328,14 +328,18 @@ const SCHEDULE_STORE_KEY = 'shiftguard.schedule.v1';
 const DEMO_DATA_REV = '2026-08-uniform-month-v2';
 
 function saveSchedule() {
-  try {
-    localStorage.setItem(SCHEDULE_STORE_KEY, JSON.stringify({ rev: DEMO_DATA_REV, shifts: SHIFTS }));
-  } catch (e) {}
+  // 登入模式（改讀 D1）：本機不落地——這份班表的正本在雲端，localStorage 的舊編輯疊上來只會蓋掉正本。
+  // 排班工作區的變更仍在這個分頁生效，但標示為「本機草稿、未寫回」；寫回 D1 是下一階段（詳 docs/LINEBOT-STAGE1.md §6）。
+  if (!LIVE.active) {
+    try {
+      localStorage.setItem(SCHEDULE_STORE_KEY, JSON.stringify({ rev: DEMO_DATA_REV, shifts: SHIFTS }));
+    } catch (e) {}
+  }
   // 儲存狀態指示：每一次寫入都把時間戳亮給使用者看——「有沒有存到」不用猜
   const chip = $('#roster-saved');
   if (chip) {
     chip.hidden = false;
-    chip.textContent = `已自動儲存 ${nowStamp().slice(11)}`;
+    chip.textContent = LIVE.active ? `本機草稿 ${nowStamp().slice(11)}（未寫回 D1）` : `已自動儲存 ${nowStamp().slice(11)}`;
     MOTION.pop(chip);
   }
   const badge = $('#roster-modified');
@@ -488,6 +492,11 @@ function roleAllows(screen) {
 function setRole(key, opts) {
   opts = opts || {};
   if (!ROLES[key]) return;
+  // 登入模式：視角＝綁定時授權的權責層，不能在側欄自己升級（§2.5 矩陣是唯一真相來源）
+  if (LIVE.active && key !== LIVE.identity.tier) {
+    toast(`已以 LINE 身分登入，視角鎖定為「${ROLES[LIVE.identity.tier].label}」；要換權責層請找管理者重新發碼`, 'warn');
+    return;
+  }
   if (key === CURRENT_ROLE && !opts.force) return;
   const prev = CURRENT_ROLE;
   CURRENT_ROLE = key;
@@ -4061,7 +4070,8 @@ function init() {
         '班守 ShiftGuard 防護');
     }
   }
-  const schedLoad = loadSchedule();
+  if (LIVE.active) applyLiveMode();
+  const schedLoad = LIVE.active ? null : loadSchedule();   // 登入模式：正本在 D1，本機舊編輯不疊上來
   if (schedLoad && schedLoad.staleReset) {
     logAction('示範資料已更新，本機舊班表自動重置',
       `偵測到本機保存的班表基於舊版示範資料（版本戳記不符 ${DEMO_DATA_REV}）——` +
@@ -4427,4 +4437,50 @@ function init() {
   switchScreen(roleAllows(entry) ? entry : currentRole().home);
 }
 
-document.addEventListener('DOMContentLoaded', init);
+/* ══ Phase 3b：平台以 LINE 身分登入 → 改讀 D1 即時班表 ══════════════
+ * 機器人「平台」回的連結帶 #t=（本人專屬、10 分鐘）；開頁時換成 session（12 小時）並載雲端快照：
+ * STAFF／SHIFTS 就地換成 D1 的內容（引擎持有同一份參照，不需重建），視角鎖定為權責層，
+ * 資料範圍依 §2.5（head／staff 只拿到本單位）。任何一步失敗都回落離線示範模式，畫面照常。 */
+async function bootLive() {
+  try {
+    const ok = await liveEstablish();
+    if (!ok) return;
+    const snap = await liveFetch('/api/snapshot');
+    if (!snap || !Array.isArray(snap.staff) || !Array.isArray(snap.shifts)) throw new Error('快照格式不對');
+    STAFF.length = 0; snap.staff.forEach((s) => STAFF.push(s));
+    SHIFTS.length = 0; snap.shifts.forEach((s) => SHIFTS.push(s));
+    LIVE.identity = snap.identity || LIVE.identity;
+    LIVE.scope = snap.scope || null;
+    LIVE.loadedAt = snap.generatedAt || new Date().toISOString();
+    LIVE.active = true;
+  } catch (e) {
+    LIVE.error = (e && e.message) || String(e);
+    LIVE.active = false;
+  }
+}
+
+/** 登入模式的介面：資料來源徽章、視角鎖定、留痕 */
+function applyLiveMode() {
+  const id = LIVE.identity;
+  const badge = $('#data-badge');
+  if (badge) {
+    badge.textContent = `雲端即時資料（D1）· ${id.staff_id} · ${UNITS[id.unit] || id.unit}${LIVE.scope ? '' : ' · 全院'}`;
+    badge.classList.remove('badge-demo');
+    badge.classList.add('badge-live');
+  }
+  const sw = $('#role-switch');
+  if (sw) {
+    sw.title = `已以 LINE 身分登入：視角鎖定為 ${ROLES[id.tier].label}（綁定時授權的權責層）`;
+    $$('#role-switch button').forEach((b) => { if (b.dataset.role !== id.tier) b.disabled = true; });
+  }
+  CURRENT_ROLE = id.tier;   // 不經 setRole（畫面尚未渲染），下面的常規初始化會依 CURRENT_ROLE 佈局
+  try { localStorage.setItem(ROLE_KEY, id.tier); } catch (e) {}
+  logAction('以 LINE 身分登入平台',
+    `${id.staff_id}｜${UNITS[id.unit] || id.unit}｜${ROLES[id.tier].label}視角；資料改讀雲端即時班表（D1，${STAFF.length} 人／${SHIFTS.length} 班次，${LIVE.scope ? '本單位' : '全院'}），本機舊編輯不疊上`,
+    '班守 ShiftGuard');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (LIVE.error) console.warn('[LIVE]', LIVE.error);
+  bootLive().then(init, (e) => { console.warn('[LIVE] boot failed:', e); init(); });
+});

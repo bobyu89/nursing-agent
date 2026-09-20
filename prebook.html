@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- CSP 與 index.html 同一套：只允許同源 JS；connect-src https 供呼叫 Worker API -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' file: data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'">
+  <meta name="referrer" content="no-referrer">
+  <title>預假日曆｜班守 ShiftGuard</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+  <style>
+    /* 手機優先的單頁：從 LINE 的預班公告按進來，挑日期、送出、回 LINE */
+    body { background: var(--bg); margin: 0; font-family: 'Inter', 'Noto Sans TC', system-ui, sans-serif; color: var(--ink); }
+    .pb-wrap { max-width: 520px; margin: 0 auto; padding: 16px 16px 40px; box-sizing: border-box; overflow-x: hidden; }
+    .pb-card { box-sizing: border-box; }
+    .pb-brand { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; }
+    .pb-brand b { font-size: 16px; }
+    .pb-brand small { color: var(--ink-faint); display: block; font-size: 12px; }
+    .pb-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px; }
+    .pb-title { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
+    .pb-meta { color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+    .pb-cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+    .pb-cal .dow { text-align: center; font-size: 12px; color: var(--ink-faint); padding: 4px 0; }
+    .pb-day { min-width: 0; aspect-ratio: 1; border: 1px solid var(--line); border-radius: 10px; background: var(--field); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 15px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+    .pb-day small { font-size: 10px; color: var(--ink-faint); }
+    .pb-day.on { background: var(--brand); border-color: var(--brand-dark); color: var(--on-brand); font-weight: 700; }
+    .pb-day.on small { color: var(--on-brand); opacity: .85; }
+    .pb-day.off { visibility: hidden; }
+    .pb-day.dis { opacity: .35; cursor: not-allowed; }
+    .pb-day.wknd { border-color: var(--warn-line); }
+    .pb-count { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 14px; }
+    .pb-count b.over { color: var(--danger); }
+    .pb-actions { display: flex; gap: 10px; margin-top: 12px; }
+    .pb-actions .btn { flex: 1; justify-content: center; padding: 12px; font-size: 15px; }
+    .btn-primary { background: var(--brand); color: var(--on-brand); border-color: var(--brand-dark); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .pb-msg { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+    .pb-msg.ok { background: var(--ok-tint); color: var(--ok); border: 1px solid var(--ok-line); }
+    .pb-msg.err { background: var(--danger-tint); color: var(--danger); border: 1px solid var(--danger-line); }
+    .pb-msg.info { background: var(--brand-tint); color: var(--brand-dark); }
+    .pb-fine { color: var(--ink-faint); font-size: 12px; line-height: 1.6; margin-top: 10px; }
+  </style>
+</head>
+<body>
+<div class="pb-wrap">
+  <div class="pb-brand">
+    <svg viewBox="0 0 64 64" width="34" height="34" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="14.5" cy="15" r="9.2" fill="#f7efdf"/><circle cx="49.5" cy="15" r="9.2" fill="#f7efdf"/><circle cx="15.5" cy="16" r="4.8" fill="#d9d4c8"/><circle cx="48.5" cy="16" r="4.8" fill="#d9d4c8"/><path d="M32 9 C48.5 9 58 22 58 38 C58 53 47 61.5 32 61.5 C17 61.5 6 53 6 38 C6 22 15.5 9 32 9 Z" fill="#f7efdf"/><ellipse cx="32" cy="45" rx="11.5" ry="9" fill="#e6e1d4"/><circle cx="22.5" cy="33.5" r="2.9" fill="#16233a"/><circle cx="41.5" cy="33.5" r="2.9" fill="#16233a"/><circle cx="23.5" cy="32.5" r="1" fill="#ffffff"/><circle cx="42.5" cy="32.5" r="1" fill="#ffffff"/><rect x="27.4" y="39.2" width="9.2" height="5.6" rx="2.8" fill="#16233a"/><path d="M28.5 49.5 Q32 52.5 35.5 49.5" fill="none" stroke="#16233a" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <div><b>預假日曆</b><small>班守 ShiftGuard｜點日期挑想休的日子，送出即與 LINE 的「預假」同一筆</small></div>
+  </div>
+
+  <div class="pb-card" id="pb-main">
+    <div class="pb-title" id="pb-title">載入中…</div>
+    <div class="pb-meta" id="pb-meta"></div>
+    <div id="pb-body"></div>
+  </div>
+
+  <div class="pb-fine">
+    預假是請求不是保證：人力不足時排不開的格子會交護理長決定。逾期未回視同無預假，會留痕。
+    連結只給你、10 分鐘內有效；逾時請回 LINE 輸入「平台」或「我的預假」重新取得。
+  </div>
+</div>
+
+<script src="src/config.js"></script>
+<script src="src/live.js"></script>
+<script src="src/prebook.js"></script>
+</body>
+</html>

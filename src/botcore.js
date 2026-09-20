@@ -516,7 +516,9 @@ function guideCommand(text, platformUrl, liffUrl, tier = 'exec') {
     can('swap') && '・換班 N-01 8/3 N-02 8/5 —— 互換前先預檢，\n　兩人各自重跑 H1–H10，紅燈逐條附規則代碼',
     can('myask') && '・我的邀請 —— 重看正在等你回覆的替班詢問',
     can('opencycle') && '・開啟預班 10月 —— 開下個月的預假收集（可加：截止 9/25、上限 3）；\n　預班狀態／催繳／關閉預班 —— 看進度、手動催、提前截止並生成草稿',
-    can('prebook') && '・預假 10/3 10/4 —— 回覆下個月想休的日期（截止前可改，最後一次為準；不需要回「預假 無」）；\n　我的預假 —— 看自己這期送了什麼',
+    can('requirement') && '・需求 —— 看本單位生成草稿的每班人數；設定需求 D2 E1 N1 —— 改（留痕）',
+    can('prebook') && '・預假 10/3 10/4 —— 回覆下個月想休的日期（截止前可改，最後一次為準；不需要回「預假 無」）；\n　我的預假 —— 看自己這期送了什麼（附日曆連結）',
+    can('platform') && '・平台 —— 拿一條本人專屬的登入連結，開啟平台後改讀雲端即時班表、視角鎖定你的權責層',
     can('dispatch') && '・調度 8/9 大夜 —— 全院缺口🔴貼線🟡餘裕🟢，\n　借調建議含守恆律檢查（不讓支援單位變缺口）',
     can('retention') && '・負荷 —— 高負荷名單，誰一直在扛看得見',
     can('whoami') && '・我是誰 —— 綁定身分與權責層',
@@ -673,17 +675,17 @@ function tierFromWord(w) {
 const COMMAND_MIN_TIER = {
   menu: 'staff', guide: 'staff', report: 'staff', swap: 'staff',
   myask: 'staff', whoami: 'staff', reportguide: 'staff', bindguide: 'staff',
-  prebook: 'staff', myprebook: 'staff',
+  prebook: 'staff', myprebook: 'staff', platform: 'staff',
   dashboard: 'head', pending: 'head', manage: 'head',
-  opencycle: 'head', cyclestatus: 'head', remindnow: 'head', closecycle: 'head', publish: 'head',
+  opencycle: 'head', cyclestatus: 'head', remindnow: 'head', closecycle: 'head', publish: 'head', requirement: 'head',
   retention: 'exec', dispatch: 'exec',
 };
 const COMMAND_LABEL = {
   menu: '選單', guide: '使用說明', report: '通報缺班', swap: '換班預檢',
   myask: '我的邀請', whoami: '我是誰', reportguide: '通報引導', bindguide: '綁定說明',
-  prebook: '預假', myprebook: '我的預假',
+  prebook: '預假', myprebook: '我的預假', platform: '平台登入',
   dashboard: '儀表板', pending: '待核准', manage: '核准／調整替班',
-  opencycle: '開啟預班', cyclestatus: '預班狀態', remindnow: '催繳預班', closecycle: '截止預班', publish: '核准公告班表',
+  opencycle: '開啟預班', cyclestatus: '預班狀態', remindnow: '催繳預班', closecycle: '截止預班', publish: '核准公告班表', requirement: '生成需求',
   retention: '負荷雷達', dispatch: '調度棋盤',
 };
 
@@ -700,7 +702,9 @@ function classifyCommand(text) {
   if (CYCLE_STATUS_RE.test(t)) return 'cyclestatus';
   if (REMIND_NOW_RE.test(t)) return 'remindnow';
   if (CLOSE_CYCLE_RE.test(t)) return 'closecycle';
+  if (REQ_RE.test(normalizeCmdText(t))) return 'requirement';
   if (MYPREBOOK_RE.test(t)) return 'myprebook';
+  if (PLATFORM_LOGIN_RE.test(t)) return 'platform';
   if (PREBOOK_RE.test(normalizeCmdText(t))) return 'prebook';
   if (DASHBOARD_RE.test(t)) return 'dashboard';
   if (MENU_RE.test(t)) return 'menu';
@@ -1403,6 +1407,7 @@ function announceMessage(cycle) {
       '預假是請求不是保證：人力不足時排不開的格子會交護理長決定。',
     ].join('\n'),
     items: [
+      { label: '📅 用日曆挑', page: 'prebook.html' },
       { label: '預假 無', text: '預假 無' },
       { label: '我的預假', text: '我的預假' },
     ],
@@ -1484,7 +1489,8 @@ async function myPrebookFlow({ actor, store }) {
   const r = await store.getPrebookRequest(cycle.id, actor.staff_id);
   const dates = r ? JSON.parse(r.dates_json || '[]') : [];
   const st = !r || r.state === 'PENDING' ? '尚未回覆' : r.state === 'NO_REQUEST' ? '逾期未回，視同無預假' : (dates.length ? dates.map((d) => d.slice(5).replace('-', '/')).join('、') : '無預假');
-  return { reply: { text: `${monthLabel(cycle.month)}預班（${cycle.state}，截止 ${tpe(cycle.deadline)}）：${st}`, items: null }, pushes: [] };
+  return { reply: { text: `${monthLabel(cycle.month)}預班（${cycle.state}，截止 ${tpe(cycle.deadline)}）：${st}`,
+    items: cycle.state === 'OPEN' ? [{ label: '📅 用日曆改', page: 'prebook.html' }] : null }, pushes: [] };
 }
 
 /* ── 3. 護理長看進度／手動催繳／手動截止 ── */
@@ -1510,7 +1516,7 @@ async function cycleStatusFlow({ actor, store }) {
 function reminderMessage(cycle) {
   return {
     text: `【催繳｜${monthLabel(cycle.month)}預班】你還沒回覆想休的日期，截止 ${tpe(cycle.deadline)}。逾期視同無預假。回「預假 10/3 10/4」或「預假 無」。`,
-    items: [{ label: '預假 無', text: '預假 無' }, { label: '我的預假', text: '我的預假' }],
+    items: [{ label: '📅 用日曆挑', page: 'prebook.html' }, { label: '預假 無', text: '預假 無' }, { label: '我的預假', text: '我的預假' }],
   };
 }
 
@@ -1535,10 +1541,94 @@ async function remindNowFlow({ actor, now, store }) {
 }
 
 /* ── 4. 截止 → 預假入 leaves → 生成 → REVIEW（cron 到時自動；護理長可「關閉預班」提前）── */
-/** 生成需求＝平台的最低人力（UNIT_MIN_STAFF）＋院內政策 ACLS；與調度棋盤同一把尺 */
-function requirementsFor(unit) {
+/* ── Phase 3b：平台以 LINE 身分登入（docs/LINEBOT-STAGE1.md §0 第 11 個決定）──
+ * 平台是靜態頁（GitHub Pages），CSP 不載 LIFF SDK；改由機器人回一條「帶簽章短效連結」：
+ * 宿主用自己的 secret 簽 { staff_id, exp }，平台開頁時拿它向 Worker 換 session，再讀 D1 快照。
+ * 這裡只組訊息；items 裡的 { label, page } 由宿主換成本人專屬的簽章網址（每個人不同、10 分鐘內有效）。 */
+const PLATFORM_LOGIN_RE = /^(平台|登入平台|平台登入|開啟平台|登入)$/;
+function platformLoginMessage(identity) {
+  return {
+    text: [
+      `【平台登入】${identity.staff_id}｜${UNITS[identity.unit] || identity.unit}｜${TIER_LABEL[identity.tier] || identity.tier}視角`,
+      '按下面的按鈕開啟平台：這條連結只給你、10 分鐘內有效，開啟後平台改讀雲端即時班表（D1），',
+      '視角鎖定為你的權責層。逾時就再輸入「平台」拿新連結。',
+    ].join('\n'),
+    items: [
+      { label: '🌐 開啟平台（已登入）', page: 'index.html' },
+      { label: '📅 預假日曆', page: 'prebook.html' },
+    ],
+  };
+}
+
+/* ── Phase 3a：生成需求可設定（每單位每班人數，存 D1 setting `req.<unit>`；沒設＝平台的最低人力 UNIT_MIN_STAFF）── */
+const REQ_RE = /^(?:設定需求|需求設定|生成需求|目前需求|需求)(?:\s+(.+))?$/;
+const REQ_MAX = 9;
+const SHIFT_WORD = { D: 'D', E: 'E', N: 'N', 白: 'D', 白班: 'D', 小夜: 'E', 小夜班: 'E', 大夜: 'N', 大夜班: 'N', 日: 'D', 晚: 'E', 夜: 'N' };
+
+/** 「D2 E1 N1」「白班2 小夜1 大夜1」「2 1 1」→ {D,E,N}；認不得回 null */
+function parseRequirementWords(body) {
+  const words = normalizeCmdText(body || '').split(/[\s,，、／/]+/).filter(Boolean);
+  if (!words.length) return null;
+  const out = {};
+  if (words.length === 3 && words.every((w) => /^\d$/.test(w))) {
+    [out.D, out.E, out.N] = words.map(Number);
+  } else {
+    for (const w of words) {
+      const m = /^([A-Za-z\u4e00-\u9fff]+?)\s*[:：=]?\s*(\d)$/.exec(w);
+      const k = m && SHIFT_WORD[m[1].toUpperCase()] || (m && SHIFT_WORD[m[1]]);
+      if (!k) return null;
+      out[k] = Number(m[2]);
+    }
+  }
+  if (!['D', 'E', 'N'].every((k) => Number.isInteger(out[k]) && out[k] >= 0 && out[k] <= REQ_MAX)) return null;
+  return { D: out.D, E: out.E, N: out.N };
+}
+
+function defaultRequirementCounts(unit) {
   const min = UNIT_MIN_STAFF[unit] || { D: 1, E: 1, N: 1 };
-  return Object.entries(min).map(([shift, count]) => ({ shift, count, requiredRole: '護理師', requiredCerts: ['ACLS'] }));
+  return { D: min.D, E: min.E, N: min.N };
+}
+
+/** 單位的生成需求：D1 setting 優先，沒設＝平台的最低人力（UNIT_MIN_STAFF）。回 { counts, source } */
+async function unitRequirements(store, unit) {
+  if (store && typeof store.getSetting === 'function') {
+    try {
+      const raw = await store.getSetting(`req.${unit}`);
+      if (raw) {
+        const c = JSON.parse(raw);
+        if (['D', 'E', 'N'].every((k) => Number.isInteger(c[k]))) return { counts: { D: c.D, E: c.E, N: c.N }, source: 'setting' };
+      }
+    } catch { /* 壞掉的設定值視同沒設 */ }
+  }
+  return { counts: defaultRequirementCounts(unit), source: 'default' };
+}
+
+function requirementLabel(counts) {
+  return ['D', 'E', 'N'].map((k) => `${SHIFT_TYPES[k] ? SHIFT_TYPES[k].name : k}${counts[k]}`).join('／');
+}
+
+/** 生成需求＝每班人數（可設定）＋院內政策 ACLS；與調度棋盤同一把尺 */
+function requirementsFor(unit, counts) {
+  const c = counts || defaultRequirementCounts(unit);
+  return ['D', 'E', 'N'].map((shift) => ({ shift, count: c[shift], requiredRole: '護理師', requiredCerts: ['ACLS'] }));
+}
+
+/** 護理長「需求」看目前值、「設定需求 D2 E1 N1」改；改了留痕 before／after */
+async function requirementFlow({ text, actor, now, store }) {
+  const m = REQ_RE.exec(normalizeCmdText(text));
+  const body = m && m[1] ? m[1].trim() : '';
+  const unit = actor.unit;
+  const cur = await unitRequirements(store, unit);
+  const hint = '格式：設定需求 D2 E1 N1（也可寫 白班2 小夜1 大夜1），每班 0–9 人；生成草稿時另加院內政策 ACLS。';
+  if (!body) {
+    return { reply: { text: `${UNITS[unit] || unit} 目前的生成需求：${requirementLabel(cur.counts)}${cur.source === 'default' ? '（平台預設，尚未設定）' : ''}。\n${hint}`, items: null }, pushes: [] };
+  }
+  const counts = parseRequirementWords(body);
+  if (!counts) return { reply: { text: `看不懂「${body}」。${hint}`, items: null }, pushes: [] };
+  if (!store || typeof store.setSetting !== 'function') return { reply: { text: STORE_DISABLED_TEXT, items: null }, pushes: [] };
+  await store.setSetting(`req.${unit}`, JSON.stringify(counts), now);
+  await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'req.changed', payload: { unit, before: cur.counts, after: counts } });
+  return { reply: { text: `已設定 ${UNITS[unit] || unit} 的生成需求：${requirementLabel(counts)}（原 ${requirementLabel(cur.counts)}）。下次截止生成草稿即以此為準；已生成的草稿不變。`, items: null }, pushes: [] };
 }
 
 async function closeAndGenerate(cycle, now, store, actor) {
@@ -1556,13 +1646,15 @@ async function closeAndGenerate(cycle, now, store, actor) {
 
   const db = await store.loadDb();                       // 預假已入 leaves，重新載入
   const dates = monthDays(cycle.month);
-  const gen = platformEngine(db).generateSchedule({ unit: cycle.unit, dates, requirements: requirementsFor(cycle.unit) });
+  const req = await unitRequirements(store, cycle.unit);
+  const gen = platformEngine(db).generateSchedule({ unit: cycle.unit, dates, requirements: requirementsFor(cycle.unit, req.counts) });
+  gen.requirementCounts = req.counts;
   await store.updateCycle(cycle.id, {
     state: 'REVIEW', generated_at: now,
     draft_json: JSON.stringify(gen.assignments), uncovered_json: JSON.stringify(gen.uncovered),
   });
   await store.appendAudit({ ts: now, actor: null, action: 'prebook.generated',
-    payload: { cycle: cycle.id, filled: gen.filled, slots: gen.slotCount, uncovered: gen.uncovered.length } });
+    payload: { cycle: cycle.id, filled: gen.filled, slots: gen.slotCount, uncovered: gen.uncovered.length, requirements: req.counts, requirementSource: req.source } });
   const fresh = await store.getCycle(cycle.id);
   const heads = await headsOf(store, cycle.unit);
   const msg = reviewMessage(fresh, gen);
@@ -1575,6 +1667,7 @@ function reviewMessage(cycle, gen) {
   const slots = gen ? gen.slotCount : filled + unc.length;
   const lines = [
     `【${monthLabel(cycle.month)}班表草稿｜${UNITS[cycle.unit] || cycle.unit}】已排 ${filled}／${slots} 格`,
+    ...(gen && gen.requirementCounts ? [`需求：每日 ${requirementLabel(gen.requirementCounts)}＋ACLS（「設定需求」可改）`] : []),
     unc.length ? `排不出 ${unc.length} 格（不硬塞、不放寬）：` : '全部格子都排得出。',
     ...unc.slice(0, 8).map((u) => `　・${u.date.slice(5).replace('-', '/')} ${SHIFT_TYPES[u.shift] ? SHIFT_TYPES[u.shift].name : u.shift}——${(u.blockers || []).map((b) => `${b.code}×${b.count}`).join('、')}`),
     ...(unc.length > 8 ? [`　…另 ${unc.length - 8} 格`] : []),
@@ -1679,5 +1772,9 @@ if (typeof module !== 'undefined' && module.exports) {
     announceMessage, reminderMessage, reviewMessage,
     openCycleFlow, prebookFlow, myPrebookFlow, cycleStatusFlow, remindNowFlow, closeCycleFlow, closeAndGenerate,
     publishFlow, holdFlow, prebookCron,
+    // Phase 3a 生成需求可設定
+    REQ_RE, parseRequirementWords, defaultRequirementCounts, unitRequirements, requirementLabel, requirementFlow,
+    // Phase 3b 平台登入
+    PLATFORM_LOGIN_RE, platformLoginMessage,
   };
 }
