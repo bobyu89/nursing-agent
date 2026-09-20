@@ -183,10 +183,11 @@ test('stage1：auditCanonical 欄位順序固定、系統動作 actor 為空字�
 
 test('stage1：權限矩陣——三層照抄平台 ROLES，上級涵蓋下級', () => {
   const allowed = (t) => Object.keys(COMMAND_MIN_TIER).filter((k) => commandAllowed(t, k)).sort();
-  const base = ['bindguide', 'guide', 'menu', 'myask', 'report', 'reportguide', 'swap', 'whoami'];
-  assertEqual(allowed('staff'), base, '護理師：通報、換班、選單、說明、我的邀請、我是誰');
-  assertEqual(allowed('head'), [...base, 'dashboard', 'manage', 'pending'].sort(), '護理長：多儀表板、待核准、調整');
-  assertEqual(allowed('exec'), [...base, 'dashboard', 'dispatch', 'manage', 'pending', 'retention'].sort(), '督導：全部');
+  const base = ['bindguide', 'guide', 'menu', 'myask', 'myprebook', 'prebook', 'report', 'reportguide', 'swap', 'whoami'];
+  const headExtra = ['dashboard', 'manage', 'pending', 'opencycle', 'cyclestatus', 'remindnow', 'closecycle', 'publish'];
+  assertEqual(allowed('staff'), base, '護理師：通報、換班、選單、說明、我的邀請、我是誰、預假');
+  assertEqual(allowed('head'), [...base, ...headExtra].sort(), '護理長：多儀表板、待核准、調整、預班週期');
+  assertEqual(allowed('exec'), [...base, ...headExtra, 'dispatch', 'retention'].sort(), '督導：全部');
   assert(!commandAllowed('staff', 'dispatch') && !commandAllowed('head', 'retention'), '護理師不得調度、護理長不得看負荷');
   assert(!commandAllowed('nobody', 'menu') && !commandAllowed('exec', 'unknown'), '未知層級或未知指令一律拒');
 });
@@ -686,4 +687,202 @@ test('phase16：選單與使用說明依矩陣過濾——護理師看不到儀�
   assert(/・調度/.test(g('exec').text) && /儀表板 ICU/.test(g('exec').text));
   assertEqual(g('staff').items.length, 3, '護理師：換班、通報、開啟平台');
   assertEqual(g('exec').items.length, 5);
+});
+
+/* ══ Phase 2：預班迴路（docs/LINEBOT-STAGE1.md §3）══════════════════════════════════
+ * 釘住的是：開啟→全單位 PENDING 與推播、上限／月份／截止的拒收、覆蓋以最後一次為準、
+ * 催繳只推未回覆者且不重複、截止時 PENDING→NO_REQUEST 留痕、預假進 leaves 後生成器不排那天、
+ * 核准才寫班表且限本單位護理長以上、暫緩不寫。store 用記憶體假物件，與 store-d1 同介面。
+ */
+function prebookStore() {
+  const st = subStore();
+  const cycles = new Map();
+  const reqs2 = [];          // prebook_request rows
+  const leaves = [];         // insertLeaves 呼叫累積
+  const shifts = [];         // insertShifts 呼叫累積
+  return Object.assign(st, {
+    cycles, reqs2, leaves, shifts,
+    async createCycle(c) { if (cycles.has(c.id)) throw new Error('dup'); cycles.set(c.id, { draft_json: '[]', uncovered_json: '[]', ...c }); },
+    async getCycle(id) { return cycles.get(id) ? { ...cycles.get(id) } : null; },
+    async updateCycle(id, patch) { Object.assign(cycles.get(id), patch); },
+    async findCycle({ unit, states }) {
+      return [...cycles.values()].filter((c) => c.unit === unit && states.includes(c.state)).sort((a, b) => (a.opened_at < b.opened_at ? 1 : -1)).map((c) => ({ ...c }))[0] || null;
+    },
+    async listCycles({ states }) { return [...cycles.values()].filter((c) => states.includes(c.state)).map((c) => ({ ...c })); },
+    async upsertPrebookRequests(cycleId, staffIds) {
+      staffIds.forEach((sid) => { if (!reqs2.some((r) => r.cycle_id === cycleId && r.staff_id === sid)) reqs2.push({ cycle_id: cycleId, staff_id: sid, dates_json: '[]', state: 'PENDING', submitted_at: null, reminded_count: 0, last_reminded_at: null }); });
+    },
+    async getPrebookRequest(cycleId, staffId) { const r = reqs2.find((x) => x.cycle_id === cycleId && x.staff_id === staffId); return r ? { ...r } : null; },
+    async updatePrebookRequest(cycleId, staffId, patch) { Object.assign(reqs2.find((x) => x.cycle_id === cycleId && x.staff_id === staffId), patch); },
+    async listPrebookRequests(cycleId, state) { return reqs2.filter((r) => r.cycle_id === cycleId && (!state || r.state === state)).map((r) => ({ ...r })); },
+    async insertLeaves(rows) { leaves.push(...rows); },
+    async insertShifts(rows) { shifts.push(...rows); },
+    async loadDb() {
+      const staff = STAFF.map((s) => ({ ...s, leaves: [...(s.leaves || []), ...leaves.filter((l) => l.staffId === s.id).map((l) => ({ from: l.from, to: l.to, type: l.type }))] }));
+      return { staff, shifts: SHIFTS, empty: false };
+    },
+  });
+}
+const Q0 = '2026-09-10T01:00:00.000Z';                       // 9/10：開 10 月預班，預設截止 9/25 23:59（台北）
+const DL = '2026-09-25T15:59:00.000Z';
+const MED3A_COUNT = STAFF.filter((s) => s.unit === 'MED-3A').length;
+async function opened(st, text = '開啟預班 10月') {
+  st.seed('Uhead', 'N-01', 'MED-3A', 'head');
+  st.seed('Un2', 'N-02', 'MED-3A', 'staff');
+  st.seed('Un5', 'N-05', 'MED-3A', 'staff');
+  const head = await st.getIdentityByUser('Uhead');
+  const out = await openCycleFlow({ text, actor: head, now: Q0, store: st, db: null });
+  return { out, head, n2: await st.getIdentityByUser('Un2'), n5: await st.getIdentityByUser('Un5'), id: 'MED-3A:2026-10' };
+}
+
+test('phase2：月份／截止／日期解析——只給月份取最近的未來、截止落在週期月之前那一年、日期清單去重排序並回報不認得的字', () => {
+  assertEqual(parseMonthWord('10月', Q0), '2026-10');
+  assertEqual(parseMonthWord('2', Q0), '2027-02', '已過的月份 → 明年');
+  assertEqual(parseMonthWord('2027-1', Q0), '2027-01');
+  assertEqual(parseMonthWord('13', Q0), null);
+  assertEqual(defaultDeadline('2026-10'), DL, '前月 25 日 23:59 台北');
+  assertEqual(parseDeadlineWord('9/25', '2026-10'), DL);
+  assertEqual(parseDeadlineWord('12/25', '2027-01'), '2026-12-25T15:59:00.000Z', '跨年：1 月的截止 12/25 是前一年');
+  assertEqual(parseDeadlineWord('9月31日', '2026-10'), null);
+  assertEqual(parseDateList('10/4 10月3日 10/4, 2026-10-17 十月五日', 2026), { dates: ['2026-10-03', '2026-10-04', '2026-10-17'], bad: ['十月五日'] });
+  assertEqual(monthDays('2026-02').length, 28);
+});
+
+test('phase2：開啟——建 OPEN 週期、全單位每人一列 PENDING、推播每個人、留痕；重複開／壞月份／過期截止／超出上限都拒', async () => {
+  const st = prebookStore();
+  const { out, id } = await opened(st, '開啟預班 10月 截止 9/25 上限 3');
+  const c = st.cycles.get(id);
+  assertEqual([c.state, c.month, c.deadline, c.max_days, c.opened_by], ['OPEN', '2026-10', DL, 3, 'N-01']);
+  assertEqual(st.reqs2.filter((r) => r.cycle_id === id && r.state === 'PENDING').length, MED3A_COUNT, '全單位每人一列');
+  assertEqual(out.pushes.length, MED3A_COUNT, '推播全單位（含未綁定者——宿主會丟棄並記錄）');
+  assert(/10 月預班開放/.test(out.pushes[0].text) && /最多 3 天/.test(out.pushes[0].text), '公告寫明月份與上限');
+  assert(/09\/25 23:59/.test(out.reply.text), '回覆寫明台北時間截止');
+  assertEqual(st.audit.at(-1).action, 'prebook.opened');
+  const head = await st.getIdentityByUser('Uhead');
+  assert(/已存在/.test((await openCycleFlow({ text: '開啟預班 10月', actor: head, now: Q0, store: st })).reply.text), '同單位同月只開一次');
+  assert(/不認得/.test((await openCycleFlow({ text: '開啟預班 13月', actor: head, now: Q0, store: st })).reply.text));
+  assert(/已過/.test((await openCycleFlow({ text: '開啟預班 11月 截止 9/1', actor: head, now: Q0, store: st })).reply.text), '截止已過');
+  assert(/0–10/.test((await openCycleFlow({ text: '開啟預班 11月 上限 11', actor: head, now: Q0, store: st })).reply.text));
+  assertEqual(st.cycles.size, 1, '被拒的都沒建');
+});
+
+test('phase2：預假——超上限／跨月／看不懂／沒週期／逾期都拒收；合法即 SUBMITTED；重送覆蓋且留痕 replaced；「預假 無」＝送出空清單', async () => {
+  const st = prebookStore();
+  const { id, n2 } = await opened(st, '開啟預班 10月 上限 2');
+  const go = (text, now = Q0) => prebookFlow({ text, actor: n2, now, store: st });
+  assert(/最多 2 天/.test((await go('預假 10/3 10/4 10/5')).reply.text), '超上限');
+  assert(/不在 10 月/.test((await go('預假 10/3 11/4')).reply.text), '跨月');
+  assert(/不認得/.test((await go('預假 十月三日')).reply.text), '看不懂');
+  assert(/請列出/.test((await go('預假')).reply.text), '沒給日期');
+  assertEqual((await st.getPrebookRequest(id, 'N-02')).state, 'PENDING', '被拒的都沒動狀態');
+  const ok = await go('預假 10/4 10月3日');
+  assert(/10\/03、10\/04（2／2 天）/.test(ok.reply.text), ok.reply.text);
+  let r = await st.getPrebookRequest(id, 'N-02');
+  assertEqual([r.state, JSON.parse(r.dates_json)], ['SUBMITTED', ['2026-10-03', '2026-10-04']]);
+  assertEqual(st.audit.at(-1).payload.replaced, false);
+  await go('預假 10/17');
+  r = await st.getPrebookRequest(id, 'N-02');
+  assertEqual(JSON.parse(r.dates_json), ['2026-10-17'], '最後一次為準');
+  assertEqual(st.audit.at(-1).payload.replaced, true, '覆蓋留痕');
+  await go('預假 無');
+  assertEqual(JSON.parse((await st.getPrebookRequest(id, 'N-02')).dates_json), [], '「無」＝空清單但已回覆');
+  assert(/不需要預假/.test((await go('預假 無')).reply.text));
+  assert(/已於.*截止/.test((await go('預假 10/3', '2026-09-26T00:00:00.000Z')).reply.text), '逾期拒收');
+  const n8 = { staff_id: 'N-08', unit: 'SUR-5B', tier: 'staff' };
+  assert(/沒有開放中/.test((await prebookFlow({ text: '預假 10/3', actor: n8, now: Q0, store: st })).reply.text), '別單位沒週期');
+  assert(/10\/17|無預假/.test((await myPrebookFlow({ actor: n2, store: st })).reply.text));
+});
+
+test('phase2：預班狀態——已回覆／未回覆／逾期三個數字與未回覆名單；催繳只推未回覆者、計數與留痕', async () => {
+  const st = prebookStore();
+  const { id, head, n2 } = await opened(st);
+  await prebookFlow({ text: '預假 10/3', actor: n2, now: Q0, store: st });
+  const s1 = await cycleStatusFlow({ actor: head, store: st });
+  assert(new RegExp(`已回覆 1／未回覆 ${MED3A_COUNT - 1}／逾期視同無預假 0`).test(s1.reply.text), s1.reply.text);
+  assert(/未回覆：/.test(s1.reply.text) && !/N-02/.test(s1.reply.text.split('未回覆：')[1]), '名單不含已回覆者');
+  assertEqual(s1.reply.items.map((i) => i.text), ['催繳', '關閉預班']);
+  const rm = await remindNowFlow({ actor: head, now: Q0, store: st });
+  assertEqual(rm.pushes.length, MED3A_COUNT - 1, '只推未回覆者');
+  assert(!rm.pushes.some((p) => p.staffId === 'N-02'));
+  assertEqual((await st.getPrebookRequest(id, 'N-05')).reminded_count, 1);
+  assertEqual((await st.getPrebookRequest(id, 'N-02')).reminded_count, 0);
+  assertEqual([st.audit.at(-1).action, st.audit.at(-1).payload.manual], ['prebook.reminded', true]);
+  assert(/暫時|沒有|SUR-5B 沒有預班/.test((await cycleStatusFlow({ actor: { staff_id: 'N-08', unit: 'SUR-5B', tier: 'head' }, store: st })).reply.text));
+});
+
+test('phase2：cron——截止前 3 天／1 天各催一輪（同一輪不重複、已回覆不催）；到期自動截止：PENDING→NO_REQUEST 留痕、預假入 leaves、生成草稿進 REVIEW、推核准鍵給護理長', async () => {
+  const st = prebookStore();
+  const { id, n2 } = await opened(st);
+  await prebookFlow({ text: '預假 10/3 10/4', actor: n2, now: Q0, store: st });
+  let out = await prebookCron({ now: '2026-09-22T00:00:00.000Z', store: st });   // 截止前 3 天 15:59Z 之前
+  assertEqual([out.reminded, out.closed, out.pushes.length], [0, 0, 0], '還沒到催繳時點');
+  out = await prebookCron({ now: '2026-09-22T16:00:00.000Z', store: st });
+  assertEqual(out.reminded, MED3A_COUNT - 1, '第一輪只催未回覆者');
+  out = await prebookCron({ now: '2026-09-22T16:01:00.000Z', store: st });
+  assertEqual(out.reminded, 0, '同一輪不重複');
+  await prebookFlow({ text: '預假 無', actor: await st.getIdentityByUser('Un5'), now: '2026-09-23T00:00:00.000Z', store: st });
+  out = await prebookCron({ now: '2026-09-24T16:00:00.000Z', store: st });
+  assertEqual(out.reminded, MED3A_COUNT - 2, '第二輪：中途回覆的人不再被催');
+  assertEqual((await st.getPrebookRequest(id, 'N-07')).reminded_count, 2);
+  out = await prebookCron({ now: '2026-09-25T16:00:00.000Z', store: st });   // 過了 23:59 台北
+  assertEqual(out.closed, 1);
+  const c = st.cycles.get(id);
+  assertEqual(c.state, 'REVIEW');
+  assert(c.closed_at && c.generated_at, '截止與生成時間');
+  const rows = await st.listPrebookRequests(id);
+  assertEqual(rows.filter((r) => r.state === 'NO_REQUEST').length, MED3A_COUNT - 2, '未回覆者視同無預假');
+  assertEqual(rows.find((r) => r.staff_id === 'N-02').state, 'SUBMITTED');
+  assertEqual(st.leaves.map((l) => [l.staffId, l.from, l.type, l.source]), [['N-02', '2026-10-03', '預假', 'prebook'], ['N-02', '2026-10-04', '預假', 'prebook']]);
+  const draft = JSON.parse(c.draft_json); const unc = JSON.parse(c.uncovered_json);
+  assertEqual(draft.length + unc.length, 31 * 3, '10 月 31 天 × 三班最低人力 1 人');
+  assert(draft.length > 0 && draft.every((a) => a.unit === 'MED-3A' && a.date.startsWith('2026-10')), '草稿只排本單位本月');
+  assert(!draft.some((a) => a.staffId === 'N-02' && ['2026-10-03', '2026-10-04'].includes(a.date)), '預假日不排班——預假真的進了生成器');
+  assertEqual(out.pushes.length, 1, '通知本單位護理長（N-01）');
+  assertEqual(out.pushes[0].staffId, 'N-01');
+  assertEqual(out.pushes[0].items.map((i) => decodeParams(i.dataStr)).map((p) => [p.cy, p.act]), [[id, 'publish'], [id, 'hold']]);
+  assert(/已排 \d+／93 格/.test(out.pushes[0].text), out.pushes[0].text);
+  const actions = st.audit.map((a) => a.action);
+  assert(actions.includes('prebook.closed') && actions.includes('prebook.generated') && actions.filter((a) => a === 'prebook.reminded').length === 2, JSON.stringify(actions));
+  const closed = st.audit.find((a) => a.action === 'prebook.closed');
+  assertEqual([closed.actor, closed.payload.manual, closed.payload.noRequest.length, closed.payload.leaves], [null, false, MED3A_COUNT - 2, 2], '系統截止：actor 為空、列出視同無預假的人');
+  assert(/沒有開放中/.test((await prebookFlow({ text: '預假 10/9', actor: n2, now: '2026-09-26T00:00:00.000Z', store: st })).reply.text), 'REVIEW 中不再收預假');
+  out = await prebookCron({ now: '2026-09-26T00:00:00.000Z', store: st });
+  assertEqual([out.closed, out.reminded], [0, 0], 'REVIEW 的週期 cron 不再碰');
+});
+
+test('phase2：審核——別單位護理長不得公告；暫緩不寫班表；本單位護理長公告＝草稿整批入 shift（source generated）、PUBLISHED、推播全單位；重複公告拒', async () => {
+  const st = prebookStore();
+  const { id, head } = await opened(st);
+  const pushes = await closeCycleFlow({ actor: head, now: '2026-09-20T00:00:00.000Z', store: st });
+  assertEqual(st.cycles.get(id).state, 'REVIEW', '護理長可提前截止並生成');
+  assert(/提前|已截止/.test(pushes.reply.text));
+  const other = { staff_id: 'N-08', unit: 'SUR-5B', tier: 'head' };
+  assert(/需該單位護理長/.test((await publishFlow({ cy: id, actor: other, now: Q0, store: st, db: null })).reply.text));
+  assertEqual(st.shifts.length, 0);
+  const held = await holdFlow({ cy: id, actor: head, now: Q0, store: st });
+  assert(/保留/.test(held.reply.text) && st.cycles.get(id).state === 'REVIEW' && st.shifts.length === 0, '暫緩不寫');
+  assertEqual(st.audit.at(-1).action, 'prebook.held');
+  const draftN = JSON.parse(st.cycles.get(id).draft_json).length;
+  const pub = await publishFlow({ cy: id, actor: head, now: Q0, store: st, db: null });
+  assertEqual(st.shifts.length, draftN, '草稿整批寫入');
+  assert(st.shifts.every((s) => s.source === 'generated' && s.writtenAt === Q0));
+  const c = st.cycles.get(id);
+  assertEqual([c.state, c.published_by, c.published_at], ['PUBLISHED', 'N-01', Q0]);
+  assertEqual(pub.pushes.length, MED3A_COUNT, '公告推播全單位');
+  assert(/班表已公告/.test(pub.pushes[0].text));
+  assertEqual(st.audit.at(-1).action, 'prebook.published');
+  assert(/狀態為 PUBLISHED/.test((await publishFlow({ cy: id, actor: head, now: Q0, store: st, db: null })).reply.text), '不可重複公告');
+  assert(/查無/.test((await publishFlow({ cy: 'X:2026-01', actor: head, now: Q0, store: st, db: null })).reply.text));
+  const exec = { staff_id: 'N-03', unit: 'ICU', tier: 'exec' };
+  assert(/狀態為 PUBLISHED/.test((await publishFlow({ cy: id, actor: exec, now: Q0, store: st, db: null })).reply.text), '督導跨單位可核准（這裡因已公告而被狀態擋）');
+  assert(/已存在.*PUBLISHED/.test((await openCycleFlow({ text: '開啟預班 10月', actor: head, now: Q0, store: st })).reply.text));
+});
+
+test('phase2：選單與使用說明——護理師多「我的預假」、護理長多「預班狀態」；classifyCommand 把預班指令歸對鍵，含「預假」開頭的通報句不誤判', () => {
+  const labels = (t) => menuMessage('https://x/', '', t).quickReply.items.map((i) => i.action.label).join('|');
+  assert(/我的預假/.test(labels('staff')) && !/預班狀態/.test(labels('staff')));
+  assert(/預班狀態/.test(labels('head')) && /我的預假/.test(labels('head')));
+  assert(/開啟預班 10月/.test(guideCommand('使用說明', 'https://x/', '', 'head').text) && !/開啟預班/.test(guideCommand('使用說明', 'https://x/', '', 'staff').text));
+  assertEqual(['開啟預班 10月', '預班狀態', '催繳', '關閉預班', '預假 10/3', '預班 10/3', '我的預假', '預假 無', '我明天預假不能來'].map(classifyCommand),
+    ['opencycle', 'cyclestatus', 'remindnow', 'closecycle', 'prebook', 'prebook', 'myprebook', 'prebook', 'report']);
 });

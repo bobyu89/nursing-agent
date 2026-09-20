@@ -252,6 +252,18 @@ async function handleEvent(ev, env, { store, live }) {
   if (ev.type === 'postback' && ev.replyToken) {
     const p = decodeParams(ev.postback && ev.postback.data);
 
+    /* Phase 2：預班草稿的按鈕（核准公告／暫緩＝該單位護理長以上） */
+    if (p.cy) {
+      if (!store || !identity) return lineReply(token, ev.replyToken, store ? BIND_HELP : STORE_DISABLED_TEXT);
+      if (!commandAllowed(tier, 'publish')) return lineReply(token, ev.replyToken, tierDeniedText('publish', tier));
+      const ctx = { cy: p.cy, actor: identity, now: nowIso, store, db: live };
+      const out = p.act === 'publish' ? await publishFlow(ctx)
+        : p.act === 'hold' ? await holdFlow(ctx)
+          : { reply: { text: '不認得的動作。', items: null }, pushes: [] };
+      await dispatchPushes(env, store, out.pushes);
+      return lineReply(token, ev.replyToken, out.reply.text, out.reply.items);
+    }
+
     /* Phase 1：替班請求的按鈕（核准／略過／駁回＝護理長；接／不接＝被問到的人） */
     if (p.rq) {
       if (!store || !identity) return lineReply(token, ev.replyToken, store ? BIND_HELP : STORE_DISABLED_TEXT);
@@ -339,7 +351,16 @@ async function handleEvent(ev, env, { store, live }) {
         : await timeoutFlow({ rq: c.rq, minutes: c.minutes, actor: identity, now: nowIso, store });
       return lineReply(token, ev.replyToken, o.reply.text, o.reply.items);
     }
-  } else if (['pending', 'myask', 'manage'].includes(cmdKey)) {
+    /* Phase 2：預班迴路（開啟／預假／查詢／進度／催繳／截止）；每個 flow 自己驗單位與狀態 */
+    const p2 = { text, actor: identity, now: nowIso, store, db: live };
+    const p2flow = { opencycle: openCycleFlow, prebook: prebookFlow, myprebook: myPrebookFlow,
+      cyclestatus: cycleStatusFlow, remindnow: remindNowFlow, closecycle: closeCycleFlow }[cmdKey];
+    if (p2flow) {
+      const o = await p2flow(p2);
+      await dispatchPushes(env, store, o.pushes);
+      return lineReply(token, ev.replyToken, o.reply.text, o.reply.items);
+    }
+  } else if (['pending', 'myask', 'manage', 'opencycle', 'prebook', 'myprebook', 'cyclestatus', 'remindnow', 'closecycle'].includes(cmdKey)) {
     return lineReply(token, ev.replyToken, store ? BIND_HELP : STORE_DISABLED_TEXT);
   }
   /* Phase 1.6 資料範圍：head／staff 鎖在自己的單位，exec／管理者／示範模式全院 */
@@ -436,7 +457,7 @@ export default {
     return new Response('ok', { status: 200 });
   },
 
-  /** Cron（wrangler.toml [triggers]）：每分鐘一次。Phase 0 只清過期綁定碼；無 D1 直接返回。 */
+  /** Cron（wrangler.toml [triggers]）：每分鐘一次。清過期綁定碼、替班逾時、預班催繳與截止；無 D1 直接返回。 */
   async scheduled(event, env) {
     const store = makeStore(env);
     if (!store) return;
@@ -448,6 +469,10 @@ export default {
       const out = await expireFlow({ now: nowIso, store });
       if (out.expired) console.log(`[CRON] ${out.expired} ask(s) timed out, ${out.pushes.length} push(es)`);
       await dispatchPushes(env, store, out.pushes);
+      // Phase 2：預班催繳（截止前 3 天／1 天，只推未回覆者）與到期截止→生成草稿→通知護理長
+      const pb = await prebookCron({ now: nowIso, store });
+      if (pb.reminded || pb.closed) console.log(`[CRON] prebook: reminded ${pb.reminded}, closed ${pb.closed}, ${pb.pushes.length} push(es)`);
+      await dispatchPushes(env, store, pb.pushes);
     } catch (err) { console.log('[CRON] error:', String(err)); }
   },
 };

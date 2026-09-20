@@ -72,7 +72,12 @@ CREATE TABLE IF NOT EXISTS prebook_cycle (
   state      TEXT NOT NULL,        -- OPEN | CLOSED | GENERATED | REVIEW | PUBLISHED
   opened_by  TEXT NOT NULL,
   opened_at  TEXT NOT NULL,
-  closed_at  TEXT
+  closed_at  TEXT,
+  draft_json     TEXT NOT NULL DEFAULT '[]',   -- 生成器排出的草稿 [{staffId,date,shift,unit}]；核准時寫入 shift（source:'generated'）
+  uncovered_json TEXT NOT NULL DEFAULT '[]',   -- 排不出的格子連同阻擋規則 [{date,shift,unit,blockers:[{code,count}]}]——不硬塞
+  generated_at   TEXT,
+  published_at   TEXT,
+  published_by   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS prebook_request (

@@ -95,8 +95,8 @@ cd cloudflare/linebot; npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
 | 版本 | 六格 | 誰看到 |
 |---|---|---|
 | unbound | 如何綁定／使用說明／開啟平台／通報缺班・換班預檢・我的邀請（標「綁定後可用」） | 全體預設，未綁定者 |
-| staff | 通報缺班／換班預檢／我的邀請／我是誰／功能選單／開啟平台 | 綁定為護理師者 |
-| head | 戰情儀表板／待核准／通報缺班／換班簽核／我的邀請／開啟平台 | 綁定為護理長者 |
+| staff | 通報缺班／換班預檢／我的邀請／我的預假／功能選單／開啟平台 | 綁定為護理師者 |
+| head | 戰情儀表板／待核准／通報缺班／換班簽核／預班／開啟平台 | 綁定為護理長者 |
 | exec | 戰情儀表板／調度棋盤／負荷雷達／待核准／換班預檢／開啟平台 | 綁定為督導／主任者 |
 
 格子＝§2.5 權限矩陣該層打勾的指令；Worker 在**綁定成功那一刻**依 tier 把對應選單掛給本人（換手機時舊帳號解除、退回預設）。
@@ -161,10 +161,13 @@ npx wrangler secret put ADMIN_USER_ID                            # 管理者 LIN
 | 未綁定的任何人 | 只看得到綁定說明；輸入 `綁定 N-04 483920` 完成綁定，權責層隨碼進 identity |
 | 已綁定者 | 依權責層開放指令（設計 §2.5 矩陣）：護理師＝通報／換班；護理長＋儀表板；督導＋負荷／調度。權限不足時誠實回覆屬哪一層。人員與班表來自 D1 快照 |
 
-既有的庫補權責層欄位（新建的庫跑 schema.sql 即含）：`npx wrangler d1 execute shiftguard --remote --file=migrations/0001-tier.sql`
+既有的庫補欄位（新建的庫跑 schema.sql 即含），依序：`npx wrangler d1 execute shiftguard --remote --file=migrations/0001-tier.sql`、`…/0002-sub-candidates.sql`、`…/0003-prebook-draft.sql`
 
 每一次發碼、綁定、拒絕都是 `audit` 表裡的一筆雜湊鏈留痕；`line_user_id` 只在 `identity` 表存原值（推播要用），留痕一律雜湊。
-cron 每分鐘清一次過期／已用的綁定碼。
+cron 每分鐘：清過期綁定碼、替班詢問逾時換下一位、預班催繳（截止前 3 天／1 天，只推未回覆者）、到期截止並生成草稿。
+
+預班迴路（Phase 2）的指令：護理長 `開啟預班 10月`（可加 `截止 9/25`、`上限 3`）、`預班狀態`、`催繳`、`關閉預班`（提前截止並生成）；同仁 `預假 10/3 10/4`、`預假 無`、`我的預假`。
+草稿推給護理長附「核准並公告／暫緩」鍵，核准才寫入 `shift`（source generated）。
 
 > 正式導入時 `snapshot.sql` 的來源改為平台匯出的 JSON（`--json export.json`），匯出端請剔除任何可識別個人之欄位——D1 只存代號。
 

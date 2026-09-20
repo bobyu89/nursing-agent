@@ -217,7 +217,7 @@ $MENUS = @(
        @{ title = '通報缺班';   sub = '一句話，其餘按鈕問你'; icon = 'chat';  action = (& $T '通報缺班') },
        @{ title = '換班預檢';   sub = '互換後 H1–H10 重算';   icon = 'swap';  action = (& $T '換班') },
        @{ title = '我的邀請';   sub = '等你回覆的替班詢問';   icon = 'bell';  action = (& $T '我的邀請') },
-       @{ title = '我是誰';     sub = '綁定身分與權責層';     icon = 'id';    action = (& $T '我是誰') },
+       @{ title = '我的預假';   sub = '下個月想休的日期';     icon = 'id';    action = (& $T '我的預假') },
        @{ title = '功能選單';   sub = '全部指令的快速按鈕';   icon = 'gauge'; action = (& $T '選單') },
        $OPEN
      ) },
@@ -228,7 +228,7 @@ $MENUS = @(
        @{ title = '待核准';     sub = '替班請求，核准才開口'; icon = 'check'; action = (& $T '待核准') },
        @{ title = '通報缺班';   sub = '自己的缺班也走迴路';   icon = 'chat';  action = (& $T '通報缺班') },
        @{ title = '換班簽核';   sub = '互換後 H1–H10 重算';   icon = 'swap';  action = (& $T '換班') },
-       @{ title = '我的邀請';   sub = '等你回覆的替班詢問';   icon = 'bell';  action = (& $T '我的邀請') },
+       @{ title = '預班';       sub = '開啟、進度、催繳、公告'; icon = 'bell';  action = (& $T '預班狀態') },
        $OPEN
      ) },
   @{ key = 'exec'; chatBar = '督導'; default = $false
