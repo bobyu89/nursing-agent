@@ -9,8 +9,8 @@ PLATFORM_URL = "https://bobyu89.github.io/nursing-agent/"
 # （Endpoint URL 填上方 PLATFORM_URL + index.html、Size 選 Full），把 LIFF ID 貼進來
 # 後重新 deploy——「開啟平台／完整儀表板」按鈕即改以全高視窗在 LINE 內開啟。
 LIFF_ID = "2011209447-AlMMDUMl"
-# 圖文選單依權責層掛載（Phase 1.5，docs/LINEBOT-STAGE1.md §2.4）：跑 richmenu.ps1 後把印出的三個 id 貼進來。
-# 未設定＝不掛（全體沿用預設選單），不影響任何流程。
+# 圖文選單依權責層掛載（docs/LINEBOT-STAGE1.md §2.4）：正常不用填——管理者在 LINE 輸入「建立選單」，
+# Worker 自己建四份選單並把 id 存進 D1 setting 表。這三行只在你想手動指定 id 時才用（有設定即優先於 D1）。
 # RICHMENU_STAFF = "richmenu-…"
 # RICHMENU_HEAD  = "richmenu-…"
 # RICHMENU_EXEC  = "richmenu-…"

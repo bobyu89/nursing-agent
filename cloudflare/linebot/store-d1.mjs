@@ -163,6 +163,81 @@ export function createD1Store(db, { auditCanonical }) {
       await db.batch(stmts);
     },
 
+    /* ── 系統設定 key/value（圖文選單 id 等）──────────────── */
+    async getSetting(key) {
+      const r = await db.prepare('SELECT value FROM setting WHERE key = ?').bind(key).first();
+      return r ? r.value : null;
+    },
+    async setSetting(key, value, nowIso) {
+      await db.prepare('INSERT OR REPLACE INTO setting (key, value, updated_at) VALUES (?,?,?)').bind(key, value, nowIso).run();
+    },
+    /** 全部已綁定者（建選單後整批重掛用） */
+    async listAllIdentities() {
+      const { results } = await db.prepare('SELECT line_user_id, staff_id, unit, tier FROM identity').all();
+      return results;
+    },
+
+    /* ── Phase 2：預班迴路（docs/LINEBOT-STAGE1.md §3）──────── */
+    async createCycle(c) {
+      await db.prepare('INSERT INTO prebook_cycle (id, unit, month, deadline, max_days, state, opened_by, opened_at) VALUES (?,?,?,?,?,?,?,?)')
+        .bind(c.id, c.unit, c.month, c.deadline, c.max_days, c.state, c.opened_by, c.opened_at).run();
+    },
+    async getCycle(id) {
+      return db.prepare('SELECT * FROM prebook_cycle WHERE id = ?').bind(id).first();
+    },
+    async updateCycle(id, patch) {
+      const keys = Object.keys(patch);
+      if (!keys.length) return;
+      await db.prepare(`UPDATE prebook_cycle SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`)
+        .bind(...keys.map((k) => patch[k]), id).run();
+    },
+    /** 該單位最近一個處於指定狀態的週期（依開啟時間倒序） */
+    async findCycle({ unit, states }) {
+      const marks = states.map(() => '?').join(',');
+      return db.prepare(`SELECT * FROM prebook_cycle WHERE unit = ? AND state IN (${marks}) ORDER BY opened_at DESC LIMIT 1`)
+        .bind(unit, ...states).first();
+    },
+    async listCycles({ states }) {
+      const marks = states.map(() => '?').join(',');
+      const { results } = await db.prepare(`SELECT * FROM prebook_cycle WHERE state IN (${marks}) ORDER BY deadline`).bind(...states).all();
+      return results;
+    },
+    /** 開啟時為全單位建 PENDING；已存在者不動（INSERT OR IGNORE） */
+    async upsertPrebookRequests(cycleId, staffIds, nowIso) {
+      if (!staffIds.length) return;
+      await db.batch(staffIds.map((sid) =>
+        db.prepare("INSERT OR IGNORE INTO prebook_request (cycle_id, staff_id, dates_json, state) VALUES (?,?,'[]','PENDING')").bind(cycleId, sid)));
+    },
+    async getPrebookRequest(cycleId, staffId) {
+      return db.prepare('SELECT * FROM prebook_request WHERE cycle_id = ? AND staff_id = ?').bind(cycleId, staffId).first();
+    },
+    async updatePrebookRequest(cycleId, staffId, patch) {
+      const keys = Object.keys(patch);
+      if (!keys.length) return;
+      await db.prepare(`UPDATE prebook_request SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE cycle_id = ? AND staff_id = ?`)
+        .bind(...keys.map((k) => patch[k]), cycleId, staffId).run();
+    },
+    async listPrebookRequests(cycleId, state) {
+      const { results } = await (state
+        ? db.prepare('SELECT * FROM prebook_request WHERE cycle_id = ? AND state = ? ORDER BY staff_id').bind(cycleId, state)
+        : db.prepare('SELECT * FROM prebook_request WHERE cycle_id = ? ORDER BY staff_id').bind(cycleId)).all();
+      return results;
+    },
+    /** 截止時預假入 leave（type:'預假'、source:'prebook'）；同人同日同類型重送即覆蓋 */
+    async insertLeaves(rows) {
+      if (!rows.length) return;
+      await db.batch(rows.map((l) =>
+        db.prepare('INSERT OR REPLACE INTO leave (staff_id, from_date, to_date, type, source, created_at) VALUES (?,?,?,?,?,?)')
+          .bind(l.staffId, l.from, l.to, l.type, l.source, l.createdAt)));
+    },
+    /** 公告時草稿入正式班表（source:'generated'） */
+    async insertShifts(rows) {
+      if (!rows.length) return;
+      await db.batch(rows.map((s) =>
+        db.prepare('INSERT OR REPLACE INTO shift (staff_id, date, shift, unit, source, written_at) VALUES (?,?,?,?,?,?)')
+          .bind(s.staffId, s.date, s.shift, s.unit, s.source, s.writtenAt)));
+    },
+
     /* ── 人員與班表快照 → 引擎用的 db 形狀（與 data.js 相同）──── */
     async loadDb() {
       const [staffRes, shiftRes, leaveRes] = await db.batch([

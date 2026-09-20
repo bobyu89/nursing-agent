@@ -8,7 +8,7 @@
 
 test('botcore：postback 參數編解碼 roundtrip（含「無需資格」的空字串哨兵）', () => {
   const p = { d: '2026-08-09', s: 'D', u: 'MED-3A', c: 'ACLS,CHEMO' };
-  assertEqual(decodeParams(encodeParams(p)), { ...p, id: null, r: null, rq: null, act: null, who: null }, '一般條件應原樣還原（Phase 1 新增欄位未給時為 null）');
+  assertEqual(decodeParams(encodeParams(p)), { ...p, id: null, r: null, rq: null, act: null, who: null, cy: null }, '一般條件應原樣還原（Phase 1／2 新增欄位未給時為 null）');
 
   const noCert = decodeParams(encodeParams({ d: '2026-08-09', s: 'E', u: 'ICU', c: '' }));
   assertEqual(noCert.c, '', '明確選了「無需資格」是空字串，不得變回 null（null 代表還沒問）');

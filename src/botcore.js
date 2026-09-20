@@ -38,6 +38,7 @@ function decodeParams(str) {
     rq: qs.get('rq'),                                // Phase 1：替班請求代號
     act: qs.get('act'),                              // Phase 1：approve | reject | skip | accept | decline
     who: qs.get('who'),                              // Phase 1：略過的候選代號
+    cy: qs.get('cy'),                                // Phase 2：預班週期代號（UNIT:YYYY-MM）
   };
 }
 
@@ -514,6 +515,8 @@ function guideCommand(text, platformUrl, liffUrl, tier = 'exec') {
     can('pending') && '・待核准 —— 本單位待你核准的替班請求，附核准／駁回／調整鍵',
     can('swap') && '・換班 N-01 8/3 N-02 8/5 —— 互換前先預檢，\n　兩人各自重跑 H1–H10，紅燈逐條附規則代碼',
     can('myask') && '・我的邀請 —— 重看正在等你回覆的替班詢問',
+    can('opencycle') && '・開啟預班 10月 —— 開下個月的預假收集（可加：截止 9/25、上限 3）；\n　預班狀態／催繳／關閉預班 —— 看進度、手動催、提前截止並生成草稿',
+    can('prebook') && '・預假 10/3 10/4 —— 回覆下個月想休的日期（截止前可改，最後一次為準；不需要回「預假 無」）；\n　我的預假 —— 看自己這期送了什麼',
     can('dispatch') && '・調度 8/9 大夜 —— 全院缺口🔴貼線🟡餘裕🟢，\n　借調建議含守恆律檢查（不讓支援單位變缺口）',
     can('retention') && '・負荷 —— 高負荷名單，誰一直在扛看得見',
     can('whoami') && '・我是誰 —— 綁定身分與權責層',
@@ -596,6 +599,8 @@ function menuMessage(platformUrl, liffUrl, tier = 'exec') {
     ['reportguide', { type: 'message', label: '📝 通報缺班', text: '通報缺班' }],
     ['swap',        { type: 'message', label: '🔁 換班預檢', text: '換班' }],
     ['myask',       { type: 'message', label: '🔔 我的邀請', text: '我的邀請' }],
+    ['cyclestatus', { type: 'message', label: '🗓 預班狀態', text: '預班狀態' }],
+    ['myprebook',   { type: 'message', label: '🗓 我的預假', text: '我的預假' }],
     ['dispatch',    { type: 'message', label: '🧭 調度棋盤', text: '調度' }],
     ['retention',   { type: 'message', label: '📈 負荷雷達', text: '負荷' }],
     ['menu',        { type: 'uri', label: '🌐 開啟平台', uri: liffUrl || platformUrl }],
@@ -668,13 +673,17 @@ function tierFromWord(w) {
 const COMMAND_MIN_TIER = {
   menu: 'staff', guide: 'staff', report: 'staff', swap: 'staff',
   myask: 'staff', whoami: 'staff', reportguide: 'staff', bindguide: 'staff',
+  prebook: 'staff', myprebook: 'staff',
   dashboard: 'head', pending: 'head', manage: 'head',
+  opencycle: 'head', cyclestatus: 'head', remindnow: 'head', closecycle: 'head', publish: 'head',
   retention: 'exec', dispatch: 'exec',
 };
 const COMMAND_LABEL = {
   menu: '選單', guide: '使用說明', report: '通報缺班', swap: '換班預檢',
   myask: '我的邀請', whoami: '我是誰', reportguide: '通報引導', bindguide: '綁定說明',
+  prebook: '預假', myprebook: '我的預假',
   dashboard: '儀表板', pending: '待核准', manage: '核准／調整替班',
+  opencycle: '開啟預班', cyclestatus: '預班狀態', remindnow: '催繳預班', closecycle: '截止預班', publish: '核准公告班表',
   retention: '負荷雷達', dispatch: '調度棋盤',
 };
 
@@ -687,6 +696,12 @@ function classifyCommand(text) {
   if (REPORT_GUIDE_RE.test(t)) return 'reportguide';
   if (BIND_GUIDE_RE.test(t)) return 'bindguide';
   if (phase15Command(t)) return 'manage';
+  if (OPEN_CYCLE_RE.test(normalizeCmdText(t))) return 'opencycle';
+  if (CYCLE_STATUS_RE.test(t)) return 'cyclestatus';
+  if (REMIND_NOW_RE.test(t)) return 'remindnow';
+  if (CLOSE_CYCLE_RE.test(t)) return 'closecycle';
+  if (MYPREBOOK_RE.test(t)) return 'myprebook';
+  if (PREBOOK_RE.test(normalizeCmdText(t))) return 'prebook';
   if (DASHBOARD_RE.test(t)) return 'dashboard';
   if (MENU_RE.test(t)) return 'menu';
   if (GUIDE_RE.test(t)) return 'guide';
@@ -1288,6 +1303,354 @@ function reportGuideMessage() {
   };
 }
 
+/* ══ Phase 2：預班迴路 開啟 → 預假 → 催繳 → 截止 → 生成 → 審核 → 公告（docs/LINEBOT-STAGE1.md §3）══════
+ *
+ * 純邏輯，同 Phase 1 的介面：每個 flow 回 { reply?, pushes }。
+ * store 新增（cloudflare/linebot/store-d1.mjs 實作；測試用記憶體假物件）：
+ *   store.listStaffByUnit(unit) → [{ id, unit, role }]               （人員快照，不是 identity——沒綁定的人也要有一列）
+ *   store.createCycle(row)  store.getCycle(id) → row|null  store.updateCycle(id, patch)
+ *   store.findCycle({ unit, states }) → row|null            store.listCycles({ states }) → rows
+ *   store.upsertPrebookRequests(cycleId, staffIds, nowIso)  （PENDING，已存在者不動）
+ *   store.getPrebookRequest(cycleId, staffId) → row|null    store.updatePrebookRequest(cycleId, staffId, patch)
+ *   store.listPrebookRequests(cycleId, state?) → rows
+ *   store.insertLeaves(rows)   store.insertShifts(rows)     （批次，INSERT OR REPLACE）
+ *   store.loadDb() → { staff, shifts }                      （截止後要重新載入，預假才會進 leaves）
+ *
+ * 誠實原則：預假是請求不是保證；生成器排不出的格子連同阻擋規則一起交護理長，不硬塞。
+ */
+
+const PREBOOK_DEFAULT_MAX = 4;
+const PREBOOK_MAX_LIMIT = 10;
+const PREBOOK_DEFAULT_DEADLINE_DAY = 25;       // 前月 25 日 23:59（台北）
+const PREBOOK_REMIND_DAYS = [3, 1];            // 截止前 3 天、前 1 天（cron）
+
+const OPEN_CYCLE_RE = /^(?:開啟預班|預班開放|開放預班)\s*(\S+)?(?:\s+截止\s*(\S+))?(?:\s+上限\s*(\d{1,2}))?$/;
+const PREBOOK_RE = /^(?:預假|預班|我要預假)(?:[:：]|\s)?\s*(.*)$/;
+const MYPREBOOK_RE = /^(我的預假|我的預班|預假查詢)$/;
+const CYCLE_STATUS_RE = /^(預班狀態|預班進度|誰還沒填)$/;
+const REMIND_NOW_RE = /^(催繳|催預班|催繳預班)$/;
+const CLOSE_CYCLE_RE = /^(關閉預班|截止預班|預班截止)$/;
+
+/** 「10月」「10」「2026-10」「2026/10」→ YYYY-MM；只給月份時取「今年」，若已過則明年 */
+function parseMonthWord(w, nowIso) {
+  const t = normalizeCmdText(w || '').replace(/月$/, '');
+  let m = /^(\d{4})[-\/](\d{1,2})$/.exec(t);
+  if (m) return `${m[1]}-${String(Number(m[2])).padStart(2, '0')}`;
+  m = /^(\d{1,2})$/.exec(t);
+  if (!m) return null;
+  const mon = Number(m[1]);
+  if (mon < 1 || mon > 12) return null;
+  const now = new Date(new Date(nowIso).getTime() + 8 * 3600_000);   // 台北
+  let year = now.getUTCFullYear();
+  if (mon < now.getUTCMonth() + 1) year += 1;
+  return `${year}-${String(mon).padStart(2, '0')}`;
+}
+
+function monthDays(month) {
+  const [y, m] = month.split('-').map(Number);
+  const n = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return Array.from({ length: n }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`);
+}
+
+/** 預設截止：前月 25 日 23:59 台北 → ISO */
+function defaultDeadline(month) {
+  const [y, m] = month.split('-').map(Number);
+  const prev = new Date(Date.UTC(y, m - 2, PREBOOK_DEFAULT_DEADLINE_DAY, 15, 59, 0));   // 23:59+08 = 15:59Z
+  return prev.toISOString();
+}
+
+/** 「10/3」「10月3日」「2026-10-03」→ YYYY-MM-DD，年份由呼叫端給（預班週期跨年時不能靠「今年」猜） */
+function expandDateIn(word, year) {
+  const t = String(word || '').replace(/(\d{1,2})月(\d{1,2})日?/, '$1/$2');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return isValidDateStr(t) ? t : null;
+  const m = /^(\d{1,2})[\/-](\d{1,2})$/.exec(t);
+  if (!m) return null;
+  const full = `${year}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  return isValidDateStr(full) ? full : null;
+}
+
+/** 「9/25」「2026-09-25」→ 該日 23:59 台北 ISO；認不得 null。只給月日時，落在週期月之前的那一年 */
+function parseDeadlineWord(w, month) {
+  if (!w) return null;
+  const year = Number(month.slice(0, 4));
+  let d = expandDateIn(normalizeCmdText(w), year);
+  if (d && d.slice(0, 7) >= month && !/^\d{4}-/.test(w)) d = expandDateIn(normalizeCmdText(w), year - 1);
+  return d ? new Date(`${d}T23:59:00+08:00`).toISOString() : null;
+}
+
+/** 把「10/3 10/4 10/17」「10月3日」等解析成 ISO 日期陣列；無法解析的字詞回在 bad */
+function parseDateList(text, year) {
+  const words = normalizeCmdText(text).split(/[\s,，、;；]+/).filter(Boolean);
+  const dates = [], bad = [];
+  for (const w of words) {
+    const d = expandDateIn(w, year);
+    if (d) dates.push(d); else bad.push(w);
+  }
+  return { dates: [...new Set(dates)].sort(), bad };
+}
+
+function cycleIdOf(unit, month) { return `${unit}:${month}`; }
+function monthLabel(month) { return `${Number(month.split('-')[1])} 月`; }
+function tpe(iso) { return new Date(new Date(iso).getTime() + 8 * 3600_000).toISOString().slice(5, 16).replace('T', ' ').replace('-', '/'); }
+
+function announceMessage(cycle) {
+  return {
+    text: [
+      `【${monthLabel(cycle.month)}預班開放｜${UNITS[cycle.unit] || cycle.unit}】`,
+      `請在 ${tpe(cycle.deadline)} 前回覆想休的日期，每人最多 ${cycle.max_days} 天，截止前可改（最後一次為準）：`,
+      `　預假 ${cycle.month.split('-')[1]}/3 ${cycle.month.split('-')[1]}/4`,
+      '不需要預假請回「預假 無」。逾期未回視同無預假，會留痕。',
+      '預假是請求不是保證：人力不足時排不開的格子會交護理長決定。',
+    ].join('\n'),
+    items: [
+      { label: '預假 無', text: '預假 無' },
+      { label: '我的預假', text: '我的預假' },
+    ],
+  };
+}
+
+/* ── 1. 護理長開啟週期 ── */
+async function openCycleFlow({ text, actor, now, store, db }) {
+  const m = OPEN_CYCLE_RE.exec(normalizeCmdText(text));
+  if (!m) return { reply: { text: '格式：開啟預班 10月（可加：截止 9/25、上限 3）', items: null }, pushes: [] };
+  const month = parseMonthWord(m[1], now);
+  if (!month) return { reply: { text: `月份「${m[1] || ''}」不認得。例：開啟預班 10月、開啟預班 2026-11`, items: null }, pushes: [] };
+  const deadline = m[2] ? parseDeadlineWord(m[2], month) : defaultDeadline(month);
+  if (!deadline) return { reply: { text: `截止日「${m[2]}」不認得。例：截止 9/25`, items: null }, pushes: [] };
+  if (deadline <= now) return { reply: { text: `截止時間 ${tpe(deadline)} 已過，請指定未來的日期（截止 9/25）。`, items: null }, pushes: [] };
+  const maxDays = m[3] ? Number(m[3]) : PREBOOK_DEFAULT_MAX;
+  if (maxDays < 0 || maxDays > PREBOOK_MAX_LIMIT) return { reply: { text: `上限需為 0–${PREBOOK_MAX_LIMIT} 天。`, items: null }, pushes: [] };
+  const unit = actor.unit;
+  const id = cycleIdOf(unit, month);
+  const existing = await store.getCycle(id);
+  if (existing) {
+    return { reply: { text: `${UNITS[unit] || unit} 的 ${monthLabel(month)}預班已存在（狀態 ${existing.state}）。輸入「預班狀態」查看；同一單位同一月份只開一次。`, items: null }, pushes: [] };
+  }
+  const staff = liveData(db).staff.filter((s) => s.unit === unit);
+  if (!staff.length) return { reply: { text: `${UNITS[unit] || unit} 目前沒有人員快照，無法開啟預班。`, items: null }, pushes: [] };
+  const cycle = { id, unit, month, deadline, max_days: maxDays, state: 'OPEN', opened_by: actor.staff_id, opened_at: now };
+  await store.createCycle(cycle);
+  await store.upsertPrebookRequests(id, staff.map((s) => s.id), now);
+  await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'prebook.opened',
+    payload: { id, month, deadline, maxDays, staffCount: staff.length } });
+  const msg = announceMessage(cycle);
+  return {
+    reply: {
+      text: `已開啟 ${UNITS[unit] || unit} ${monthLabel(month)}預班：${staff.length} 人、截止 ${tpe(deadline)}、每人上限 ${maxDays} 天。已推播全單位；截止前 3 天與前 1 天會自動催繳未回覆者。輸入「預班狀態」隨時看進度。`,
+      items: null,
+    },
+    pushes: staff.map((s) => ({ staffId: s.id, text: msg.text, items: msg.items })),
+  };
+}
+
+/* ── 2. 同仁送出預假 ── */
+async function prebookFlow({ text, actor, now, store }) {
+  const m = PREBOOK_RE.exec(normalizeCmdText(text));
+  const body = (m && m[1] ? m[1] : '').trim();
+  const cycle = await store.findCycle({ unit: actor.unit, states: ['OPEN'] });
+  if (!cycle) return { reply: { text: `${UNITS[actor.unit] || actor.unit} 目前沒有開放中的預班週期。`, items: null }, pushes: [] };
+  if (cycle.deadline <= now) return { reply: { text: `${monthLabel(cycle.month)}預班已於 ${tpe(cycle.deadline)} 截止，無法再送。`, items: null }, pushes: [] };
+  let dates = [];
+  if (!/^(無|沒有|不用|不需要|none)$/i.test(body)) {
+    const parsed = parseDateList(body, Number(cycle.month.slice(0, 4)));
+    if (!body || (parsed.dates.length === 0 && parsed.bad.length === 0)) {
+      return { reply: { text: `請列出想休的日期，例：預假 ${cycle.month.split('-')[1]}/3 ${cycle.month.split('-')[1]}/4；不需要請回「預假 無」。`, items: null }, pushes: [] };
+    }
+    if (parsed.bad.length) return { reply: { text: `這些日期不認得：${parsed.bad.join('、')}。請用 10/3 或 2026-10-03 的寫法。`, items: null }, pushes: [] };
+    const outOfMonth = parsed.dates.filter((d) => !d.startsWith(cycle.month));
+    if (outOfMonth.length) return { reply: { text: `${outOfMonth.join('、')} 不在 ${monthLabel(cycle.month)}。這個週期只收 ${cycle.month} 的日期。`, items: null }, pushes: [] };
+    if (parsed.dates.length > cycle.max_days) return { reply: { text: `最多 ${cycle.max_days} 天，你給了 ${parsed.dates.length} 天。請刪減後再送。`, items: null }, pushes: [] };
+    dates = parsed.dates;
+  }
+  const prev = await store.getPrebookRequest(cycle.id, actor.staff_id);
+  if (!prev) await store.upsertPrebookRequests(cycle.id, [actor.staff_id], now);
+  await store.updatePrebookRequest(cycle.id, actor.staff_id, { dates_json: JSON.stringify(dates), state: 'SUBMITTED', submitted_at: now });
+  await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'prebook.submitted',
+    payload: { cycle: cycle.id, dates, replaced: !!(prev && prev.state === 'SUBMITTED') } });
+  return {
+    reply: {
+      text: dates.length
+        ? `已收到你 ${monthLabel(cycle.month)}的預假：${dates.map((d) => d.slice(5).replace('-', '/')).join('、')}（${dates.length}／${cycle.max_days} 天）。截止 ${tpe(cycle.deadline)} 前可重送覆蓋。`
+        : `已記錄：你 ${monthLabel(cycle.month)}不需要預假。截止前可再送「預假 日期」覆蓋。`,
+      items: null,
+    },
+    pushes: [],
+  };
+}
+
+async function myPrebookFlow({ actor, store }) {
+  const cycle = await store.findCycle({ unit: actor.unit, states: ['OPEN', 'CLOSED', 'GENERATED', 'REVIEW'] });
+  if (!cycle) return { reply: { text: '目前沒有進行中的預班週期。', items: null }, pushes: [] };
+  const r = await store.getPrebookRequest(cycle.id, actor.staff_id);
+  const dates = r ? JSON.parse(r.dates_json || '[]') : [];
+  const st = !r || r.state === 'PENDING' ? '尚未回覆' : r.state === 'NO_REQUEST' ? '逾期未回，視同無預假' : (dates.length ? dates.map((d) => d.slice(5).replace('-', '/')).join('、') : '無預假');
+  return { reply: { text: `${monthLabel(cycle.month)}預班（${cycle.state}，截止 ${tpe(cycle.deadline)}）：${st}`, items: null }, pushes: [] };
+}
+
+/* ── 3. 護理長看進度／手動催繳／手動截止 ── */
+async function cycleStatusFlow({ actor, store }) {
+  const cycle = await store.findCycle({ unit: actor.unit, states: ['OPEN', 'CLOSED', 'GENERATED', 'REVIEW', 'PUBLISHED'] });
+  if (!cycle) return { reply: { text: `${UNITS[actor.unit] || actor.unit} 沒有預班週期。輸入「開啟預班 10月」開始。`, items: null }, pushes: [] };
+  const rows = await store.listPrebookRequests(cycle.id);
+  const by = (s) => rows.filter((r) => r.state === s);
+  const lines = [
+    `【${monthLabel(cycle.month)}預班｜${UNITS[cycle.unit] || cycle.unit}】狀態 ${cycle.state}，截止 ${tpe(cycle.deadline)}，上限 ${cycle.max_days} 天`,
+    `已回覆 ${by('SUBMITTED').length}／未回覆 ${by('PENDING').length}／逾期視同無預假 ${by('NO_REQUEST').length}`,
+  ];
+  if (by('PENDING').length) lines.push(`未回覆：${by('PENDING').map((r) => r.staff_id).join('、')}`);
+  if (cycle.state === 'REVIEW') lines.push(`草稿：${JSON.parse(cycle.draft_json || '[]').length} 格已排、${JSON.parse(cycle.uncovered_json || '[]').length} 格排不出——見上一則核准訊息或輸入「待核准」`);
+  const items = [];
+  if (cycle.state === 'OPEN') {
+    items.push({ label: '催繳未回覆者', text: '催繳' });
+    items.push({ label: '立即截止並生成', text: '關閉預班' });
+  }
+  return { reply: { text: lines.join('\n'), items: items.length ? items : null }, pushes: [] };
+}
+
+function reminderMessage(cycle) {
+  return {
+    text: `【催繳｜${monthLabel(cycle.month)}預班】你還沒回覆想休的日期，截止 ${tpe(cycle.deadline)}。逾期視同無預假。回「預假 10/3 10/4」或「預假 無」。`,
+    items: [{ label: '預假 無', text: '預假 無' }, { label: '我的預假', text: '我的預假' }],
+  };
+}
+
+async function remindPending(cycle, now, store, actor) {
+  const pending = await store.listPrebookRequests(cycle.id, 'PENDING');
+  const msg = reminderMessage(cycle);
+  for (const r of pending) {
+    await store.updatePrebookRequest(cycle.id, r.staff_id, { reminded_count: (r.reminded_count || 0) + 1, last_reminded_at: now });
+  }
+  if (pending.length) {
+    await store.appendAudit({ ts: now, actor: actor || null, action: 'prebook.reminded',
+      payload: { cycle: cycle.id, count: pending.length, staff: pending.map((r) => r.staff_id), manual: !!actor } });
+  }
+  return pending.map((r) => ({ staffId: r.staff_id, text: msg.text, items: msg.items }));
+}
+
+async function remindNowFlow({ actor, now, store }) {
+  const cycle = await store.findCycle({ unit: actor.unit, states: ['OPEN'] });
+  if (!cycle) return { reply: { text: '沒有開放中的預班週期。', items: null }, pushes: [] };
+  const pushes = await remindPending(cycle, now, store, actor.staff_id);
+  return { reply: { text: pushes.length ? `已催繳 ${pushes.length} 位未回覆者（留痕）。` : '全員都已回覆，不需催繳。', items: null }, pushes };
+}
+
+/* ── 4. 截止 → 預假入 leaves → 生成 → REVIEW（cron 到時自動；護理長可「關閉預班」提前）── */
+/** 生成需求＝平台的最低人力（UNIT_MIN_STAFF）＋院內政策 ACLS；與調度棋盤同一把尺 */
+function requirementsFor(unit) {
+  const min = UNIT_MIN_STAFF[unit] || { D: 1, E: 1, N: 1 };
+  return Object.entries(min).map(([shift, count]) => ({ shift, count, requiredRole: '護理師', requiredCerts: ['ACLS'] }));
+}
+
+async function closeAndGenerate(cycle, now, store, actor) {
+  const rows = await store.listPrebookRequests(cycle.id);
+  const pending = rows.filter((r) => r.state === 'PENDING');
+  for (const r of pending) await store.updatePrebookRequest(cycle.id, r.staff_id, { state: 'NO_REQUEST' });
+  const leaves = [];
+  for (const r of rows.filter((x) => x.state === 'SUBMITTED')) {
+    for (const d of JSON.parse(r.dates_json || '[]')) leaves.push({ staffId: r.staff_id, from: d, to: d, type: '預假', source: 'prebook', createdAt: now });
+  }
+  if (leaves.length) await store.insertLeaves(leaves);
+  await store.updateCycle(cycle.id, { state: 'CLOSED', closed_at: now });
+  await store.appendAudit({ ts: now, actor: actor || null, action: 'prebook.closed',
+    payload: { cycle: cycle.id, noRequest: pending.map((r) => r.staff_id), leaves: leaves.length, manual: !!actor } });
+
+  const db = await store.loadDb();                       // 預假已入 leaves，重新載入
+  const dates = monthDays(cycle.month);
+  const gen = platformEngine(db).generateSchedule({ unit: cycle.unit, dates, requirements: requirementsFor(cycle.unit) });
+  await store.updateCycle(cycle.id, {
+    state: 'REVIEW', generated_at: now,
+    draft_json: JSON.stringify(gen.assignments), uncovered_json: JSON.stringify(gen.uncovered),
+  });
+  await store.appendAudit({ ts: now, actor: null, action: 'prebook.generated',
+    payload: { cycle: cycle.id, filled: gen.filled, slots: gen.slotCount, uncovered: gen.uncovered.length } });
+  const fresh = await store.getCycle(cycle.id);
+  const heads = await headsOf(store, cycle.unit);
+  const msg = reviewMessage(fresh, gen);
+  return heads.map((h) => ({ ...h, text: msg.text, items: msg.items }));
+}
+
+function reviewMessage(cycle, gen) {
+  const unc = gen ? gen.uncovered : JSON.parse(cycle.uncovered_json || '[]');
+  const filled = gen ? gen.filled : JSON.parse(cycle.draft_json || '[]').length;
+  const slots = gen ? gen.slotCount : filled + unc.length;
+  const lines = [
+    `【${monthLabel(cycle.month)}班表草稿｜${UNITS[cycle.unit] || cycle.unit}】已排 ${filled}／${slots} 格`,
+    unc.length ? `排不出 ${unc.length} 格（不硬塞、不放寬）：` : '全部格子都排得出。',
+    ...unc.slice(0, 8).map((u) => `　・${u.date.slice(5).replace('-', '/')} ${SHIFT_TYPES[u.shift] ? SHIFT_TYPES[u.shift].name : u.shift}——${(u.blockers || []).map((b) => `${b.code}×${b.count}`).join('、')}`),
+    ...(unc.length > 8 ? [`　…另 ${unc.length - 8} 格`] : []),
+    '',
+    '核准即寫入正式班表並公告全單位；要調整請先到平台改，改完再核准。',
+  ];
+  return {
+    text: lines.join('\n'),
+    items: [
+      { label: '✅ 核准並公告', dataStr: encodeParams({ cy: cycle.id, act: 'publish' }) },
+      { label: '⏸ 暫緩（保留草稿）', dataStr: encodeParams({ cy: cycle.id, act: 'hold' }) },
+    ],
+  };
+}
+
+async function closeCycleFlow({ actor, now, store }) {
+  const cycle = await store.findCycle({ unit: actor.unit, states: ['OPEN'] });
+  if (!cycle) return { reply: { text: '沒有開放中的預班週期。', items: null }, pushes: [] };
+  const pushes = await closeAndGenerate(cycle, now, store, actor.staff_id);
+  return { reply: { text: `已截止 ${monthLabel(cycle.month)}預班並生成草稿，核准訊息已送出。`, items: null }, pushes };
+}
+
+/* ── 5. 審核：公告／暫緩 ── */
+async function publishFlow({ cy, actor, now, store, db }) {
+  const cycle = await store.getCycle(cy);
+  if (!cycle) return { reply: { text: `查無預班週期 ${cy}。`, items: null }, pushes: [] };
+  if (!(TIERS[actor.tier] >= TIERS.exec || (TIERS[actor.tier] >= TIERS.head && actor.unit === cycle.unit))) {
+    return { reply: { text: `${cy} 需該單位護理長或督導核准。`, items: null }, pushes: [] };
+  }
+  if (cycle.state !== 'REVIEW') return { reply: { text: `${cy} 狀態為 ${cycle.state}，不可公告。`, items: null }, pushes: [] };
+  const draft = JSON.parse(cycle.draft_json || '[]');
+  await store.insertShifts(draft.map((a) => ({ staffId: a.staffId, date: a.date, shift: a.shift, unit: a.unit, source: 'generated', writtenAt: now })));
+  await store.updateCycle(cy, { state: 'PUBLISHED', published_at: now, published_by: actor.staff_id });
+  await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'prebook.published', payload: { cycle: cy, shifts: draft.length } });
+  const staff = liveData(db).staff.filter((s) => s.unit === cycle.unit);
+  const text = `【${monthLabel(cycle.month)}班表已公告｜${UNITS[cycle.unit] || cycle.unit}】共 ${draft.length} 格。輸入「我的班表」或到平台查看。`;
+  return {
+    reply: { text: `已公告 ${monthLabel(cycle.month)}班表（${draft.length} 格寫入正式班表），全單位 ${staff.length} 人已通知。`, items: null },
+    pushes: staff.map((s) => ({ staffId: s.id, text, items: null })),
+  };
+}
+
+async function holdFlow({ cy, actor, now, store }) {
+  const cycle = await store.getCycle(cy);
+  if (!cycle) return { reply: { text: `查無預班週期 ${cy}。`, items: null }, pushes: [] };
+  if (cycle.state !== 'REVIEW') return { reply: { text: `${cy} 狀態為 ${cycle.state}。`, items: null }, pushes: [] };
+  await store.appendAudit({ ts: now, actor: actor.staff_id, action: 'prebook.held', payload: { cycle: cy } });
+  return { reply: { text: `草稿保留（${cy}），未寫入班表。到平台調整後，輸入「預班狀態」再按核准。`, items: null }, pushes: [] };
+}
+
+/* ── 6. cron：催繳與到期截止 ── */
+async function prebookCron({ now, store }) {
+  const open = await store.listCycles({ states: ['OPEN'] });
+  const pushes = [];
+  let reminded = 0, closed = 0;
+  for (const c of open) {
+    if (c.deadline <= now) {
+      pushes.push(...await closeAndGenerate(c, now, store, null));
+      closed += 1;
+      continue;
+    }
+    const due = PREBOOK_REMIND_DAYS.filter((d) => now >= isoPlusMinutes(c.deadline, -d * 1440)).length;   // 到了幾輪
+    if (!due) continue;
+    const pending = (await store.listPrebookRequests(c.id, 'PENDING')).filter((r) => (r.reminded_count || 0) < due);
+    if (!pending.length) continue;
+    const msg = reminderMessage(c);
+    for (const r of pending) {
+      await store.updatePrebookRequest(c.id, r.staff_id, { reminded_count: (r.reminded_count || 0) + 1, last_reminded_at: now });
+      pushes.push({ staffId: r.staff_id, text: msg.text, items: msg.items });
+    }
+    await store.appendAudit({ ts: now, actor: null, action: 'prebook.reminded', payload: { cycle: c.id, round: due, count: pending.length, staff: pending.map((r) => r.staff_id) } });
+    reminded += pending.length;
+  }
+  return { reminded, closed, pushes };
+}
+
 /* 讓 Workers（esbuild）、Lambda（CJS interop）、瀏覽器測試頁與 Node CI 共用 */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -1300,7 +1663,7 @@ if (typeof module !== 'undefined' && module.exports) {
     BIND_CODE_TTL_MIN, BIND_HELP, STORE_DISABLED_TEXT,
     genBindCode, isoPlusMinutes, stage1Command, issueBindCodeFlow, bindFlow, auditCanonical,
     TIERS, TIER_LABEL, COMMAND_MIN_TIER, COMMAND_LABEL,
-    tierFromWord, classifyCommand, commandAllowed, tierDeniedText,
+    tierFromWord, classifyCommand, commandAllowed, tierDeniedText, normalizeCmdText,
     // Phase 1 替班迴路
     SUB_TOP_N, genRequestId, timeoutMinutesFor, gapLabel, approvalMessage,
     reportFlow, approveFlow, skipFlow, rejectFlow, answerFlow, expireFlow, advanceAsk,
@@ -1310,5 +1673,11 @@ if (typeof module !== 'undefined' && module.exports) {
     PENDING_RE, MYASK_RE, WHOAMI_RE, REPORT_GUIDE_RE, BIND_GUIDE_RE,
     // Phase 1.6 資料範圍
     resolveScope, parseUnitWord, dashboardUnit,
+    // Phase 2 預班迴路
+    PREBOOK_DEFAULT_MAX, PREBOOK_REMIND_DAYS, OPEN_CYCLE_RE, PREBOOK_RE, MYPREBOOK_RE, CYCLE_STATUS_RE, REMIND_NOW_RE, CLOSE_CYCLE_RE,
+    parseMonthWord, monthDays, defaultDeadline, parseDeadlineWord, parseDateList, expandDateIn, requirementsFor,
+    announceMessage, reminderMessage, reviewMessage,
+    openCycleFlow, prebookFlow, myPrebookFlow, cycleStatusFlow, remindNowFlow, closeCycleFlow, closeAndGenerate,
+    publishFlow, holdFlow, prebookCron,
   };
 }

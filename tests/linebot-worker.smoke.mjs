@@ -8,6 +8,7 @@
  *
  * 走完：未綁定被擋 → 管理者發碼 → 本人綁定 → 儀表板改讀 D1 → 一碼一用 → 非管理者發碼被拒
  *       → 權責閘 → cron 清碼 → Phase 1 替班迴路（通報→核准→不接→接→寫回；逾時→cron→遲到的接；駁回）
+ *       → Phase 2 預班迴路（開啟→預假→催繳→截止生成→暫緩→公告寫回）
  *       → 留痕鏈驗證 → 無 D1 時回落 Stage 0 行為
  *
  * 執行：node tests/linebot-worker.smoke.mjs
@@ -42,9 +43,24 @@ function d1Like(sqlite) {
 
 /* ── LINE 呼叫錄影 ── */
 const calls = [];
+let richMenuSeq = 0;
 globalThis.fetch = async (url, init) => {
-  calls.push({ url: String(url), method: (init && init.method) || 'GET', body: init && init.body ? JSON.parse(init.body) : null });
-  return { ok: true, status: 200, async text() { return ''; } };
+  const u = String(url); const method = (init && init.method) || 'GET';
+  let body = null;
+  if (init && init.body) { try { body = typeof init.body === 'string' ? JSON.parse(init.body) : { bytes: init.body.byteLength }; } catch { body = init.body; } }
+  calls.push({ url: u, method, body });
+  // 「建立選單」會抓 GitHub Pages 上的定義與圖：這裡直接回本機檔案
+  if (/\/cloudflare\/linebot\/richmenu-defs\.json$/.test(u)) {
+    const txt = fs.readFileSync(path.join(ROOT, 'cloudflare/linebot/richmenu-defs.json'), 'utf8');
+    return { ok: true, status: 200, async json() { return JSON.parse(txt); }, async text() { return txt; } };
+  }
+  if (/\/cloudflare\/linebot\/richmenu-\w+\.png$/.test(u)) {
+    const buf = fs.readFileSync(path.join(ROOT, 'cloudflare/linebot', u.split('/').at(-1)));
+    return { ok: true, status: 200, async arrayBuffer() { return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength); } };
+  }
+  if (u === 'https://api.line.me/v2/bot/richmenu/list') return { ok: true, status: 200, async json() { return { richmenus: [{ richMenuId: 'RM_OLD', name: 'shiftguard-menu-staff-20260101-0000' }, { richMenuId: 'RM_OTHER', name: 'someone-else' }] }; } };
+  if (u === 'https://api.line.me/v2/bot/richmenu' && method === 'POST') { richMenuSeq += 1; return { ok: true, status: 200, async json() { return { richMenuId: `RM_NEW_${richMenuSeq}` }; }, async text() { return ''; } }; }
+  return { ok: true, status: 200, async text() { return ''; }, async json() { return {}; } };
 };
 const lastReply = () => calls.filter((c) => c.url.endsWith('/reply')).at(-1)?.body.messages[0];
 const replyText = () => lastReply()?.text || '';
@@ -347,6 +363,130 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   Date.now = realNow;
 }
 
+/* ── 8⅞. Phase 2 預班迴路：開啟 → 預假 → 進度 → cron 催繳 → cron 截止生成 → 暫緩 → 公告寫回 ── */
+{
+  // worker 的 nowIso 來自 new Date()，只改 Date.now 跳不動時鐘；換成整個 Date（無參數建構＝假時間），段末還原
+  const RealDate = Date; let skew = 0; let jump = null;
+  class FakeDate extends RealDate {
+    constructor(...a) { super(...(a.length ? a : [FakeDate.now()])); }
+    static now() { return (jump ?? RealDate.now()) + (skew += 7000); }
+  }
+  globalThis.Date = FakeDate;
+  const pb = (userId, data, tag) => ({ type: 'postback', replyToken: 'pd' + tag, source: { userId }, postback: { data } });
+  const pushes = () => calls.filter((c) => c.url.endsWith('/push')).map((c) => c.body);
+  const medCount = db.prepare("SELECT COUNT(*) AS n FROM staff WHERE unit = 'MED-3A'").get().n;
+  const CY = 'MED-3A:2026-11';
+
+  // 護理師不得開啟；護理長開啟 11 月 → 週期 OPEN、每人一列 PENDING、推播已綁定者
+  await worker.fetch(signed([textEv(OTHER, '開啟預班 11月')]), envD1);                  // OTHER＝N-02 staff
+  step('護理師「開啟預班」→ 權責閘擋下', /開啟預班.*護理長以上/.test(replyText()), replyText());
+  calls.length = 0;
+  await worker.fetch(signed([textEv(USER, '開啟預班 11月')]), envD1);                   // USER＝N-04 head
+  step('護理長「開啟預班 11月」→ 已開啟、截止 10/25 23:59、上限 4', /已開啟 內科病房 3A 11 月預班/.test(replyText()) && /10\/25 23:59/.test(replyText()) && /上限 4 天/.test(replyText()), replyText());
+  const cyc = db.prepare('SELECT * FROM prebook_cycle WHERE id = ?').get(CY);
+  step('D1 prebook_cycle OPEN、opened_by=N-04', cyc && cyc.state === 'OPEN' && cyc.opened_by === 'N-04' && cyc.max_days === 4, JSON.stringify(cyc));
+  step(`prebook_request 每人一列 PENDING（${medCount} 人）`, db.prepare("SELECT COUNT(*) AS n FROM prebook_request WHERE cycle_id = ? AND state = 'PENDING'").get(CY).n === medCount);
+  const boundMed = db.prepare("SELECT COUNT(*) AS n FROM identity WHERE unit = 'MED-3A'").get().n;
+  step(`公告推播給已綁定的本單位成員（${boundMed} 人），未綁定者丟棄`, pushes().filter((p) => /11 月預班開放/.test(p.messages[0].text)).length === boundMed, `pushes=${pushes().length}`);
+  await worker.fetch(signed([textEv(USER, '開啟預班 11月')]), envD1);
+  step('再開一次 → 已存在', /已存在/.test(replyText()), replyText());
+
+  // 預假：超上限拒、合法收、覆蓋
+  await worker.fetch(signed([textEv(OTHER, '預假 11/1 11/2 11/3 11/4 11/5')]), envD1);
+  step('五天 → 最多 4 天拒收', /最多 4 天/.test(replyText()), replyText());
+  await worker.fetch(signed([textEv(OTHER, '預假 11/3 11月4日')]), envD1);
+  step('「預假 11/3 11月4日」→ 收到 2／4 天', /11\/03、11\/04（2／4 天）/.test(replyText()), replyText());
+  let pr = db.prepare('SELECT * FROM prebook_request WHERE cycle_id = ? AND staff_id = ?').get(CY, 'N-02');
+  step('D1 prebook_request SUBMITTED、dates_json 兩天', pr.state === 'SUBMITTED' && JSON.parse(pr.dates_json).length === 2, JSON.stringify(pr));
+  await worker.fetch(signed([textEv(OTHER, '我的預假')]), envD1);
+  step('「我的預假」→ 11/03、11/04', /11\/03、11\/04/.test(replyText()), replyText());
+  await worker.fetch(signed([textEv(OTHER, '預班狀態')]), envD1);
+  step('護理師「預班狀態」→ 權責閘擋下', /預班狀態.*護理長以上/.test(replyText()), replyText());
+  await worker.fetch(signed([textEv(USER, '預班狀態')]), envD1);
+  step(`護理長「預班狀態」→ 已回覆 1／未回覆 ${medCount - 1}，附催繳與截止鍵`, new RegExp(`已回覆 1／未回覆 ${medCount - 1}`).test(replyText()) && lastReply().quickReply.items.length === 2, replyText());
+
+  // cron：現在（9 月）沒事；跳到截止前 3 天 → 只催未回覆且已綁定者；再跳過截止 → 自動截止＋生成＋通知護理長
+  calls.length = 0;
+  await worker.scheduled({}, envD1);
+  step('cron（距截止 > 3 天）→ 不催繳', !pushes().some((p) => /催繳/.test(p.messages[0].text)), `pushes=${pushes().length}`);
+  jump = Date.parse('2026-10-23T00:00:00.000Z'); skew = 0;
+  calls.length = 0;
+  await worker.scheduled({}, envD1);
+  const remindPushes = pushes().filter((p) => /催繳｜11 月預班/.test(p.messages[0].text));
+  step(`cron（截止前 3 天）→ 催繳未回覆且已綁定者（${boundMed - 1} 則），N-02 不在內`, remindPushes.length === boundMed - 1 && !remindPushes.some((p) => p.to === OTHER), `got ${remindPushes.length}`);
+  step('reminded_count：N-06=1、N-02=0', db.prepare('SELECT reminded_count AS n FROM prebook_request WHERE cycle_id = ? AND staff_id = ?').get(CY, 'N-06').n === 1
+    && db.prepare('SELECT reminded_count AS n FROM prebook_request WHERE cycle_id = ? AND staff_id = ?').get(CY, 'N-02').n === 0);
+  calls.length = 0;
+  await worker.scheduled({}, envD1);
+  step('同一輪再跑 cron → 不重複催', !pushes().some((p) => /催繳｜11 月預班/.test(p.messages[0].text)));
+  jump = Date.parse('2026-10-25T16:30:00.000Z'); skew = 0;                              // 台北 10/26 00:30，已過 10/25 23:59
+  calls.length = 0;
+  await worker.scheduled({}, envD1);
+  const cyc2 = db.prepare('SELECT * FROM prebook_cycle WHERE id = ?').get(CY);
+  step('cron（過截止）→ 週期 REVIEW、有 closed_at／generated_at、草稿 90 格（11 月 30 天 × 3）', cyc2.state === 'REVIEW' && cyc2.closed_at && cyc2.generated_at
+    && JSON.parse(cyc2.draft_json).length + JSON.parse(cyc2.uncovered_json).length === 90, `${cyc2.state} draft=${JSON.parse(cyc2.draft_json).length} unc=${JSON.parse(cyc2.uncovered_json).length}`);
+  step(`未回覆者 → NO_REQUEST（${medCount - 1} 人）`, db.prepare("SELECT COUNT(*) AS n FROM prebook_request WHERE cycle_id = ? AND state = 'NO_REQUEST'").get(CY).n === medCount - 1);
+  const lv = db.prepare("SELECT * FROM leave WHERE staff_id = 'N-02' AND source = 'prebook' ORDER BY from_date").all();
+  step('N-02 的預假入 leave（type 預假、source prebook）', lv.length === 2 && lv[0].from_date === '2026-11-03' && lv[0].type === '預假', JSON.stringify(lv));
+  step('草稿不排 N-02 的預假日', !JSON.parse(cyc2.draft_json).some((a) => a.staffId === 'N-02' && ['2026-11-03', '2026-11-04'].includes(a.date)));
+  const reviewPushes = pushes().filter((p) => /11 月班表草稿/.test(p.messages[0].text));
+  const headsMed = db.prepare("SELECT COUNT(*) AS n FROM identity WHERE unit = 'MED-3A' AND tier IN ('head','exec')").get().n;
+  step(`草稿通知推給本單位護理長（${headsMed} 人），附核准／暫緩鍵`, reviewPushes.length === headsMed && reviewPushes.every((p) => p.messages[0].quickReply.items.length === 2), `got ${reviewPushes.length}`);
+  const publishData = reviewPushes[0].messages[0].quickReply.items[0].action.data;
+  const holdData = reviewPushes[0].messages[0].quickReply.items[1].action.data;
+
+  // 審核：護理師按不了；暫緩不寫；公告寫回 shift（source generated）＋推播全單位
+  await worker.fetch(signed([pb(OTHER, publishData, 1)]), envD1);
+  step('護理師按「核准並公告」→ 權責閘擋下', /核准公告班表.*護理長以上/.test(replyText()), replyText());
+  await worker.fetch(signed([pb(USER, holdData, 2)]), envD1);
+  step('護理長「暫緩」→ 草稿保留、shift 未寫入', /草稿保留/.test(replyText()) && db.prepare("SELECT COUNT(*) AS n FROM shift WHERE source = 'generated'").get().n === 0, replyText());
+  calls.length = 0;
+  await worker.fetch(signed([pb(USER, publishData, 3)]), envD1);
+  const genN = db.prepare("SELECT COUNT(*) AS n FROM shift WHERE source = 'generated' AND date LIKE '2026-11-%'").get().n;
+  step('護理長「核准並公告」→ 草稿整批入 shift（source generated）', /已公告 11 月班表/.test(replyText()) && genN === JSON.parse(cyc2.draft_json).length, `${replyText()} gen=${genN}`);
+  step('週期 PUBLISHED、published_by=N-04', db.prepare('SELECT state, published_by FROM prebook_cycle WHERE id = ?').get(CY).published_by === 'N-04');
+  step(`公告推播本單位已綁定者（${boundMed} 人）`, pushes().filter((p) => /11 月班表已公告/.test(p.messages[0].text)).length === boundMed, `pushes=${pushes().length}`);
+  await worker.fetch(signed([pb(USER, publishData, 4)]), envD1);
+  step('再按一次核准 → 狀態擋下', /狀態為 PUBLISHED/.test(replyText()), replyText());
+  await worker.fetch(signed([textEv(OTHER, '儀表板')]), envD1);
+  step('公告後儀表板仍可讀（D1 多了 11 月班表不影響本週卡）', lastReply()?.type === 'flex' || /護理長以上/.test(replyText()));
+  globalThis.Date = RealDate;
+}
+
+/* ── 8⁹⁄₁₀. 管理者「建立選單」：Worker 自己拿 token 建四份選單、id 進 D1、已綁定者重掛；之後綁定改讀 D1 的 id ── */
+{
+  const RealDate = Date; let skew = 0;
+  class FakeDate extends RealDate { constructor(...a) { super(...(a.length ? a : [FakeDate.now()])); } static now() { return RealDate.now() + (skew += 7000); } }
+  globalThis.Date = FakeDate;
+  await worker.fetch(signed([textEv(OTHER, '建立選單')]), envD1);
+  step('非管理者「建立選單」→ 限管理者', /限管理者/.test(replyText()), replyText());
+  calls.length = 0;
+  await worker.fetch(signed([textEv(ADMIN, '建立選單')]), envD1);
+  const rep = replyText();
+  step('管理者「建立選單」→ 四份都建立、unbound 設全體預設、舊版清掉、不需改 wrangler.toml', /✓ unbound（全體預設）：RM_NEW_1/.test(rep) && /✓ staff：RM_NEW_2/.test(rep) && /✓ head：RM_NEW_3/.test(rep) && /✓ exec：RM_NEW_4/.test(rep) && /舊版已清除：shiftguard-menu-staff/.test(rep) && /不需要改 wrangler\.toml/.test(rep), rep);
+  const api = (re, m) => calls.filter((c) => re.test(c.url) && (!m || c.method === m));
+  step('LINE API 呼叫序：建立 ×4、上傳圖 ×4（有位元組）、全體預設 ×1、bulk link、DELETE 只刪自家舊版', api(/\/v2\/bot\/richmenu$/, 'POST').length === 4
+    && api(/api-data\.line\.me\/v2\/bot\/richmenu\/RM_NEW_\d\/content/, 'POST').every((c) => c.body.bytes > 50000) && api(/\/content$/).length === 4
+    && api(/\/user\/all\/richmenu\/RM_NEW_1$/, 'POST').length === 1
+    && api(/\/richmenu\/bulk\/link$/, 'POST').length >= 1
+    && api(/\/v2\/bot\/richmenu\/RM_OLD$/, 'DELETE').length === 1 && api(/RM_OTHER/, 'DELETE').length === 0, JSON.stringify(calls.map((c) => `${c.method} ${c.url}`)));
+  const settings = db.prepare("SELECT key, value FROM setting WHERE key LIKE 'richmenu.%' ORDER BY key").all();
+  step('D1 setting 存四個 id', JSON.stringify(settings) === JSON.stringify([{ key: 'richmenu.exec', value: 'RM_NEW_4' }, { key: 'richmenu.head', value: 'RM_NEW_3' }, { key: 'richmenu.staff', value: 'RM_NEW_2' }, { key: 'richmenu.unbound', value: 'RM_NEW_1' }]), JSON.stringify(settings));
+  const bulk = api(/\/richmenu\/bulk\/link$/, 'POST').map((c) => c.body);
+  const headIds = db.prepare("SELECT line_user_id FROM identity WHERE tier = 'head'").all().map((r) => r.line_user_id).sort();
+  step('已綁定者依 tier 整批重掛：head 群掛 RM_NEW_3、人數與 identity 一致', bulk.some((b) => b.richMenuId === 'RM_NEW_3' && JSON.stringify([...b.userIds].sort()) === JSON.stringify(headIds)), JSON.stringify(bulk));
+  step('留痕 richmenu.built', db.prepare("SELECT COUNT(*) AS n FROM audit WHERE action = 'richmenu.built'").get().n === 1);
+  // 之後的綁定：env 沒有 RICHMENU_* 時改讀 D1 的 id
+  const envNoVars = { ...envD1 }; delete envNoVars.RICHMENU_STAFF; delete envNoVars.RICHMENU_HEAD; delete envNoVars.RICHMENU_EXEC;
+  await worker.fetch(signed([textEv(ADMIN, '發碼 N-09 督導')]), envNoVars);
+  const c9 = /　(\d{6})/.exec(replyText())[1];
+  const U9 = 'Ustaff9000000000000000000000000000';
+  calls.length = 0;
+  await worker.fetch(signed([textEv(U9, `綁定 N-09 ${c9}`)]), envNoVars);
+  step('沒有 RICHMENU_* vars 時，綁定成功掛的是 D1 裡的 exec 選單 id', api(new RegExp(`/user/${U9}/richmenu/RM_NEW_4$`), 'POST').length === 1, JSON.stringify(calls.map((c) => `${c.method} ${c.url}`)));
+  globalThis.Date = RealDate;
+}
+
 /* ── 9. 留痕鏈 ── */
 {
   const { createD1Store } = await import(pathToFileURL(path.join(ROOT, 'cloudflare/linebot/store-d1.mjs')).href);
@@ -354,9 +494,10 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   const v = await store.verifyAuditChain();
   step(`留痕鏈完整（${v.length} 筆，含 Phase 1 全部轉移）`, v.ok && v.length > 20, JSON.stringify(v));
   const actions = db.prepare('SELECT action FROM audit ORDER BY id').all().map((r) => r.action);
-  step('留痕動作序列正確（前 7 筆為綁定；Phase 1 的 reported→approved→asked→declined→asked→filled 依序在後）',
+  step('留痕動作序列正確（前 7 筆為綁定；Phase 1 替班與 Phase 2 預班的每一步都在）',
     JSON.stringify(actions.slice(0, 7)) === JSON.stringify(['bind_code.issued', 'bind.completed', 'bind.rejected', 'bind_code.issued', 'bind.completed', 'bind_code.issued', 'bind.completed'])
-    && ['sub.reported', 'sub.approved', 'sub.asked', 'sub.declined', 'sub.asked', 'sub.filled', 'sub.timeout', 'sub.answer_ignored', 'sub.rejected', 'sub.reordered', 'sub.timeout_changed'].every((k) => actions.includes(k)), JSON.stringify(actions));
+    && ['sub.reported', 'sub.approved', 'sub.asked', 'sub.declined', 'sub.asked', 'sub.filled', 'sub.timeout', 'sub.answer_ignored', 'sub.rejected', 'sub.reordered', 'sub.timeout_changed',
+      'prebook.opened', 'prebook.submitted', 'prebook.reminded', 'prebook.closed', 'prebook.generated', 'prebook.held', 'prebook.published'].every((k) => actions.includes(k)), JSON.stringify(actions));
   // 竄改一筆 → 鏈斷
   db.prepare("UPDATE audit SET payload_json = '{\"tampered\":true}' WHERE id = 1").run();
   const v2 = await store.verifyAuditChain();

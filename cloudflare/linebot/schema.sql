@@ -62,6 +62,15 @@ CREATE TABLE IF NOT EXISTS leave (
   PRIMARY KEY (staff_id, from_date, type)
 );
 
+-- ── 系統設定（key/value）────────────────────────────────
+-- 目前存圖文選單 id（richmenu.staff／head／exec／unbound）：管理者在 LINE 輸入「建立選單」由 Worker 建好後寫入，
+-- 免貼 token、免改 wrangler.toml；[vars] 的 RICHMENU_* 若有設定仍優先。
+CREATE TABLE IF NOT EXISTS setting (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 -- ── 迴路 A：預班（Phase 2 使用，schema 先落）───────────────
 CREATE TABLE IF NOT EXISTS prebook_cycle (
   id         TEXT PRIMARY KEY,     -- 例：MED-3A:2026-10
@@ -72,7 +81,12 @@ CREATE TABLE IF NOT EXISTS prebook_cycle (
   state      TEXT NOT NULL,        -- OPEN | CLOSED | GENERATED | REVIEW | PUBLISHED
   opened_by  TEXT NOT NULL,
   opened_at  TEXT NOT NULL,
-  closed_at  TEXT
+  closed_at  TEXT,
+  draft_json     TEXT NOT NULL DEFAULT '[]',   -- 生成器排出的草稿 [{staffId,date,shift,unit}]；核准時寫入 shift（source:'generated'）
+  uncovered_json TEXT NOT NULL DEFAULT '[]',   -- 排不出的格子連同阻擋規則 [{date,shift,unit,blockers:[{code,count}]}]——不硬塞
+  generated_at   TEXT,
+  published_at   TEXT,
+  published_by   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS prebook_request (

@@ -217,7 +217,7 @@ $MENUS = @(
        @{ title = '通報缺班';   sub = '一句話，其餘按鈕問你'; icon = 'chat';  action = (& $T '通報缺班') },
        @{ title = '換班預檢';   sub = '互換後 H1–H10 重算';   icon = 'swap';  action = (& $T '換班') },
        @{ title = '我的邀請';   sub = '等你回覆的替班詢問';   icon = 'bell';  action = (& $T '我的邀請') },
-       @{ title = '我是誰';     sub = '綁定身分與權責層';     icon = 'id';    action = (& $T '我是誰') },
+       @{ title = '我的預假';   sub = '下個月想休的日期';     icon = 'id';    action = (& $T '我的預假') },
        @{ title = '功能選單';   sub = '全部指令的快速按鈕';   icon = 'gauge'; action = (& $T '選單') },
        $OPEN
      ) },
@@ -228,7 +228,7 @@ $MENUS = @(
        @{ title = '待核准';     sub = '替班請求，核准才開口'; icon = 'check'; action = (& $T '待核准') },
        @{ title = '通報缺班';   sub = '自己的缺班也走迴路';   icon = 'chat';  action = (& $T '通報缺班') },
        @{ title = '換班簽核';   sub = '互換後 H1–H10 重算';   icon = 'swap';  action = (& $T '換班') },
-       @{ title = '我的邀請';   sub = '等你回覆的替班詢問';   icon = 'bell';  action = (& $T '我的邀請') },
+       @{ title = '預班';       sub = '開啟、進度、催繳、公告'; icon = 'bell';  action = (& $T '預班狀態') },
        $OPEN
      ) },
   @{ key = 'exec'; chatBar = '督導'; default = $false
@@ -288,14 +288,30 @@ function Draw-MenuImage($menu, [string]$path) {
   $bmp.Dispose()
 }
 
-# ── 1. 畫四張圖 ─────────────────────────────────────────────────
+# ── 1. 畫四張圖＋寫出選單定義 JSON ──────────────────────────────
+# richmenu-defs.json 與四張 png 一起 commit 到 repo，GitHub Pages 會把它們公開；
+# Worker 的管理者指令「建立選單」就從那裡抓定義與圖、用它自己手上的 channel token 建選單，
+# 本機不需要任何 token。座標與下方 §3 相同（六格＋底部細長列）。
+$defs = @()
 foreach ($m in $MENUS) {
   $m.img = Join-Path $PSScriptRoot "richmenu-$($m.key).png"
   Draw-MenuImage $m $m.img
   $size = [math]::Round((Get-Item $m.img).Length / 1KB)
   Write-Host "✓ 選單圖已產生：$($m.img)（${size} KB）"
+  $areas = @()
+  for ($i = 0; $i -lt 6; $i++) {
+    $col = $i % 3; $row = [math]::Floor($i / 3)
+    $areas += @{ bounds = @{ x = [int](833 * $col); y = [int](748 * $row); width = $(if ($col -eq 2) { 834 } else { 833 }); height = $(if ($row -eq 0) { 748 } else { 728 }) }
+                 action = $m.cells[$i].action }
+  }
+  $areas += @{ bounds = @{ x = 0; y = 1476; width = 2500; height = 210 }; action = $m.stripAction }
+  $defs += [ordered]@{ key = $m.key; default = [bool]$m.default; chatBarText = $m.chatBar; image = "richmenu-$($m.key).png"
+                       size = @{ width = $W; height = $H }; areas = $areas }
 }
-if ($ImageOnly) { Write-Host '（-ImageOnly：不呼叫 LINE API，先開圖檔確認樣式）'; exit 0 }
+$defsPath = Join-Path $PSScriptRoot 'richmenu-defs.json'
+[IO.File]::WriteAllText($defsPath, (ConvertTo-Json -InputObject $defs -Depth 8), (New-Object System.Text.UTF8Encoding($false)))
+Write-Host "✓ 選單定義已寫出：$defsPath"
+if ($ImageOnly) { Write-Host '（-ImageOnly：不呼叫 LINE API。commit png＋json 後，在 LINE 對機器人輸入「建立選單」即可）'; exit 0 }
 
 # ── 2. 取得 token ────────────────────────────────────────────────
 Write-Host ''

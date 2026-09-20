@@ -1,0 +1,386 @@
+[
+    {
+        "key":  "unbound",
+        "default":  true,
+        "chatBarText":  "先綁定",
+        "image":  "richmenu-unbound.png",
+        "size":  {
+                     "height":  1686,
+                     "width":  2500
+                 },
+        "areas":  [
+                      {
+                          "action":  {
+                                         "text":  "綁定說明",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  0,
+                                         "width":  833,
+                                         "height":  748,
+                                         "x":  0
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "使用說明",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  0,
+                                         "width":  833,
+                                         "height":  748,
+                                         "x":  833
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "type":  "uri",
+                                         "uri":  "https://liff.line.me/2011209447-AlMMDUMl"
+                                     },
+                          "bounds":  {
+                                         "y":  0,
+                                         "width":  834,
+                                         "height":  748,
+                                         "x":  1666
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "綁定說明",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  748,
+                                         "width":  833,
+                                         "height":  728,
+                                         "x":  0
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "綁定說明",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  748,
+                                         "width":  833,
+                                         "height":  728,
+                                         "x":  833
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "綁定說明",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  748,
+                                         "width":  834,
+                                         "height":  728,
+                                         "x":  1666
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "綁定說明",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  1476,
+                                         "width":  2500,
+                                         "height":  210,
+                                         "x":  0
+                                     }
+                      }
+                  ]
+    },
+    {
+        "key":  "staff",
+        "default":  false,
+        "chatBarText":  "功能選單",
+        "image":  "richmenu-staff.png",
+        "size":  {
+                     "height":  1686,
+                     "width":  2500
+                 },
+        "areas":  [
+                      {
+                          "action":  {
+                                         "text":  "通報缺班",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  0,
+                                         "width":  833,
+                                         "height":  748,
+                                         "x":  0
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "換班",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  0,
+                                         "width":  833,
+                                         "height":  748,
+                                         "x":  833
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "我的邀請",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  0,
+                                         "width":  834,
+                                         "height":  748,
+                                         "x":  1666
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "我的預假",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  748,
+                                         "width":  833,
+                                         "height":  728,
+                                         "x":  0
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "選單",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  748,
+                                         "width":  833,
+                                         "height":  728,
+                                         "x":  833
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "type":  "uri",
+                                         "uri":  "https://liff.line.me/2011209447-AlMMDUMl"
+                                     },
+                          "bounds":  {
+                                         "y":  748,
+                                         "width":  834,
+                                         "height":  728,
+                                         "x":  1666
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "使用說明",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  1476,
+                                         "width":  2500,
+                                         "height":  210,
+                                         "x":  0
+                                     }
+                      }
+                  ]
+    },
+    {
+        "key":  "head",
+        "default":  false,
+        "chatBarText":  "護理長",
+        "image":  "richmenu-head.png",
+        "size":  {
+                     "height":  1686,
+                     "width":  2500
+                 },
+        "areas":  [
+                      {
+                          "action":  {
+                                         "text":  "儀表板",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  0,
+                                         "width":  833,
+                                         "height":  748,
+                                         "x":  0
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "待核准",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  0,
+                                         "width":  833,
+                                         "height":  748,
+                                         "x":  833
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "通報缺班",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  0,
+                                         "width":  834,
+                                         "height":  748,
+                                         "x":  1666
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "換班",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  748,
+                                         "width":  833,
+                                         "height":  728,
+                                         "x":  0
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "預班狀態",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  748,
+                                         "width":  833,
+                                         "height":  728,
+                                         "x":  833
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "type":  "uri",
+                                         "uri":  "https://liff.line.me/2011209447-AlMMDUMl"
+                                     },
+                          "bounds":  {
+                                         "y":  748,
+                                         "width":  834,
+                                         "height":  728,
+                                         "x":  1666
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "使用說明",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  1476,
+                                         "width":  2500,
+                                         "height":  210,
+                                         "x":  0
+                                     }
+                      }
+                  ]
+    },
+    {
+        "key":  "exec",
+        "default":  false,
+        "chatBarText":  "督導",
+        "image":  "richmenu-exec.png",
+        "size":  {
+                     "height":  1686,
+                     "width":  2500
+                 },
+        "areas":  [
+                      {
+                          "action":  {
+                                         "text":  "儀表板",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  0,
+                                         "width":  833,
+                                         "height":  748,
+                                         "x":  0
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "調度",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  0,
+                                         "width":  833,
+                                         "height":  748,
+                                         "x":  833
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "負荷",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  0,
+                                         "width":  834,
+                                         "height":  748,
+                                         "x":  1666
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "待核准",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  748,
+                                         "width":  833,
+                                         "height":  728,
+                                         "x":  0
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "換班",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  748,
+                                         "width":  833,
+                                         "height":  728,
+                                         "x":  833
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "type":  "uri",
+                                         "uri":  "https://liff.line.me/2011209447-AlMMDUMl"
+                                     },
+                          "bounds":  {
+                                         "y":  748,
+                                         "width":  834,
+                                         "height":  728,
+                                         "x":  1666
+                                     }
+                      },
+                      {
+                          "action":  {
+                                         "text":  "使用說明",
+                                         "type":  "message"
+                                     },
+                          "bounds":  {
+                                         "y":  1476,
+                                         "width":  2500,
+                                         "height":  210,
+                                         "x":  0
+                                     }
+                      }
+                  ]
+    }
+]

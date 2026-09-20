@@ -152,10 +152,13 @@ async function lineReply(channelToken, replyToken, text, quickItems) {
 }
 
 /* ── 圖文選單依權責層掛載（docs/LINEBOT-STAGE1.md §2.4）──
- * wrangler.toml [vars] RICHMENU_STAFF／RICHMENU_HEAD／RICHMENU_EXEC 填 richmenu.ps1 印出的 id；
- * 未設定＝不掛（沿用全體預設選單），不影響任何流程。 */
-function richMenuIdFor(env, tier) {
-  return ({ staff: env.RICHMENU_STAFF, head: env.RICHMENU_HEAD, exec: env.RICHMENU_EXEC })[tier] || null;
+ * id 來源兩處：wrangler.toml [vars] RICHMENU_*（若有設定優先），否則 D1 setting 表 richmenu.<tier>
+ * （管理者在 LINE 輸入「建立選單」由 Worker 自己建好後寫入）。兩處都沒有＝不掛，不影響任何流程。 */
+async function richMenuIdFor(env, store, tier) {
+  const fromVar = ({ staff: env.RICHMENU_STAFF, head: env.RICHMENU_HEAD, exec: env.RICHMENU_EXEC })[tier];
+  if (fromVar) return fromVar;
+  if (!store || !store.getSetting) return null;
+  try { return await store.getSetting(`richmenu.${tier}`); } catch { return null; }
 }
 async function lineRichMenuLink(channelToken, userId, richMenuId) {
   const res = await fetch(`https://api.line.me/v2/bot/user/${userId}/richmenu/${richMenuId}`, {
@@ -169,13 +172,67 @@ async function lineRichMenuUnlink(channelToken, userId) {
   if (!res.ok && res.status !== 404) console.log('LINE richmenu unlink failed:', res.status, await res.text());
 }
 /** 綁定成功後：本人掛該 tier 的選單；換手機時舊帳號解除（退回全體預設＝未綁定選單） */
-async function applyRichMenu(env, userId, bound) {
+async function applyRichMenu(env, store, userId, bound) {
   const token = env.LINE_CHANNEL_ACCESS_TOKEN;
   try {
     if (bound.replacedLineUserId) await lineRichMenuUnlink(token, bound.replacedLineUserId);
-    const id = richMenuIdFor(env, bound.tier);
+    const id = await richMenuIdFor(env, store, bound.tier);
     if (id) await lineRichMenuLink(token, userId, id);
   } catch (err) { console.log('[RICHMENU] apply failed:', String(err)); }
+}
+
+/* ── 管理者「建立選單」：Worker 用自己手上的 channel token 建四份圖文選單 ──
+ * 定義（richmenu-defs.json）與四張圖由 richmenu.ps1 -ImageOnly 產生、commit 後經 GitHub Pages 公開；
+ * 這裡逐份：建立 → 上傳圖 → unbound 設全體預設 → id 寫入 D1 setting → 已綁定者依 tier 整批重掛 → 刪舊版。
+ * 本機不需要 token、不需要改 wrangler.toml、不需要重新部署。回傳給管理者的是一段人話報告。 */
+const RICHMENU_NAME = 'shiftguard-menu';
+async function buildRichMenus(env, store, platformUrl, nowIso) {
+  const token = env.LINE_CHANNEL_ACCESS_TOKEN;
+  const auth = { authorization: `Bearer ${token}` };
+  const base = platformUrl.replace(/\/?$/, '/') + 'cloudflare/linebot/';
+  const lines = [];
+  const defsRes = await fetch(base + 'richmenu-defs.json');
+  if (!defsRes.ok) return `抓不到選單定義（${defsRes.status}）：${base}richmenu-defs.json\n請先 commit richmenu-defs.json 與四張 png 並等 GitHub Pages 發布後再試。`;
+  const defs = await defsRes.json();
+  const listRes = await fetch('https://api.line.me/v2/bot/richmenu/list', { headers: auth });
+  const old = listRes.ok ? ((await listRes.json()).richmenus || []).filter((m) => String(m.name || '').startsWith(RICHMENU_NAME)) : [];
+  const ids = {};
+  for (const d of defs) {
+    const body = { size: d.size, selected: true, name: `${RICHMENU_NAME}-${d.key}-${nowIso.slice(0, 16).replace(/[-:T]/g, '')}`, chatBarText: d.chatBarText, areas: d.areas };
+    const cr = await fetch('https://api.line.me/v2/bot/richmenu', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    if (!cr.ok) return `[${d.key}] 建立失敗 ${cr.status}：${(await cr.text()).slice(0, 200)}`;
+    const id = (await cr.json()).richMenuId;
+    const img = await fetch(base + d.image);
+    if (!img.ok) return `[${d.key}] 抓不到圖（${img.status}）：${base}${d.image}`;
+    const up = await fetch(`https://api-data.line.me/v2/bot/richmenu/${id}/content`, { method: 'POST', headers: { ...auth, 'content-type': 'image/png' }, body: await img.arrayBuffer() });
+    if (!up.ok) return `[${d.key}] 上傳圖失敗 ${up.status}：${(await up.text()).slice(0, 200)}`;
+    if (d.default) {
+      const df = await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${id}`, { method: 'POST', headers: auth });
+      if (!df.ok) return `[${d.key}] 設全體預設失敗 ${df.status}`;
+    }
+    ids[d.key] = id;
+    await store.setSetting(`richmenu.${d.key}`, id, nowIso);
+    lines.push(`✓ ${d.key}${d.default ? '（全體預設）' : ''}：${id}`);
+  }
+  // 已綁定者依 tier 整批重掛（bulk link，一次最多 500 人）
+  const identities = await store.listAllIdentities();
+  const byTier = {};
+  for (const i of identities) if (ids[i.tier]) (byTier[i.tier] = byTier[i.tier] || []).push(i.line_user_id);
+  let relinked = 0;
+  for (const [tier, userIds] of Object.entries(byTier)) {
+    for (let i = 0; i < userIds.length; i += 500) {
+      const bl = await fetch('https://api.line.me/v2/bot/richmenu/bulk/link', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' },
+        body: JSON.stringify({ richMenuId: ids[tier], userIds: userIds.slice(i, i + 500) }) });
+      if (bl.ok) relinked += Math.min(500, userIds.length - i); else lines.push(`✗ ${tier} 重掛失敗 ${bl.status}`);
+    }
+  }
+  lines.push(`✓ 已綁定者依權責層重掛：${relinked}／${identities.length} 人`);
+  for (const o of old) {
+    const del = await fetch(`https://api.line.me/v2/bot/richmenu/${o.richMenuId}`, { method: 'DELETE', headers: auth });
+    lines.push(`${del.ok ? '✓' : '✗'} 舊版已清除：${o.name}`);
+  }
+  await store.appendAudit({ ts: nowIso, actor: null, action: 'richmenu.built', payload: { ids, relinked, removed: old.length } });
+  return ['【圖文選單已建立】', ...lines, '', 'id 已存進 D1，之後綁定成功的人會自動掛上對應層的選單；不需要改 wrangler.toml、不需要重新部署。'].join('\n');
 }
 
 /* ── 事件處理（流程與訊息組裝在 src/botcore.js）── */
@@ -205,7 +262,7 @@ async function handleEvent(ev, env, { store, live }) {
       if (cmd && cmd.kind === 'bind' && ev.replyToken) {
         const out = await bindFlow({ lineUserId: userId, lineUserHash: userHash(userId),
           staffId: cmd.staffId, code: cmd.code, now: nowIso, store, db: live });
-        if (out.bound) await applyRichMenu(env, userId, out.bound);
+        if (out.bound) await applyRichMenu(env, store, userId, out.bound);
         return lineReply(token, ev.replyToken, out.text);
       }
       secLog('unbound-user', userHash(userId));
@@ -251,6 +308,18 @@ async function handleEvent(ev, env, { store, live }) {
   /* 按鈕回傳：條件逐步補齊 → 齊全即評估；帶 id 則產生詢問草稿 */
   if (ev.type === 'postback' && ev.replyToken) {
     const p = decodeParams(ev.postback && ev.postback.data);
+
+    /* Phase 2：預班草稿的按鈕（核准公告／暫緩＝該單位護理長以上） */
+    if (p.cy) {
+      if (!store || !identity) return lineReply(token, ev.replyToken, store ? BIND_HELP : STORE_DISABLED_TEXT);
+      if (!commandAllowed(tier, 'publish')) return lineReply(token, ev.replyToken, tierDeniedText('publish', tier));
+      const ctx = { cy: p.cy, actor: identity, now: nowIso, store, db: live };
+      const out = p.act === 'publish' ? await publishFlow(ctx)
+        : p.act === 'hold' ? await holdFlow(ctx)
+          : { reply: { text: '不認得的動作。', items: null }, pushes: [] };
+      await dispatchPushes(env, store, out.pushes);
+      return lineReply(token, ev.replyToken, out.reply.text, out.reply.items);
+    }
 
     /* Phase 1：替班請求的按鈕（核准／略過／駁回＝護理長；接／不接＝被問到的人） */
     if (p.rq) {
@@ -316,8 +385,16 @@ async function handleEvent(ev, env, { store, live }) {
     // 已綁定者再綁（換代號／換手機／升權責層）：同一流程，consumeBindCode 保證一碼一用
     const out = await bindFlow({ lineUserId: userId, lineUserHash: userHash(userId),
       staffId: s1.staffId, code: s1.code, now: nowIso, store, db: live });
-    if (out.bound) await applyRichMenu(env, userId, out.bound);
+    if (out.bound) await applyRichMenu(env, store, userId, out.bound);
     return lineReply(token, ev.replyToken, out.text);
+  }
+  /* 管理者專用：建立四份圖文選單（Worker 自己拿 token 做，本機零設定） */
+  if (/^(建立選單|建選單|重建選單|建立圖文選單)$/.test(normalizeCmdText(text))) {
+    if (!isAdmin(env, userId)) { secLog('richmenu-denied', userHash(userId)); return lineReply(token, ev.replyToken, '「建立選單」限管理者使用。'); }
+    if (!store) return lineReply(token, ev.replyToken, STORE_DISABLED_TEXT);
+    let report;
+    try { report = await buildRichMenus(env, store, platformUrl, nowIso); } catch (err) { report = `建立選單失敗：${String(err)}`; }
+    return lineReply(token, ev.replyToken, report);
   }
   /* 權責閘（docs/LINEBOT-STAGE1.md §2.5）：指令歸類 → 查矩陣 → 不足時誠實回覆，不假裝指令不存在 */
   const cmdKey = classifyCommand(text);
@@ -339,7 +416,16 @@ async function handleEvent(ev, env, { store, live }) {
         : await timeoutFlow({ rq: c.rq, minutes: c.minutes, actor: identity, now: nowIso, store });
       return lineReply(token, ev.replyToken, o.reply.text, o.reply.items);
     }
-  } else if (['pending', 'myask', 'manage'].includes(cmdKey)) {
+    /* Phase 2：預班迴路（開啟／預假／查詢／進度／催繳／截止）；每個 flow 自己驗單位與狀態 */
+    const p2 = { text, actor: identity, now: nowIso, store, db: live };
+    const p2flow = { opencycle: openCycleFlow, prebook: prebookFlow, myprebook: myPrebookFlow,
+      cyclestatus: cycleStatusFlow, remindnow: remindNowFlow, closecycle: closeCycleFlow }[cmdKey];
+    if (p2flow) {
+      const o = await p2flow(p2);
+      await dispatchPushes(env, store, o.pushes);
+      return lineReply(token, ev.replyToken, o.reply.text, o.reply.items);
+    }
+  } else if (['pending', 'myask', 'manage', 'opencycle', 'prebook', 'myprebook', 'cyclestatus', 'remindnow', 'closecycle'].includes(cmdKey)) {
     return lineReply(token, ev.replyToken, store ? BIND_HELP : STORE_DISABLED_TEXT);
   }
   /* Phase 1.6 資料範圍：head／staff 鎖在自己的單位，exec／管理者／示範模式全院 */
@@ -436,7 +522,7 @@ export default {
     return new Response('ok', { status: 200 });
   },
 
-  /** Cron（wrangler.toml [triggers]）：每分鐘一次。Phase 0 只清過期綁定碼；無 D1 直接返回。 */
+  /** Cron（wrangler.toml [triggers]）：每分鐘一次。清過期綁定碼、替班逾時、預班催繳與截止；無 D1 直接返回。 */
   async scheduled(event, env) {
     const store = makeStore(env);
     if (!store) return;
@@ -448,6 +534,10 @@ export default {
       const out = await expireFlow({ now: nowIso, store });
       if (out.expired) console.log(`[CRON] ${out.expired} ask(s) timed out, ${out.pushes.length} push(es)`);
       await dispatchPushes(env, store, out.pushes);
+      // Phase 2：預班催繳（截止前 3 天／1 天，只推未回覆者）與到期截止→生成草稿→通知護理長
+      const pb = await prebookCron({ now: nowIso, store });
+      if (pb.reminded || pb.closed) console.log(`[CRON] prebook: reminded ${pb.reminded}, closed ${pb.closed}, ${pb.pushes.length} push(es)`);
+      await dispatchPushes(env, store, pb.pushes);
     } catch (err) { console.log('[CRON] error:', String(err)); }
   },
 };
