@@ -171,6 +171,9 @@ export function createD1Store(db, { auditCanonical }) {
     async setSetting(key, value, nowIso) {
       await db.prepare('INSERT OR REPLACE INTO setting (key, value, updated_at) VALUES (?,?,?)').bind(key, value, nowIso).run();
     },
+    async deleteSetting(key) {
+      await db.prepare('DELETE FROM setting WHERE key = ?').bind(key).run();
+    },
     /** 全部已綁定者（建選單後整批重掛用） */
     async listAllIdentities() {
       const { results } = await db.prepare('SELECT line_user_id, staff_id, unit, tier FROM identity').all();
