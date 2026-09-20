@@ -33,7 +33,7 @@ import rules from '../../src/rules.js';
 import engineMod from '../../src/engine.js';
 import llm from '../../src/llm.js';
 import botcore from '../../src/botcore.js';
-import { createD1Store, userHash } from './store-d1.mjs';
+import { createD1Store, userHash, sha256Hex } from './store-d1.mjs';
 
 // 依 index.html 的載入語義把全域掛回（與 tests/run-node.js 同一招）
 Object.assign(globalThis, data, rules, engineMod, llm, botcore);
@@ -202,6 +202,11 @@ function corsHeaders(env, request) {
     vary: 'origin',
   };
 }
+/** 班表版本＝範圍內所有班次（含來源）排序後的雜湊；平台寫回時帶回來當樂觀鎖 */
+function rosterVersion(rows) {
+  const keys = rows.map((s) => `${s.staffId}|${s.date}|${s.shift}|${s.unit}|${s.source || 'imported'}`).sort();
+  return sha256Hex(keys.join('\n')).slice(0, 16);
+}
 const json = (obj, status, headers) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers } });
 
 async function handleApi(request, env, url) {
@@ -237,11 +242,41 @@ async function handleApi(request, env, url) {
   if (url.pathname === '/api/snapshot' && request.method === 'GET') {
     const snap = await store.loadDb();
     const inScope = (u) => !scope || u === scope.unit;
+    const shifts = snap.shifts.filter((s) => inScope(s.unit));
     return json({
       identity: me, scope: scope ? scope.unit : null, generatedAt: nowIso,
+      version: rosterVersion(shifts),
+      canWrite: identity.tier === 'head',   // 寫回類動作一律屬護理長（docs/CONTEXT.md 身份視角）
       staff: snap.staff.filter((s) => inScope(s.unit)),
-      shifts: snap.shifts.filter((s) => inScope(s.unit)),
+      shifts: shifts.map(shiftRowForPlatform),
     }, 200, cors);
+  }
+
+  /* Phase 3d：平台編輯寫回——整份送回、宿主算差異、樂觀鎖（baseVersion）、批次寫、留痕差異 */
+  if (url.pathname === '/api/shifts' && request.method === 'POST') {
+    if (identity.tier !== 'head') return json({ error: 'forbidden', message: '寫回班表屬護理長權限；督導／主任為檢視模式、護理師唯讀。' }, 403, cors);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'bad_json' }, 400, cors); }
+    const snap = await store.loadDb();
+    const staffIds = new Set(snap.staff.map((s) => s.id));
+    const v = validateShiftRows(body && body.shifts, { staffIds, scopeUnit: identity.unit });
+    if (!v.ok) return json({ error: 'invalid', message: `班次資料未通過白名單：${v.errors.slice(0, 3).join('；')}`, errors: v.errors }, 422, cors);
+    const current = await store.listShifts(identity.unit);
+    const curVersion = rosterVersion(current);
+    if (body.baseVersion && body.baseVersion !== curVersion) {
+      return json({ error: 'conflict', message: '雲端班表在你載入之後已被更動（另一位護理長或機器人的替班寫回）。未寫入；請重新載入後再改。', version: curVersion }, 409, cors);
+    }
+    const { deletes, inserts } = diffShifts(current, body.shifts);
+    if (deletes.length || inserts.length) {
+      await store.replaceShifts({ deletes, inserts, now: nowIso });
+      await store.appendAudit({ ts: nowIso, actor: identity.staff_id, action: 'roster.writeback', payload: {
+        unit: identity.unit, removed: deletes.length, added: inserts.length,
+        sample: { removed: deletes.slice(0, 10).map(shiftKey), added: inserts.slice(0, 10).map((s) => `${shiftKey(s)}|${s.source}`) },
+        reason: typeof body.reason === 'string' ? body.reason.slice(0, 80) : null,
+      } });
+    }
+    const after = await store.listShifts(identity.unit);
+    return json({ ok: true, version: rosterVersion(after), removed: deletes.length, added: inserts.length, total: after.length }, 200, cors);
   }
 
   if (url.pathname === '/api/prebook' && request.method === 'GET') {

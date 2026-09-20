@@ -975,3 +975,38 @@ test('phase3b：「平台」歸 platform（staff 可用）；登入訊息兩個 
   await closeCycleFlow({ actor: await st.getIdentityByUser('Uhead'), now: '2026-09-20T00:00:00.000Z', store: st });
   assertEqual((await myPrebookFlow({ actor: n2, store: st })).reply.items, null, '截止後不附日曆');
 });
+
+/* ══ Phase 3d：平台編輯寫回——白名單驗證與差異（純函式） ══ */
+test('phase3d：validateShiftRows 逐筆白名單——代號／日期／班別／單位／範圍／重複；diffShifts 算刪與加，單位或來源不同＝刪＋加', () => {
+  const staffIds = new Set(['N-01', 'N-02']);
+  const ok = validateShiftRows([{ staffId: 'N-01', date: '2026-10-03', shift: 'D', unit: 'MED-3A' }], { staffIds, scopeUnit: 'MED-3A' });
+  assert(ok.ok && ok.errors.length === 0);
+  const bad = validateShiftRows([
+    { staffId: 'N-99', date: '2026-10-03', shift: 'D', unit: 'MED-3A' },
+    { staffId: 'N-01', date: '2026-02-30', shift: 'X', unit: 'NOPE' },
+    { staffId: 'N-01', date: '2026-10-03', shift: 'D', unit: 'ICU' },
+    { staffId: 'N-02', date: '2026-10-03', shift: 'E', unit: 'MED-3A' },
+    { staffId: 'N-02', date: '2026-10-03', shift: 'E', unit: 'MED-3A' },
+  ], { staffIds, scopeUnit: 'MED-3A' });
+  assert(!bad.ok);
+  assert(bad.errors.some((e) => /N-99/.test(e)) && bad.errors.some((e) => /2026-02-30/.test(e)) && bad.errors.some((e) => /班別 X/.test(e))
+    && bad.errors.some((e) => /單位 NOPE/.test(e)) && bad.errors.some((e) => /ICU 超出你的範圍/.test(e)) && bad.errors.some((e) => /重複/.test(e)), JSON.stringify(bad.errors));
+  assertEqual(validateShiftRows('nope', { staffIds }), { ok: false, errors: ['shifts 需為陣列'] });
+
+  const current = [
+    { staffId: 'N-01', date: '2026-10-03', shift: 'D', unit: 'MED-3A', source: 'imported' },
+    { staffId: 'N-02', date: '2026-10-03', shift: 'E', unit: 'MED-3A', source: 'imported' },
+    { staffId: 'N-02', date: '2026-10-04', shift: 'N', unit: 'MED-3A', source: 'generated' },
+  ];
+  const next = [
+    { staffId: 'N-01', date: '2026-10-03', shift: 'D', unit: 'MED-3A' },                     // 同一格：平台沒帶 source → manual ≠ imported → 視為重寫（來源更新為 manual）
+    { staffId: 'N-02', date: '2026-10-04', shift: 'N', unit: 'MED-3A', source: 'generated' },  // 完全相同 → 不動
+    { staffId: 'N-01', date: '2026-10-05', shift: 'D', unit: 'MED-3A', isReplacement: true },  // 新增，來源 substitution
+  ];
+  const d = diffShifts(current, next);
+  assertEqual(d.deletes, [{ staffId: 'N-02', date: '2026-10-03', shift: 'E' }], 'N-02 10/3 小夜被拿掉');
+  assertEqual(d.inserts.map((s) => `${shiftKey(s)}|${s.source}`), ['N-01|2026-10-03|D|manual', 'N-01|2026-10-05|D|substitution']);
+  assertEqual(diffShifts(current, current), { deletes: [], inserts: [] }, '整份原樣送回＝零差異');
+  assertEqual(shiftRowForPlatform({ staffId: 'N-01', date: '2026-10-05', shift: 'D', unit: 'MED-3A', source: 'substitution' }).isReplacement, true);
+  assertEqual(shiftRowForPlatform({ staffId: 'N-01', date: '2026-10-05', shift: 'D', unit: 'MED-3A', source: 'swap' }).isSwap, true);
+});

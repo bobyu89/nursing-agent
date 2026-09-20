@@ -241,11 +241,27 @@ export function createD1Store(db, { auditCanonical }) {
           .bind(s.staffId, s.date, s.shift, s.unit, s.source, s.writtenAt)));
     },
 
+    /* ── Phase 3d：平台編輯寫回（差異由 botcore.diffShifts 算，這裡只批次寫）── */
+    async listShifts(unit) {
+      const { results } = await (unit
+        ? db.prepare('SELECT staff_id, date, shift, unit, source, written_at FROM shift WHERE unit = ? ORDER BY date, staff_id, shift').bind(unit)
+        : db.prepare('SELECT staff_id, date, shift, unit, source, written_at FROM shift ORDER BY date, staff_id, shift')).all();
+      return results.map((r) => ({ staffId: r.staff_id, date: r.date, shift: r.shift, unit: r.unit, source: r.source, writtenAt: r.written_at }));
+    },
+    async replaceShifts({ deletes, inserts, now }) {
+      const stmts = [
+        ...deletes.map((d) => db.prepare('DELETE FROM shift WHERE staff_id = ? AND date = ? AND shift = ?').bind(d.staffId, d.date, d.shift)),
+        ...inserts.map((s) => db.prepare('INSERT OR REPLACE INTO shift (staff_id, date, shift, unit, source, written_at) VALUES (?,?,?,?,?,?)')
+          .bind(s.staffId, s.date, s.shift, s.unit, s.source, now)),
+      ];
+      if (stmts.length) await db.batch(stmts);
+    },
+
     /* ── 人員與班表快照 → 引擎用的 db 形狀（與 data.js 相同）──── */
     async loadDb() {
       const [staffRes, shiftRes, leaveRes] = await db.batch([
         db.prepare('SELECT * FROM staff ORDER BY staff_id'),
-        db.prepare('SELECT staff_id, date, shift, unit FROM shift ORDER BY date, staff_id'),
+        db.prepare('SELECT staff_id, date, shift, unit, source FROM shift ORDER BY date, staff_id'),
         db.prepare('SELECT staff_id, from_date, to_date, type FROM leave ORDER BY staff_id, from_date'),
       ]);
       const leavesBy = {};
@@ -261,7 +277,7 @@ export function createD1Store(db, { auditCanonical }) {
         standbyCount30d: r.standby_30d || 0,
         leaves: leavesBy[r.staff_id] || [],
       }));
-      const shifts = shiftRes.results.map((r) => ({ staffId: r.staff_id, date: r.date, shift: r.shift, unit: r.unit }));
+      const shifts = shiftRes.results.map((r) => ({ staffId: r.staff_id, date: r.date, shift: r.shift, unit: r.unit, source: r.source }));
       return { staff, shifts, empty: staff.length === 0 };
     },
   };

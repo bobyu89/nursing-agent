@@ -734,7 +734,7 @@
   <div class="grid g3">
     <div class="liquid-glass card reveal">
       <h3>算得準</h3>
-      <p>工時、班距、連續天數、證照效期、勞基法四週彈性工時——全部由確定性規則引擎計算，154 項邊界測試釘住。語言模型不碰任何數字：算錯工時在醫療場域是合規事故，不是體驗瑕疵。</p>
+      <p>工時、班距、連續天數、證照效期、勞基法四週彈性工時——全部由確定性規則引擎計算，155 項邊界測試釘住。語言模型不碰任何數字：算錯工時在醫療場域是合規事故，不是體驗瑕疵。</p>
     </div>
     <div class="liquid-glass card reveal">
       <h3>說得清</h3>
@@ -752,7 +752,7 @@
   <h2 class="reveal">不放假見證，放真肌肉。</h2>
   <p class="lead reveal">給資訊室與稽核看的部分——每一項都可以當場驗證，不必相信我們的話。</p>
   <div class="proof-grid">
-    <div class="liquid-glass proof reveal"><b>154 項邊界測試</b><p>班距 11 小時、連六天、四週 160 小時……合規事故等級的邊界全數釘住，每次更新自動重驗，<a href="tests.html" style="border-bottom:1px solid var(--accent)">現在就能跑</a>。</p></div>
+    <div class="liquid-glass proof reveal"><b>155 項邊界測試</b><p>班距 11 小時、連六天、四週 160 小時……合規事故等級的邊界全數釘住，每次更新自動重驗，<a href="tests.html" style="border-bottom:1px solid var(--accent)">現在就能跑</a>。</p></div>
     <div class="liquid-glass proof reveal"><b>H1–H10 對條文</b><p>每一條硬規則標明法源：勞基法第 34、36、30-1、49 條與院內規範——勞檢來的時候，依據拿得出來。</p></div>
     <div class="liquid-glass proof reveal"><b>HL7 FHIR R4</b><p>班表以國際標準（對齊衛福部 TW Core IG）與院內系統交換，不做資料孤島。</p></div>
     <div class="liquid-glass proof reveal"><b>開源可稽核</b><p>整套程式碼公開在 GitHub——演算法怎麼排除、怎麼排序，逐行看得到，沒有黑箱。</p></div>
@@ -891,7 +891,7 @@
     <div class="liquid-glass price reveal">
       <h3>開源自架</h3><div class="tagline">先讓引擎替你把關</div>
       <div class="amount">NT$ 0<small>／永久</small></div>
-      <ul><li>完整 H1–H10 規則引擎與全部畫面</li><li>雙擊即用，資料留在院內</li><li>GitHub 開源、社群更新</li><li>154 項測試隨附</li></ul>
+      <ul><li>完整 H1–H10 規則引擎與全部畫面</li><li>雙擊即用，資料留在院內</li><li>GitHub 開源、社群更新</li><li>155 項測試隨附</li></ul>
       <a class="liquid-glass btn-glass" href="https://github.com/bobyu89/nursing-agent">從 GitHub 開始</a>
     </div>
     <div class="liquid-glass price featured reveal">
@@ -916,7 +916,7 @@
     <details class="faq"><summary>人事資料會不會離開醫院？</summary>
       <div class="a">開源自架版可完全離線執行——零外部依賴、嚴格 CSP、不呼叫任何第三方服務；LINE 機器人僅以代號溝通、明確禁止病人資訊。與院內系統交換走 HL7 FHIR 標準，由院方伺服器對接。</div></details>
     <details class="faq"><summary>AI 會不會算錯工時？</summary>
-      <div class="a">不會由 AI 算。這是班守的核心設計：工時、班距、連續天數全部由確定性規則引擎計算（154 項邊界測試釘住），語言模型只負責解析訊息與把數字寫成人話——模型不碰任何數字，也不得放寬任何規則。LINE 替班迴路裡「找誰」同樣是引擎排的、「要不要問」是護理長決定的，模型從頭到尾不在決定迴路裡。</div></details>
+      <div class="a">不會由 AI 算。這是班守的核心設計：工時、班距、連續天數全部由確定性規則引擎計算（155 項邊界測試釘住），語言模型只負責解析訊息與把數字寫成人話——模型不碰任何數字，也不得放寬任何規則。LINE 替班迴路裡「找誰」同樣是引擎排的、「要不要問」是護理長決定的，模型從頭到尾不在決定迴路裡。</div></details>
     <details class="faq"><summary>需要換掉現有排班系統嗎？</summary>
       <div class="a">不用。班守可以從「簽核前的預檢工具」開始用——換班預檢、缺班替補、負荷雷達都不要求你改變現有流程；班表可從 Excel 貼上匯入，也能經 FHIR 與既有系統同步。</div></details>
     <details class="faq"><summary>我們醫院的排班規則很特殊，套得進去嗎？</summary>
@@ -943,7 +943,7 @@
     <b>誠實聲明</b>——本站為教學展示：所有人員、班表、請假資料皆為虛構（代號 N-01～N-11），
     不含任何病患資料；本頁行業數據為公開資訊之概述、導入方案為示範規劃；訊息解析為確定性關鍵詞規則（非真實模型），理解力有限但離線可跑、可驗證；
     Agent 不臆測缺漏欄位、不自行放寬規則、不代替主管決定；平台內的通知一律停在草稿。
-    LINE 的兩條迴路是唯一會主動聯絡人的地方——替班：只在護理長核准後、逐一詢問引擎排出的候選；預班：公告、催繳只推未回覆者、草稿交護理長核准才公告——每一步留痕。平台以 LINE 綁定的身分登入（機器人回本人專屬的短效連結）後改讀雲端即時班表，視角鎖定為授權的權責層；沒登入仍是離線示範模式。
+    LINE 的兩條迴路是唯一會主動聯絡人的地方——替班：只在護理長核准後、逐一詢問引擎排出的候選；預班：公告、催繳只推未回覆者、草稿交護理長核准才公告——每一步留痕。平台以 LINE 綁定的身分登入（機器人回本人專屬的短效連結）後改讀雲端即時班表，視角鎖定為授權的權責層；護理長在平台的每一次班表編輯都寫回雲端（差異留痕、版本衝突不覆蓋）；沒登入仍是離線示範模式。
   </div>
 </section>
 
@@ -952,7 +952,7 @@
   <a href="index.html">進入平台</a>　·
   <a href="https://line.me/R/ti/p/@913sepht">LINE 機器人</a>　·
   <a href="https://github.com/bobyu89/nursing-agent">GitHub</a>　·
-  <a href="tests.html">引擎與介接測試（154 項）</a>
+  <a href="tests.html">引擎與介接測試（155 項）</a>
 </footer>
 
 </body>

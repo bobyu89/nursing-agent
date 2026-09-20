@@ -328,18 +328,16 @@ const SCHEDULE_STORE_KEY = 'shiftguard.schedule.v1';
 const DEMO_DATA_REV = '2026-08-uniform-month-v2';
 
 function saveSchedule() {
-  // 登入模式（改讀 D1）：本機不落地——這份班表的正本在雲端，localStorage 的舊編輯疊上來只會蓋掉正本。
-  // 排班工作區的變更仍在這個分頁生效，但標示為「本機草稿、未寫回」；寫回 D1 是下一階段（詳 docs/LINEBOT-STAGE1.md §6）。
-  if (!LIVE.active) {
-    try {
-      localStorage.setItem(SCHEDULE_STORE_KEY, JSON.stringify({ rev: DEMO_DATA_REV, shifts: SHIFTS }));
-    } catch (e) {}
-  }
+  // 登入模式（改讀 D1）：本機不落地——正本在雲端；每次變更去抖動後整份送回 Worker，宿主算差異、驗版本、留痕
+  if (LIVE.active) { scheduleWriteBack(); return; }
+  try {
+    localStorage.setItem(SCHEDULE_STORE_KEY, JSON.stringify({ rev: DEMO_DATA_REV, shifts: SHIFTS }));
+  } catch (e) {}
   // 儲存狀態指示：每一次寫入都把時間戳亮給使用者看——「有沒有存到」不用猜
   const chip = $('#roster-saved');
   if (chip) {
     chip.hidden = false;
-    chip.textContent = LIVE.active ? `本機草稿 ${nowStamp().slice(11)}（未寫回 D1）` : `已自動儲存 ${nowStamp().slice(11)}`;
+    chip.textContent = `已自動儲存 ${nowStamp().slice(11)}`;
     MOTION.pop(chip);
   }
   const badge = $('#roster-modified');
@@ -4377,6 +4375,7 @@ function init() {
   });
   on('#btn-roster-import', 'click', handleRosterImport);
   on('#btn-roster-reset', 'click', () => {
+    if (LIVE.active) { location.reload(); return; }   // 登入模式：重新讀 D1（已寫回的不會消失，未寫回的草稿會）
     if (confirm('確定要清除本機保存的班表變更，回到示範資料嗎？頁面將重新載入。')) resetSchedule();
   });
 
@@ -4451,11 +4450,64 @@ async function bootLive() {
     SHIFTS.length = 0; snap.shifts.forEach((s) => SHIFTS.push(s));
     LIVE.identity = snap.identity || LIVE.identity;
     LIVE.scope = snap.scope || null;
+    LIVE.version = snap.version || null;
+    LIVE.canWrite = !!snap.canWrite;
     LIVE.loadedAt = snap.generatedAt || new Date().toISOString();
     LIVE.active = true;
   } catch (e) {
     LIVE.error = (e && e.message) || String(e);
     LIVE.active = false;
+  }
+}
+
+/* ── Phase 3d：登入模式的寫回 D1 ──
+ * 平台整份 SHIFTS 送回（範圍內），Worker 算差異、以 baseVersion 做樂觀鎖、批次寫入、留痕差異。
+ * 去抖動 800ms：連點格子只送一次；送出中再改會排下一輪。409＝雲端已被別人動過：不覆蓋、提示重新載入。 */
+let writeBackTimer = null;
+let writeBackBusy = false;
+let writeBackAgain = false;
+function setRosterChip(text, tone) {
+  const chip = $('#roster-saved');
+  if (!chip) return;
+  chip.hidden = false;
+  chip.className = `tag ${tone === 'ok' ? 'tag-ok' : tone === 'warn' ? 'tag-warn' : tone === 'danger' ? 'tag-danger' : 'tag-neutral'}`;
+  chip.textContent = text;
+  MOTION.pop(chip);
+}
+function scheduleWriteBack() {
+  const badge = $('#roster-modified');
+  if (badge) badge.hidden = false;
+  if (!LIVE.canWrite) { setRosterChip('此視角不可寫回（檢視模式）', 'warn'); return; }
+  setRosterChip('寫回中…', 'neutral');
+  clearTimeout(writeBackTimer);
+  writeBackTimer = setTimeout(liveWriteBack, 800);
+}
+async function liveWriteBack() {
+  if (writeBackBusy) { writeBackAgain = true; return; }
+  writeBackBusy = true;
+  try {
+    const shifts = SHIFTS.filter((s) => !LIVE.scope || s.unit === LIVE.scope)
+      // 來源（imported／generated…）原樣帶回，宿主才不會把沒動過的格子當成重寫；平台新增的格子沒有來源＝manual
+      .map((s) => ({ staffId: s.staffId, date: s.date, shift: s.shift, unit: s.unit, ...(s.source ? { source: s.source } : {}), ...(s.isReplacement ? { isReplacement: true } : {}), ...(s.isSwap ? { isSwap: true } : {}) }));
+    const r = await liveFetch('/api/shifts', { method: 'POST', body: { shifts, baseVersion: LIVE.version } });
+    LIVE.version = r.version;
+    setRosterChip(`已寫回 D1 ${nowStamp().slice(11)}（+${r.added}／−${r.removed}）`, 'ok');
+    if (r.added || r.removed) logAction('班表寫回雲端（D1）', `新增 ${r.added}、移除 ${r.removed} 班次；雲端共 ${r.total} 班次，版本 ${r.version}`, `${LIVE.identity.staff_id}`);
+  } catch (e) {
+    if (e.status === 409) {
+      setRosterChip('雲端已被更動，未寫回——請重新載入', 'danger');
+      toast((e.body && e.body.message) || '雲端班表已變，請重新載入', 'danger');
+      logAction('⚠ 班表寫回衝突', (e.body && e.body.message) || '雲端版本不符', '班守 ShiftGuard 防護');
+    } else if (e.status === 401) {
+      setRosterChip('登入已過期，未寫回', 'danger');
+      toast('登入已過期：請在 LINE 輸入「平台」重新取得連結', 'danger');
+    } else {
+      setRosterChip('寫回失敗，未寫回', 'danger');
+      toast(`寫回失敗：${(e.body && e.body.message) || e.message}`, 'danger');
+    }
+  } finally {
+    writeBackBusy = false;
+    if (writeBackAgain) { writeBackAgain = false; scheduleWriteBack(); }
   }
 }
 
@@ -4468,6 +4520,8 @@ function applyLiveMode() {
     badge.classList.remove('badge-demo');
     badge.classList.add('badge-live');
   }
+  const reset = $('#btn-roster-reset');
+  if (reset) reset.textContent = '重新載入雲端班表';   // 登入模式沒有「本機保存」可還原；重載＝重新讀 D1
   const sw = $('#role-switch');
   if (sw) {
     sw.title = `已以 LINE 身分登入：視角鎖定為 ${ROLES[id.tier].label}（綁定時授權的權責層）`;
