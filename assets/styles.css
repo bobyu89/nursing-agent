@@ -77,6 +77,8 @@ input[type="checkbox"]:focus-visible, input[type="range"]:focus-visible {
 }
 .badge-demo { background: var(--warn-tint); border-color: var(--warn-line); color: var(--warn); font-weight: 600; }
 .badge-llm  { background: var(--line-soft); color: var(--ink-soft); }
+.badge-live { background: var(--ok-tint); border-color: var(--ok-line); color: var(--ok); font-weight: 600; }
+#role-switch button:disabled { opacity: .4; cursor: not-allowed; }
 a.badge:hover { color: var(--ink); border-color: var(--ink-faint); }
 
 /* ── 兩層導覽：大分頁＋子分頁 ────────────────────────── */

@@ -183,8 +183,8 @@ test('stage1：auditCanonical 欄位順序固定、系統動作 actor 為空字�
 
 test('stage1：權限矩陣——三層照抄平台 ROLES，上級涵蓋下級', () => {
   const allowed = (t) => Object.keys(COMMAND_MIN_TIER).filter((k) => commandAllowed(t, k)).sort();
-  const base = ['bindguide', 'guide', 'menu', 'myask', 'myprebook', 'prebook', 'report', 'reportguide', 'swap', 'whoami'];
-  const headExtra = ['dashboard', 'manage', 'pending', 'opencycle', 'cyclestatus', 'remindnow', 'closecycle', 'publish'];
+  const base = ['bindguide', 'guide', 'menu', 'myask', 'myprebook', 'platform', 'prebook', 'report', 'reportguide', 'swap', 'whoami'];
+  const headExtra = ['dashboard', 'manage', 'pending', 'opencycle', 'cyclestatus', 'remindnow', 'closecycle', 'publish', 'requirement'];
   assertEqual(allowed('staff'), base, '護理師：通報、換班、選單、說明、我的邀請、我是誰、預假');
   assertEqual(allowed('head'), [...base, ...headExtra].sort(), '護理長：多儀表板、待核准、調整、預班週期');
   assertEqual(allowed('exec'), [...base, ...headExtra, 'dispatch', 'retention'].sort(), '督導：全部');
@@ -700,8 +700,12 @@ function prebookStore() {
   const reqs2 = [];          // prebook_request rows
   const leaves = [];         // insertLeaves 呼叫累積
   const shifts = [];         // insertShifts 呼叫累積
+  const settings = new Map();
   return Object.assign(st, {
-    cycles, reqs2, leaves, shifts,
+    cycles, reqs2, leaves, shifts, settings,
+    async getSetting(k) { return settings.has(k) ? settings.get(k) : null; },
+    async setSetting(k, v) { settings.set(k, v); },
+    async deleteSetting(k) { settings.delete(k); },
     async createCycle(c) { if (cycles.has(c.id)) throw new Error('dup'); cycles.set(c.id, { draft_json: '[]', uncovered_json: '[]', ...c }); },
     async getCycle(id) { return cycles.get(id) ? { ...cycles.get(id) } : null; },
     async updateCycle(id, patch) { Object.assign(cycles.get(id), patch); },
@@ -888,9 +892,12 @@ test('phase2：選單與使用說明——護理師多「我的預假」、護�
 });
 
 /* ══ 圖文選單定義（cloudflare/linebot/richmenu-defs.json）對矩陣：格子送出的文字，該層一定按得動 ══ */
-if (typeof require === 'function') {
-  test('richmenu：四份選單的每一格＝該層打勾的指令；unbound 只送綁定說明／使用說明；座標鋪滿 2500×1686', () => {
-    const defs = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'cloudflare/linebot/richmenu-defs.json'), 'utf8'));
+{
+  test('richmenu：四份選單的每一格＝該層打勾的指令；unbound 只送綁定說明／使用說明；座標鋪滿 2500×1686', async () => {
+    // Node 讀檔、瀏覽器（tests.html）fetch 同一份 json——兩邊跑的是同一個測試
+    const defs = typeof require === 'function'
+      ? JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'cloudflare/linebot/richmenu-defs.json'), 'utf8'))
+      : await (await fetch('cloudflare/linebot/richmenu-defs.json', { cache: 'no-store' })).json();
     assertEqual(defs.map((d) => d.key), ['unbound', 'staff', 'head', 'exec']);
     assertEqual(defs.filter((d) => d.default).map((d) => d.key), ['unbound'], '只有 unbound 是全體預設');
     for (const d of defs) {
@@ -916,3 +923,55 @@ if (typeof require === 'function') {
     assert(staffTexts.includes('我的預假') && headTexts.includes('預班狀態'), 'Phase 2 的格子在正確的層');
   });
 }
+
+/* ══ Phase 3a：生成需求可設定 ══════════════════════════════════════════════════ */
+test('phase3a：需求字詞解析——D2 E1 N1／白班2 小夜1 大夜1／2 1 1 都認得，缺班別、超過 9、亂字都拒', () => {
+  assertEqual(parseRequirementWords('D2 E1 N1'), { D: 2, E: 1, N: 1 });
+  assertEqual(parseRequirementWords('白班2 小夜1 大夜1'), { D: 2, E: 1, N: 1 });
+  assertEqual(parseRequirementWords('2 1 1'), { D: 2, E: 1, N: 1 });
+  assertEqual(parseRequirementWords('n:3 e=2 d1'), { D: 1, E: 2, N: 3 });
+  assertEqual(parseRequirementWords('D2 E1'), null, '缺大夜');
+  assertEqual(parseRequirementWords('D10 E1 N1'), null, '超過 9');
+  assertEqual(parseRequirementWords('兩個白班'), null);
+  assertEqual(classifyCommand('設定需求 D2 E1 N1'), 'requirement');
+  assertEqual(classifyCommand('需求'), 'requirement');
+  assertEqual(classifyCommand('我需求很多'), 'report');
+});
+
+test('phase3a：「需求」看目前值（沒設＝平台預設）；「設定需求」寫 setting 並留痕 before／after；截止生成即用新需求', async () => {
+  const st = prebookStore();
+  const { head } = await opened(st);
+  let out = await requirementFlow({ text: '需求', actor: head, now: Q0, store: st });
+  assert(/白班1／小夜1／大夜1（平台預設，尚未設定）/.test(out.reply.text), out.reply.text);
+  out = await requirementFlow({ text: '設定需求 D3 E2', actor: head, now: Q0, store: st });
+  assert(/看不懂/.test(out.reply.text));
+  out = await requirementFlow({ text: '設定需求 D2 E1 N1', actor: head, now: Q0, store: st });
+  assert(/已設定 內科病房 3A 的生成需求：白班2／小夜1／大夜1（原 白班1／小夜1／大夜1）/.test(out.reply.text), out.reply.text);
+  assertEqual(JSON.parse(st.settings.get('req.MED-3A')), { D: 2, E: 1, N: 1 });
+  assertEqual([st.audit.at(-1).action, st.audit.at(-1).payload.before, st.audit.at(-1).payload.after], ['req.changed', { D: 1, E: 1, N: 1 }, { D: 2, E: 1, N: 1 }]);
+  assertEqual((await unitRequirements(st, 'MED-3A')), { counts: { D: 2, E: 1, N: 1 }, source: 'setting' });
+  assertEqual((await unitRequirements(st, 'ICU')), { counts: { D: 1, E: 1, N: 1 }, source: 'default' });
+  const pushes = await closeCycleFlow({ actor: head, now: '2026-09-20T00:00:00.000Z', store: st });
+  const c = st.cycles.get('MED-3A:2026-10');
+  assertEqual(JSON.parse(c.draft_json).length + JSON.parse(c.uncovered_json).length, 31 * 4, '10 月 31 天 × (2+1+1)');
+  assert(/需求：每日 白班2／小夜1／大夜1＋ACLS/.test(pushes.pushes[0].text), pushes.pushes[0].text);
+  assertEqual(st.audit.find((a) => a.action === 'prebook.generated').payload.requirements, { D: 2, E: 1, N: 1 });
+});
+
+/* ══ Phase 3b：平台登入訊息與日曆連結項（純訊息；簽章由宿主做） ══ */
+test('phase3b：「平台」歸 platform（staff 可用）；登入訊息兩個 page 項；公告／催繳／我的預假（OPEN）帶 prebook.html 的 page 項，宿主換成本人連結', async () => {
+  assertEqual(['平台', '登入平台', '開啟平台', '登入', '平台登入'].map(classifyCommand), Array(5).fill('platform'));
+  assert(commandAllowed('staff', 'platform'));
+  const m = platformLoginMessage({ staff_id: 'N-04', unit: 'MED-3A', tier: 'head' });
+  assert(/N-04｜內科病房 3A｜護理長視角/.test(m.text) && /10 分鐘/.test(m.text), m.text);
+  assertEqual(m.items.map((i) => i.page), ['index.html', 'prebook.html']);
+  const st = prebookStore();
+  const { out, n2 } = await opened(st);
+  assertEqual(out.pushes[0].items[0], { label: '📅 用日曆挑', page: 'prebook.html' });
+  const rm = await remindNowFlow({ actor: await st.getIdentityByUser('Uhead'), now: Q0, store: st });
+  assert(rm.pushes[0].items.some((i) => i.page === 'prebook.html'));
+  const mine = await myPrebookFlow({ actor: n2, store: st });
+  assert(mine.reply.items && mine.reply.items[0].page === 'prebook.html', '週期 OPEN 時附日曆');
+  await closeCycleFlow({ actor: await st.getIdentityByUser('Uhead'), now: '2026-09-20T00:00:00.000Z', store: st });
+  assertEqual((await myPrebookFlow({ actor: n2, store: st })).reply.items, null, '截止後不附日曆');
+});

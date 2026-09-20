@@ -135,14 +135,139 @@ async function lineReplyMessages(channelToken, replyToken, messages) {
 function quickReplyOf(items) {
   return { items: items.map((it) => {
     if (it && it.type === 'action' && it.action) return it;   // 已是 LINE 形狀（使用說明／選單）直接放行
-    const { label, dataStr, text } = it;
+    const { label, dataStr, text, uri } = it;
     return {
       type: 'action',
       action: dataStr !== undefined
         ? { type: 'postback', label: label.slice(0, 20), data: dataStr, displayText: label }
-        : { type: 'message', label: label.slice(0, 20), text },
+        : uri !== undefined
+          ? { type: 'uri', label: label.slice(0, 20), uri }
+          : { type: 'message', label: label.slice(0, 20), text },
     };
   }) };
+}
+
+/* ── Phase 3b：平台以 LINE 身分登入——簽章短效 token（HMAC-SHA256，金鑰由 channel secret 派生）──
+ * link token（10 分鐘）：機器人回給本人的連結帶著它；平台開頁時拿它換 session token（12 小時）。
+ * token = base64url(JSON payload) + '.' + base64url(HMAC)。payload 只有代號、種類、到期，沒有姓名。 */
+const LINK_TTL_MS = 10 * 60_000;
+const SESSION_TTL_MS = 12 * 3600_000;
+const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const b64uDecode = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - s.length % 4) % 4)), (c) => c.charCodeAt(0));
+async function tokenKey(env) {
+  const raw = new TextEncoder().encode('shiftguard-session:' + (env.LINE_CHANNEL_SECRET || ''));
+  const digest = await crypto.subtle.digest('SHA-256', raw);
+  return crypto.subtle.importKey('raw', digest, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+}
+async function signToken(env, payload) {
+  const body = b64u(new TextEncoder().encode(JSON.stringify(payload)));
+  const mac = await crypto.subtle.sign('HMAC', await tokenKey(env), new TextEncoder().encode(body));
+  return `${body}.${b64u(mac)}`;
+}
+async function verifyToken(env, token, kind, nowMs) {
+  try {
+    const [body, mac] = String(token || '').split('.');
+    if (!body || !mac) return null;
+    const ok = await crypto.subtle.verify('HMAC', await tokenKey(env), b64uDecode(mac), new TextEncoder().encode(body));
+    if (!ok) return null;
+    const p = JSON.parse(new TextDecoder().decode(b64uDecode(body)));
+    if (p.k !== kind || typeof p.s !== 'string' || !(p.exp > nowMs)) return null;
+    return p;
+  } catch { return null; }
+}
+/** 訊息項 { label, page } → 本人專屬的簽章網址（未綁定者退回一般網址）；其餘項原樣 */
+async function resolvePageItems(env, platformUrl, items, staffId, nowMs) {
+  if (!items || !items.length) return items;
+  const base = platformUrl.replace(/\/?$/, '/');
+  const out = [];
+  for (const it of items) {
+    if (it && it.page) {
+      const t = staffId ? await signToken(env, { k: 'link', s: staffId, exp: nowMs + LINK_TTL_MS }) : null;
+      out.push({ label: it.label, uri: base + it.page + (t ? `#t=${t}` : '') });
+    } else out.push(it);
+  }
+  return out;
+}
+
+/* ── Phase 3b：平台 API（GitHub Pages 的靜態平台跨域呼叫；CORS 只放行平台來源與本機開發）── */
+function corsHeaders(env, request) {
+  const origin = request.headers.get('origin') || '';
+  const platformOrigin = new URL(env.PLATFORM_URL || 'https://bobyu89.github.io/nursing-agent/').origin;
+  const ok = origin === platformOrigin || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) || origin === 'null';
+  return {
+    'access-control-allow-origin': ok ? origin : platformOrigin,
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-headers': 'authorization, content-type',
+    'access-control-max-age': '600',
+    vary: 'origin',
+  };
+}
+const json = (obj, status, headers) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers } });
+
+async function handleApi(request, env, url) {
+  const cors = corsHeaders(env, request);
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  const store = makeStore(env);
+  if (!store) return json({ error: 'store_disabled', message: STORE_DISABLED_TEXT }, 503, cors);
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+  const platformUrl = env.PLATFORM_URL || 'https://bobyu89.github.io/nursing-agent/';
+
+  // 連結 token → session token
+  if (url.pathname === '/api/session' && request.method === 'GET') {
+    const p = await verifyToken(env, url.searchParams.get('t'), 'link', nowMs);
+    if (!p) return json({ error: 'invalid_link', message: '登入連結無效或已逾時（10 分鐘）。請在 LINE 輸入「平台」重新取得。' }, 401, cors);
+    const identity = await store.getIdentityByStaff(p.s);
+    if (!identity) return json({ error: 'not_bound', message: '此代號目前沒有綁定。' }, 401, cors);
+    const exp = nowMs + SESSION_TTL_MS;
+    const session = await signToken(env, { k: 'sess', s: identity.staff_id, exp });
+    await store.appendAudit({ ts: nowIso, actor: identity.staff_id, action: 'platform.login', payload: { tier: identity.tier, unit: identity.unit, exp: new Date(exp).toISOString() } });
+    return json({ session, exp, identity: { staff_id: identity.staff_id, unit: identity.unit, role: identity.role, tier: identity.tier } }, 200, cors);
+  }
+
+  // 其餘一律要 session
+  const auth = request.headers.get('authorization') || '';
+  const sess = await verifyToken(env, auth.replace(/^Bearer\s+/i, ''), 'sess', nowMs);
+  if (!sess) return json({ error: 'unauthorized', message: '登入已過期或無效。請在 LINE 輸入「平台」重新取得連結。' }, 401, cors);
+  const identity = await store.getIdentityByStaff(sess.s);
+  if (!identity) return json({ error: 'not_bound', message: '此代號目前沒有綁定。' }, 401, cors);
+  const me = { staff_id: identity.staff_id, unit: identity.unit, role: identity.role, tier: identity.tier };
+  const scope = resolveScope(identity, identity.tier);   // head／staff 鎖本單位；exec 全院（§2.5 資料範圍）
+
+  if (url.pathname === '/api/snapshot' && request.method === 'GET') {
+    const snap = await store.loadDb();
+    const inScope = (u) => !scope || u === scope.unit;
+    return json({
+      identity: me, scope: scope ? scope.unit : null, generatedAt: nowIso,
+      staff: snap.staff.filter((s) => inScope(s.unit)),
+      shifts: snap.shifts.filter((s) => inScope(s.unit)),
+    }, 200, cors);
+  }
+
+  if (url.pathname === '/api/prebook' && request.method === 'GET') {
+    const cycle = await store.findCycle({ unit: identity.unit, states: ['OPEN', 'CLOSED', 'GENERATED', 'REVIEW'] });
+    if (!cycle) return json({ identity: me, cycle: null }, 200, cors);
+    const r = await store.getPrebookRequest(cycle.id, identity.staff_id);
+    return json({ identity: me,
+      cycle: { id: cycle.id, month: cycle.month, deadline: cycle.deadline, max_days: cycle.max_days, state: cycle.state, open: cycle.state === 'OPEN' && cycle.deadline > nowIso },
+      request: r ? { state: r.state, dates: JSON.parse(r.dates_json || '[]'), submitted_at: r.submitted_at } : { state: 'PENDING', dates: [], submitted_at: null },
+    }, 200, cors);
+  }
+
+  if (url.pathname === '/api/prebook' && request.method === 'POST') {
+    // 日曆頁送來的日期陣列 → 轉成同一句指令走 prebookFlow：同一套驗證、同一筆留痕，不另開後門
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'bad_json' }, 400, cors); }
+    const dates = Array.isArray(body && body.dates) ? body.dates.map(String) : null;
+    if (!dates) return json({ error: 'bad_request', message: '需要 dates 陣列（YYYY-MM-DD）。' }, 400, cors);
+    const text = dates.length ? `預假 ${dates.join(' ')}` : '預假 無';
+    const out = await prebookFlow({ text, actor: identity, now: nowIso, store });
+    const r = await store.getPrebookRequest((await store.findCycle({ unit: identity.unit, states: ['OPEN'] }) || {}).id || '', identity.staff_id);
+    const ok = /已收到|已記錄/.test(out.reply.text);
+    return json({ ok, message: out.reply.text, request: r ? { state: r.state, dates: JSON.parse(r.dates_json || '[]'), submitted_at: r.submitted_at } : null }, ok ? 200 : 422, cors);
+  }
+
+  return json({ error: 'not_found' }, 404, cors);
 }
 
 async function lineReply(channelToken, replyToken, text, quickItems) {
@@ -424,6 +549,11 @@ async function handleEvent(ev, env, { store, live }) {
     if (out.bound) await applyRichMenu(env, store, userId, out.bound);
     return lineReply(token, ev.replyToken, out.text);
   }
+  /* Phase 3b：「平台」→ 本人專屬的簽章登入連結（未綁定者走一般閘門：classifyCommand → platform 需 staff＝先綁定） */
+  if (store && identity && PLATFORM_LOGIN_RE.test(normalizeCmdText(text))) {
+    const m = platformLoginMessage(identity);
+    return lineReply(token, ev.replyToken, m.text, await resolvePageItems(env, platformUrl, m.items, identity.staff_id, Date.now()));
+  }
   /* 管理者專用：建立四份圖文選單（Worker 自己拿 token 做，本機零設定） */
   if (/^(建立選單|建選單|重建選單|建立圖文選單)$/.test(normalizeCmdText(text))) {
     if (!isAdmin(env, userId)) { secLog('richmenu-denied', userHash(userId)); return lineReply(token, ev.replyToken, '「建立選單」限管理者使用。'); }
@@ -456,13 +586,13 @@ async function handleEvent(ev, env, { store, live }) {
     /* Phase 2：預班迴路（開啟／預假／查詢／進度／催繳／截止）；每個 flow 自己驗單位與狀態 */
     const p2 = { text, actor: identity, now: nowIso, store, db: live };
     const p2flow = { opencycle: openCycleFlow, prebook: prebookFlow, myprebook: myPrebookFlow,
-      cyclestatus: cycleStatusFlow, remindnow: remindNowFlow, closecycle: closeCycleFlow }[cmdKey];
+      cyclestatus: cycleStatusFlow, remindnow: remindNowFlow, closecycle: closeCycleFlow, requirement: requirementFlow }[cmdKey];
     if (p2flow) {
       const o = await p2flow(p2);
       await dispatchPushes(env, store, o.pushes);
-      return lineReply(token, ev.replyToken, o.reply.text, o.reply.items);
+      return lineReply(token, ev.replyToken, o.reply.text, await resolvePageItems(env, platformUrl, o.reply.items, identity.staff_id, Date.now()));
     }
-  } else if (['pending', 'myask', 'manage', 'opencycle', 'prebook', 'myprebook', 'cyclestatus', 'remindnow', 'closecycle'].includes(cmdKey)) {
+  } else if (['pending', 'myask', 'manage', 'opencycle', 'prebook', 'myprebook', 'cyclestatus', 'remindnow', 'closecycle', 'requirement'].includes(cmdKey)) {
     return lineReply(token, ev.replyToken, store ? BIND_HELP : STORE_DISABLED_TEXT);
   }
   /* Phase 1.6 資料範圍：head／staff 鎖在自己的單位，exec／管理者／示範模式全院 */
@@ -513,9 +643,9 @@ async function handleEvent(ev, env, { store, live }) {
 
 /** Phase 1：把 flow 回傳的 pushes（staffId 或 admin）解析成 line_user_id 後推播。查無綁定者記 log、不擋流程。 */
 async function dispatchPushes(env, store, pushes) {
+  const platformUrl = env.PLATFORM_URL || 'https://bobyu89.github.io/nursing-agent/';
   for (const m of pushes || []) {
     const msg = { type: 'text', text: String(m.text || '').slice(0, 4900) };
-    if (m.items && m.items.length) msg.quickReply = quickReplyOf(m.items);
     let targets = [];
     if (m.admin) targets = adminIds(env);
     else if (m.staffId) {
@@ -523,6 +653,8 @@ async function dispatchPushes(env, store, pushes) {
       if (id) targets = [id.line_user_id];
       else console.log(`[PUSH] ${m.staffId} 未綁定，訊息未送出`);
     }
+    // { label, page } 依收件人簽出本人專屬連結（每個人不同）
+    if (m.items && m.items.length) msg.quickReply = quickReplyOf(await resolvePageItems(env, platformUrl, m.items, m.staffId || null, Date.now()));
     for (const to of targets) {
       try { await linePush(env.LINE_CHANNEL_ACCESS_TOKEN, to, [msg]); }
       catch (err) { console.log('[PUSH] failed:', String(err)); }
@@ -532,6 +664,8 @@ async function dispatchPushes(env, store, pushes) {
 
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname.startsWith('/api/')) return handleApi(request, env, url);
     if (request.method !== 'POST') {
       return new Response('shiftguard linebot: alive', { status: 200 });
     }
