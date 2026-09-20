@@ -182,57 +182,93 @@ async function applyRichMenu(env, store, userId, bound) {
 }
 
 /* ── 管理者「建立選單」：Worker 用自己手上的 channel token 建四份圖文選單 ──
- * 定義（richmenu-defs.json）與四張圖由 richmenu.ps1 -ImageOnly 產生、commit 後經 GitHub Pages 公開；
- * 這裡逐份：建立 → 上傳圖 → unbound 設全體預設 → id 寫入 D1 setting → 已綁定者依 tier 整批重掛 → 刪舊版。
- * 本機不需要 token、不需要改 wrangler.toml、不需要重新部署。回傳給管理者的是一段人話報告。 */
+ * 定義（richmenu-defs.json）與四張圖由 richmenu.ps1 -ImageOnly 產生、commit 後經 GitHub Pages 公開。
+ * 一個 webhook 請求裡把四份做完會撞免費方案的單次請求預算（實測：第一份建好、第二份中途被砍、沒有例外可抓），
+ * 所以拆成「工作」存在 D1 setting（richmenu.job），由每分鐘的 cron 一步一步推進——每一步各有自己的預算：
+ *   unbound → staff → head → exec（各：建立 → 上傳圖 → unbound 設全體預設 → id 寫入 setting）
+ *   → relink（已綁定者依 tier bulk link 整批重掛）→ cleanup（清掉自家舊版、留痕、推播報告給管理者）
+ * 指令本身只登記工作並立刻回覆；本機不需要 token、不需要改 wrangler.toml、不需要重新部署。 */
 const RICHMENU_NAME = 'shiftguard-menu';
-async function buildRichMenus(env, store, platformUrl, nowIso) {
+const RICHMENU_JOB_KEY = 'richmenu.job';
+const RICHMENU_STEPS = ['unbound', 'staff', 'head', 'exec', 'relink', 'cleanup'];
+
+async function richMenuJobGet(store) {
+  const raw = await store.getSetting(RICHMENU_JOB_KEY);
+  try { return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+async function richMenuJobStart(store, nowIso) {
+  const job = { started_at: nowIso, next: 0, ids: {}, lines: [] };
+  await store.setSetting(RICHMENU_JOB_KEY, JSON.stringify(job), nowIso);
+  return job;
+}
+
+/** 推進一步；回 { pushes, done }。失敗＝記下原因、結束工作、推播報告（不會卡住下一次「建立選單」） */
+async function richMenuJobTick(env, store, platformUrl, nowIso) {
+  const job = await richMenuJobGet(store);
+  if (!job) return { pushes: [], done: true };
   const token = env.LINE_CHANNEL_ACCESS_TOKEN;
   const auth = { authorization: `Bearer ${token}` };
   const base = platformUrl.replace(/\/?$/, '/') + 'cloudflare/linebot/';
-  const lines = [];
-  const defsRes = await fetch(base + 'richmenu-defs.json');
-  if (!defsRes.ok) return `抓不到選單定義（${defsRes.status}）：${base}richmenu-defs.json\n請先 commit richmenu-defs.json 與四張 png 並等 GitHub Pages 發布後再試。`;
-  const defs = await defsRes.json();
-  const listRes = await fetch('https://api.line.me/v2/bot/richmenu/list', { headers: auth });
-  const old = listRes.ok ? ((await listRes.json()).richmenus || []).filter((m) => String(m.name || '').startsWith(RICHMENU_NAME)) : [];
-  const ids = {};
-  for (const d of defs) {
-    const body = { size: d.size, selected: true, name: `${RICHMENU_NAME}-${d.key}-${nowIso.slice(0, 16).replace(/[-:T]/g, '')}`, chatBarText: d.chatBarText, areas: d.areas };
-    const cr = await fetch('https://api.line.me/v2/bot/richmenu', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    if (!cr.ok) return `[${d.key}] 建立失敗 ${cr.status}：${(await cr.text()).slice(0, 200)}`;
-    const id = (await cr.json()).richMenuId;
-    const img = await fetch(base + d.image);
-    if (!img.ok) return `[${d.key}] 抓不到圖（${img.status}）：${base}${d.image}`;
-    const up = await fetch(`https://api-data.line.me/v2/bot/richmenu/${id}/content`, { method: 'POST', headers: { ...auth, 'content-type': 'image/png' }, body: await img.arrayBuffer() });
-    if (!up.ok) return `[${d.key}] 上傳圖失敗 ${up.status}：${(await up.text()).slice(0, 200)}`;
-    if (d.default) {
-      const df = await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${id}`, { method: 'POST', headers: auth });
-      if (!df.ok) return `[${d.key}] 設全體預設失敗 ${df.status}`;
+  const step = RICHMENU_STEPS[job.next];
+  const finish = async (ok) => {
+    await store.deleteSetting(RICHMENU_JOB_KEY);
+    await store.appendAudit({ ts: nowIso, actor: null, action: ok ? 'richmenu.built' : 'richmenu.failed', payload: { ids: job.ids, started_at: job.started_at, lines: job.lines } });
+    const text = [ok ? '【圖文選單已建立】' : '【圖文選單建立失敗】', ...job.lines, '',
+      ok ? 'id 已存進 D1，之後綁定成功的人會自動掛上對應層的選單；不需要改 wrangler.toml、不需要重新部署。'
+        : '已停止。修好後再輸入一次「建立選單」即可從頭重來（舊的半成品會在最後一步一併清掉）。'].join('\n');
+    return { pushes: [{ admin: true, text, items: null }], done: true };
+  };
+  try {
+    if (job.next < 4) {
+      const defsRes = await fetch(base + 'richmenu-defs.json');
+      if (!defsRes.ok) { job.lines.push(`✗ 抓不到選單定義（${defsRes.status}）：${base}richmenu-defs.json——先 commit 並等 GitHub Pages 發布`); return finish(false); }
+      const d = (await defsRes.json()).find((x) => x.key === step);
+      if (!d) { job.lines.push(`✗ 定義檔裡沒有 ${step}`); return finish(false); }
+      const body = { size: d.size, selected: true, name: `${RICHMENU_NAME}-${d.key}-${job.started_at.slice(0, 16).replace(/[-:T]/g, '')}`, chatBarText: d.chatBarText, areas: d.areas };
+      const cr = await fetch('https://api.line.me/v2/bot/richmenu', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      if (!cr.ok) { job.lines.push(`✗ ${step} 建立失敗 ${cr.status}：${(await cr.text()).slice(0, 200)}`); return finish(false); }
+      const id = (await cr.json()).richMenuId;
+      const img = await fetch(base + d.image);
+      if (!img.ok) { job.lines.push(`✗ ${step} 抓不到圖（${img.status}）：${base}${d.image}`); return finish(false); }
+      const up = await fetch(`https://api-data.line.me/v2/bot/richmenu/${id}/content`, { method: 'POST', headers: { ...auth, 'content-type': 'image/png' }, body: await img.arrayBuffer() });
+      if (!up.ok) { job.lines.push(`✗ ${step} 上傳圖失敗 ${up.status}：${(await up.text()).slice(0, 200)}`); return finish(false); }
+      if (d.default) {
+        const df = await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${id}`, { method: 'POST', headers: auth });
+        if (!df.ok) { job.lines.push(`✗ ${step} 設全體預設失敗 ${df.status}`); return finish(false); }
+      }
+      job.ids[step] = id;
+      await store.setSetting(`richmenu.${step}`, id, nowIso);
+      job.lines.push(`✓ ${step}${d.default ? '（全體預設）' : ''}：${id}`);
+    } else if (step === 'relink') {
+      const identities = await store.listAllIdentities();
+      const byTier = {};
+      for (const i of identities) if (job.ids[i.tier]) (byTier[i.tier] = byTier[i.tier] || []).push(i.line_user_id);
+      let relinked = 0;
+      for (const [tier, userIds] of Object.entries(byTier)) {
+        for (let i = 0; i < userIds.length; i += 500) {
+          const bl = await fetch('https://api.line.me/v2/bot/richmenu/bulk/link', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' },
+            body: JSON.stringify({ richMenuId: job.ids[tier], userIds: userIds.slice(i, i + 500) }) });
+          if (bl.ok) relinked += Math.min(500, userIds.length - i); else job.lines.push(`✗ ${tier} 重掛失敗 ${bl.status}`);
+        }
+      }
+      job.lines.push(`✓ 已綁定者依權責層重掛：${relinked}／${identities.length} 人`);
+    } else if (step === 'cleanup') {
+      const keep = new Set(Object.values(job.ids));
+      const listRes = await fetch('https://api.line.me/v2/bot/richmenu/list', { headers: auth });
+      const old = listRes.ok ? ((await listRes.json()).richmenus || []).filter((m) => String(m.name || '').startsWith(RICHMENU_NAME) && !keep.has(m.richMenuId)) : [];
+      for (const o of old) {
+        const del = await fetch(`https://api.line.me/v2/bot/richmenu/${o.richMenuId}`, { method: 'DELETE', headers: auth });
+        job.lines.push(`${del.ok ? '✓' : '✗'} 舊版已清除：${o.name}`);
+      }
+      return finish(true);
     }
-    ids[d.key] = id;
-    await store.setSetting(`richmenu.${d.key}`, id, nowIso);
-    lines.push(`✓ ${d.key}${d.default ? '（全體預設）' : ''}：${id}`);
+  } catch (err) {
+    job.lines.push(`✗ ${step}：${String(err).slice(0, 200)}`);
+    return finish(false);
   }
-  // 已綁定者依 tier 整批重掛（bulk link，一次最多 500 人）
-  const identities = await store.listAllIdentities();
-  const byTier = {};
-  for (const i of identities) if (ids[i.tier]) (byTier[i.tier] = byTier[i.tier] || []).push(i.line_user_id);
-  let relinked = 0;
-  for (const [tier, userIds] of Object.entries(byTier)) {
-    for (let i = 0; i < userIds.length; i += 500) {
-      const bl = await fetch('https://api.line.me/v2/bot/richmenu/bulk/link', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' },
-        body: JSON.stringify({ richMenuId: ids[tier], userIds: userIds.slice(i, i + 500) }) });
-      if (bl.ok) relinked += Math.min(500, userIds.length - i); else lines.push(`✗ ${tier} 重掛失敗 ${bl.status}`);
-    }
-  }
-  lines.push(`✓ 已綁定者依權責層重掛：${relinked}／${identities.length} 人`);
-  for (const o of old) {
-    const del = await fetch(`https://api.line.me/v2/bot/richmenu/${o.richMenuId}`, { method: 'DELETE', headers: auth });
-    lines.push(`${del.ok ? '✓' : '✗'} 舊版已清除：${o.name}`);
-  }
-  await store.appendAudit({ ts: nowIso, actor: null, action: 'richmenu.built', payload: { ids, relinked, removed: old.length } });
-  return ['【圖文選單已建立】', ...lines, '', 'id 已存進 D1，之後綁定成功的人會自動掛上對應層的選單；不需要改 wrangler.toml、不需要重新部署。'].join('\n');
+  job.next += 1;
+  await store.setSetting(RICHMENU_JOB_KEY, JSON.stringify(job), nowIso);
+  return { pushes: [], done: false };
 }
 
 /* ── 事件處理（流程與訊息組裝在 src/botcore.js）── */
@@ -392,9 +428,10 @@ async function handleEvent(ev, env, { store, live }) {
   if (/^(建立選單|建選單|重建選單|建立圖文選單)$/.test(normalizeCmdText(text))) {
     if (!isAdmin(env, userId)) { secLog('richmenu-denied', userHash(userId)); return lineReply(token, ev.replyToken, '「建立選單」限管理者使用。'); }
     if (!store) return lineReply(token, ev.replyToken, STORE_DISABLED_TEXT);
-    let report;
-    try { report = await buildRichMenus(env, store, platformUrl, nowIso); } catch (err) { report = `建立選單失敗：${String(err)}`; }
-    return lineReply(token, ev.replyToken, report);
+    const running = await richMenuJobGet(store);
+    if (running && Date.now() - Date.parse(running.started_at) < 10 * 60_000) return lineReply(token, ev.replyToken, `圖文選單正在建立中（第 ${running.next + 1}／${RICHMENU_STEPS.length} 步，${running.started_at.slice(11, 16)}Z 開始）。完成後會推播報告給你；卡住超過 10 分鐘再輸入一次。`);
+    await richMenuJobStart(store, nowIso);
+    return lineReply(token, ev.replyToken, `已開始建立圖文選單：每分鐘做一步，共 ${RICHMENU_STEPS.length} 步（四份選單 → 已綁定者重掛 → 清舊版），約 ${RICHMENU_STEPS.length} 分鐘後推播報告給你。`);
   }
   /* 權責閘（docs/LINEBOT-STAGE1.md §2.5）：指令歸類 → 查矩陣 → 不足時誠實回覆，不假裝指令不存在 */
   const cmdKey = classifyCommand(text);
@@ -538,6 +575,10 @@ export default {
       const pb = await prebookCron({ now: nowIso, store });
       if (pb.reminded || pb.closed) console.log(`[CRON] prebook: reminded ${pb.reminded}, closed ${pb.closed}, ${pb.pushes.length} push(es)`);
       await dispatchPushes(env, store, pb.pushes);
+      // 圖文選單建立工作：一步一 tick（各有自己的請求預算），做完推播報告給管理者
+      const rm = await richMenuJobTick(env, store, env.PLATFORM_URL || 'https://bobyu89.github.io/nursing-agent/', nowIso);
+      if (rm.pushes.length) console.log('[CRON] richmenu job finished');
+      await dispatchPushes(env, store, rm.pushes);
     } catch (err) { console.log('[CRON] error:', String(err)); }
   },
 };

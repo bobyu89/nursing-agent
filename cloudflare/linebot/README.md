@@ -102,9 +102,11 @@ cd cloudflare/linebot; npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
 格子＝§2.5 權限矩陣該層打勾的指令（`tests/linebot-stage1.test.js` 會對矩陣逐格檢查）；Worker 在**綁定成功那一刻**依 tier 把對應選單掛給本人（換手機時舊帳號解除、退回預設）。
 
 **建立方式（本機零 token）**：四張圖與定義檔已在 repo（`richmenu-*.png`、`richmenu-defs.json`），GitHub Pages 公開。
-管理者（`ADMIN_USER_ID`）在 LINE 對機器人輸入 **`建立選單`**，Worker 用自己手上的 channel token：逐份建立 → 上傳圖 →
-unbound 設全體預設 → 四個 id 寫進 D1 `setting` 表 → **已綁定者依權責層整批重掛** → 清掉自家舊版（安全換版）→ 回一段報告。
+管理者（`ADMIN_USER_ID`）在 LINE 對機器人輸入 **`建立選單`**，機器人立刻回「已開始」，接著每分鐘的 cron 一步一步做
+（一個 webhook 請求裡做完四份會撞免費方案的單次預算，實測第二份就被砍）：unbound → staff → head → exec（各：建立 → 上傳圖 →
+unbound 設全體預設 → id 寫進 D1 `setting` 表）→ **已綁定者依權責層整批重掛** → 清掉自家舊版（安全換版）→ **推播一段報告給管理者**，約 6 分鐘。
 不需要貼 token、不需要改 `wrangler.toml`、不需要重新部署；之後每次綁定成功都會讀 D1 的 id 掛上。
+失敗會推播原因並停止，修好後再輸入一次即從頭重來（半成品在最後一步一併清掉）。
 
 改文案或格子：改 `richmenu.ps1` 頂端的 `$MENUS` 表 → `powershell -ExecutionPolicy Bypass -File richmenu.ps1 -ImageOnly`
 （用 Windows 內建 GDI+ 重畫四張 2500×1686 的圖並重寫 `richmenu-defs.json`；「開啟平台」格由班守 IP「守守」坐鎮，

@@ -453,7 +453,7 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   globalThis.Date = RealDate;
 }
 
-/* ── 8⁹⁄₁₀. 管理者「建立選單」：Worker 自己拿 token 建四份選單、id 進 D1、已綁定者重掛；之後綁定改讀 D1 的 id ── */
+/* ── 8⁹⁄₁₀. 管理者「建立選單」：登記工作 → cron 每 tick 一步（四份選單／重掛／清舊版）→ 推播報告；之後綁定改讀 D1 的 id ── */
 {
   const RealDate = Date; let skew = 0;
   class FakeDate extends RealDate { constructor(...a) { super(...(a.length ? a : [FakeDate.now()])); } static now() { return RealDate.now() + (skew += 7000); } }
@@ -462,8 +462,20 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   step('非管理者「建立選單」→ 限管理者', /限管理者/.test(replyText()), replyText());
   calls.length = 0;
   await worker.fetch(signed([textEv(ADMIN, '建立選單')]), envD1);
-  const rep = replyText();
-  step('管理者「建立選單」→ 四份都建立、unbound 設全體預設、舊版清掉、不需改 wrangler.toml', /✓ unbound（全體預設）：RM_NEW_1/.test(rep) && /✓ staff：RM_NEW_2/.test(rep) && /✓ head：RM_NEW_3/.test(rep) && /✓ exec：RM_NEW_4/.test(rep) && /舊版已清除：shiftguard-menu-staff/.test(rep) && /不需要改 wrangler\.toml/.test(rep), rep);
+  step('管理者「建立選單」→ 立刻回「已開始，每分鐘一步、共 6 步」，webhook 內不打 LINE 選單 API', /已開始建立圖文選單/.test(replyText()) && /共 6 步/.test(replyText()) && !calls.some((c) => /\/v2\/bot\/richmenu/.test(c.url)), replyText());
+  await worker.fetch(signed([textEv(ADMIN, '建立選單')]), envD1);
+  step('進行中再輸入 → 回「正在建立中（第 1／6 步）」，不重複登記', /正在建立中（第 1／6 步/.test(replyText()), replyText());
+  step('D1 setting 有 richmenu.job（next=0）', JSON.parse(db.prepare("SELECT value FROM setting WHERE key = 'richmenu.job'").get().value).next === 0);
+  calls.length = 0;
+  for (let i = 0; i < 5; i += 1) await worker.scheduled({}, envD1);
+  step('cron 五步後：四份建好、重掛完成、工作仍在（等 cleanup），還沒推報告', db.prepare("SELECT COUNT(*) AS n FROM setting WHERE key LIKE 'richmenu.%' AND key != 'richmenu.job'").get().n === 4
+    && JSON.parse(db.prepare("SELECT value FROM setting WHERE key = 'richmenu.job'").get().value).next === 5
+    && !calls.some((c) => c.url.endsWith('/push') && /圖文選單已建立/.test(c.body.messages[0].text)), JSON.stringify(db.prepare("SELECT key, substr(value,1,80) v FROM setting").all()));
+  await worker.scheduled({}, envD1);
+  const report = calls.filter((c) => c.url.endsWith('/push')).map((c) => c.body).find((b) => /圖文選單已建立/.test(b.messages[0].text));
+  const rep = report ? report.messages[0].text : '';
+  step('第六步 cleanup → 推播報告給管理者：四份 id、unbound 全體預設、重掛人數、舊版清掉、不需改 wrangler.toml', report && report.to === ADMIN && /✓ unbound（全體預設）：RM_NEW_1/.test(rep) && /✓ staff：RM_NEW_2/.test(rep) && /✓ head：RM_NEW_3/.test(rep) && /✓ exec：RM_NEW_4/.test(rep) && /舊版已清除：shiftguard-menu-staff/.test(rep) && /不需要改 wrangler\.toml/.test(rep), rep);
+  step('工作結束：richmenu.job 已刪', !db.prepare("SELECT 1 FROM setting WHERE key = 'richmenu.job'").get());
   const api = (re, m) => calls.filter((c) => re.test(c.url) && (!m || c.method === m));
   step('LINE API 呼叫序：建立 ×4、上傳圖 ×4（有位元組）、全體預設 ×1、bulk link、DELETE 只刪自家舊版', api(/\/v2\/bot\/richmenu$/, 'POST').length === 4
     && api(/api-data\.line\.me\/v2\/bot\/richmenu\/RM_NEW_\d\/content/, 'POST').every((c) => c.body.bytes > 50000) && api(/\/content$/).length === 4
