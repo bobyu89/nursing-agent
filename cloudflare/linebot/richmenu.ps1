@@ -288,14 +288,30 @@ function Draw-MenuImage($menu, [string]$path) {
   $bmp.Dispose()
 }
 
-# ── 1. 畫四張圖 ─────────────────────────────────────────────────
+# ── 1. 畫四張圖＋寫出選單定義 JSON ──────────────────────────────
+# richmenu-defs.json 與四張 png 一起 commit 到 repo，GitHub Pages 會把它們公開；
+# Worker 的管理者指令「建立選單」就從那裡抓定義與圖、用它自己手上的 channel token 建選單，
+# 本機不需要任何 token。座標與下方 §3 相同（六格＋底部細長列）。
+$defs = @()
 foreach ($m in $MENUS) {
   $m.img = Join-Path $PSScriptRoot "richmenu-$($m.key).png"
   Draw-MenuImage $m $m.img
   $size = [math]::Round((Get-Item $m.img).Length / 1KB)
   Write-Host "✓ 選單圖已產生：$($m.img)（${size} KB）"
+  $areas = @()
+  for ($i = 0; $i -lt 6; $i++) {
+    $col = $i % 3; $row = [math]::Floor($i / 3)
+    $areas += @{ bounds = @{ x = [int](833 * $col); y = [int](748 * $row); width = $(if ($col -eq 2) { 834 } else { 833 }); height = $(if ($row -eq 0) { 748 } else { 728 }) }
+                 action = $m.cells[$i].action }
+  }
+  $areas += @{ bounds = @{ x = 0; y = 1476; width = 2500; height = 210 }; action = $m.stripAction }
+  $defs += [ordered]@{ key = $m.key; default = [bool]$m.default; chatBarText = $m.chatBar; image = "richmenu-$($m.key).png"
+                       size = @{ width = $W; height = $H }; areas = $areas }
 }
-if ($ImageOnly) { Write-Host '（-ImageOnly：不呼叫 LINE API，先開圖檔確認樣式）'; exit 0 }
+$defsPath = Join-Path $PSScriptRoot 'richmenu-defs.json'
+[IO.File]::WriteAllText($defsPath, (ConvertTo-Json -InputObject $defs -Depth 8), (New-Object System.Text.UTF8Encoding($false)))
+Write-Host "✓ 選單定義已寫出：$defsPath"
+if ($ImageOnly) { Write-Host '（-ImageOnly：不呼叫 LINE API。commit png＋json 後，在 LINE 對機器人輸入「建立選單」即可）'; exit 0 }
 
 # ── 2. 取得 token ────────────────────────────────────────────────
 Write-Host ''

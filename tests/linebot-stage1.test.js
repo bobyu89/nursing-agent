@@ -886,3 +886,33 @@ test('phase2：選單與使用說明——護理師多「我的預假」、護�
   assertEqual(['開啟預班 10月', '預班狀態', '催繳', '關閉預班', '預假 10/3', '預班 10/3', '我的預假', '預假 無', '我明天預假不能來'].map(classifyCommand),
     ['opencycle', 'cyclestatus', 'remindnow', 'closecycle', 'prebook', 'prebook', 'myprebook', 'prebook', 'report']);
 });
+
+/* ══ 圖文選單定義（cloudflare/linebot/richmenu-defs.json）對矩陣：格子送出的文字，該層一定按得動 ══ */
+if (typeof require === 'function') {
+  test('richmenu：四份選單的每一格＝該層打勾的指令；unbound 只送綁定說明／使用說明；座標鋪滿 2500×1686', () => {
+    const defs = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'cloudflare/linebot/richmenu-defs.json'), 'utf8'));
+    assertEqual(defs.map((d) => d.key), ['unbound', 'staff', 'head', 'exec']);
+    assertEqual(defs.filter((d) => d.default).map((d) => d.key), ['unbound'], '只有 unbound 是全體預設');
+    for (const d of defs) {
+      assertEqual(d.areas.length, 7, `${d.key}：六格＋細長列`);
+      assert(d.areas.every((a) => a.action.type === 'uri' || (a.action.type === 'message' && a.action.text)), `${d.key}：每格都是文字或連結`);
+      const texts = d.areas.filter((a) => a.action.type === 'message').map((a) => a.action.text);
+      if (d.key === 'unbound') {
+        assert(texts.every((t) => /^(綁定說明|使用說明)$/.test(t)), `unbound 只送綁定說明／使用說明：${texts}`);
+      } else {
+        for (const t of texts) {
+          const k = classifyCommand(t);
+          assert(k !== 'report', `${d.key}「${t}」不該被當成通報`);
+          assert(commandAllowed(d.key, k), `${d.key}「${t}」→ ${k} 該層按不動`);
+        }
+      }
+      const cells = d.areas.slice(0, 6);
+      assert(cells.every((a) => a.bounds.width >= 833 && a.bounds.height >= 728), `${d.key}：格子尺寸`);
+      const b = d.areas[6].bounds;
+      assertEqual([b.x, b.y, b.width, b.height], [0, 1476, 2500, 210], `${d.key}：細長列整條可點`);
+    }
+    const staffTexts = defs[1].areas.map((a) => a.action.text).filter(Boolean);
+    const headTexts = defs[2].areas.map((a) => a.action.text).filter(Boolean);
+    assert(staffTexts.includes('我的預假') && headTexts.includes('預班狀態'), 'Phase 2 的格子在正確的層');
+  });
+}

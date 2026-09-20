@@ -1663,7 +1663,7 @@ if (typeof module !== 'undefined' && module.exports) {
     BIND_CODE_TTL_MIN, BIND_HELP, STORE_DISABLED_TEXT,
     genBindCode, isoPlusMinutes, stage1Command, issueBindCodeFlow, bindFlow, auditCanonical,
     TIERS, TIER_LABEL, COMMAND_MIN_TIER, COMMAND_LABEL,
-    tierFromWord, classifyCommand, commandAllowed, tierDeniedText,
+    tierFromWord, classifyCommand, commandAllowed, tierDeniedText, normalizeCmdText,
     // Phase 1 替班迴路
     SUB_TOP_N, genRequestId, timeoutMinutesFor, gapLabel, approvalMessage,
     reportFlow, approveFlow, skipFlow, rejectFlow, answerFlow, expireFlow, advanceAsk,

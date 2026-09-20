@@ -19,7 +19,7 @@ node_modules/
 tmp/
 .wrangler/
 cloudflare/linebot/richmenu.png
-cloudflare/linebot/richmenu-*.png
+# richmenu-*.png 與 richmenu-defs.json 不忽略：Worker「建立選單」從 GitHub Pages 抓它們
 
 # 內部文件（商業模式／市場規模），依 docs/BLUEPRINT.md 不入公開 repo
 private/

@@ -163,6 +163,20 @@ export function createD1Store(db, { auditCanonical }) {
       await db.batch(stmts);
     },
 
+    /* ── 系統設定 key/value（圖文選單 id 等）──────────────── */
+    async getSetting(key) {
+      const r = await db.prepare('SELECT value FROM setting WHERE key = ?').bind(key).first();
+      return r ? r.value : null;
+    },
+    async setSetting(key, value, nowIso) {
+      await db.prepare('INSERT OR REPLACE INTO setting (key, value, updated_at) VALUES (?,?,?)').bind(key, value, nowIso).run();
+    },
+    /** 全部已綁定者（建選單後整批重掛用） */
+    async listAllIdentities() {
+      const { results } = await db.prepare('SELECT line_user_id, staff_id, unit, tier FROM identity').all();
+      return results;
+    },
+
     /* ── Phase 2：預班迴路（docs/LINEBOT-STAGE1.md §3）──────── */
     async createCycle(c) {
       await db.prepare('INSERT INTO prebook_cycle (id, unit, month, deadline, max_days, state, opened_by, opened_at) VALUES (?,?,?,?,?,?,?,?)')

@@ -99,21 +99,17 @@ cd cloudflare/linebot; npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
 | head | 戰情儀表板／待核准／通報缺班／換班簽核／預班／開啟平台 | 綁定為護理長者 |
 | exec | 戰情儀表板／調度棋盤／負荷雷達／待核准／換班預檢／開啟平台 | 綁定為督導／主任者 |
 
-格子＝§2.5 權限矩陣該層打勾的指令；Worker 在**綁定成功那一刻**依 tier 把對應選單掛給本人（換手機時舊帳號解除、退回預設）。
-本目錄的 `richmenu.ps1` 會自動：用 Windows 內建 GDI+ 畫出四張與平台同視覺的 2500×1686 選單圖
-（「開啟平台」格由班守 IP「守守」（北極熊）坐鎮）→ 逐份呼叫 Rich Menu API 建立 → 上傳圖片 →
-unbound 設為全體預設 → 清掉舊版（安全換版）→ **印出三個 id，貼進 `wrangler.toml` 的 `[vars]` 後重新部署。**
-「開啟平台」的動作在腳本頂端設定了 `$LIFF_ID`（與 `wrangler.toml` 同步）時走
-`liff.line.me` 全高視窗，與 bot 按鈕行為一致；清空則退回一般網址：
+格子＝§2.5 權限矩陣該層打勾的指令（`tests/linebot-stage1.test.js` 會對矩陣逐格檢查）；Worker 在**綁定成功那一刻**依 tier 把對應選單掛給本人（換手機時舊帳號解除、退回預設）。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File richmenu.ps1
-```
+**建立方式（本機零 token）**：四張圖與定義檔已在 repo（`richmenu-*.png`、`richmenu-defs.json`），GitHub Pages 公開。
+管理者（`ADMIN_USER_ID`）在 LINE 對機器人輸入 **`建立選單`**，Worker 用自己手上的 channel token：逐份建立 → 上傳圖 →
+unbound 設全體預設 → 四個 id 寫進 D1 `setting` 表 → **已綁定者依權責層整批重掛** → 清掉自家舊版（安全換版）→ 回一段報告。
+不需要貼 token、不需要改 `wrangler.toml`、不需要重新部署；之後每次綁定成功都會讀 D1 的 id 掛上。
 
-執行時會提示貼上 **Channel access token**（LINE Developers → Messaging API；請用原本那組——
-重新 Issue 會讓 Worker 裡的舊 token 失效，屆時記得同步 `npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN`）。
-只想預覽圖片：加 `-ImageOnly`（產生 `richmenu-unbound/staff/head/exec.png`）。改文案或格子後重跑即可換版；
-換版後 id 會變，記得更新 `wrangler.toml` 再部署。已綁定的既有使用者重新綁定一次即掛上新版。
+改文案或格子：改 `richmenu.ps1` 頂端的 `$MENUS` 表 → `powershell -ExecutionPolicy Bypass -File richmenu.ps1 -ImageOnly`
+（用 Windows 內建 GDI+ 重畫四張 2500×1686 的圖並重寫 `richmenu-defs.json`；「開啟平台」格由班守 IP「守守」坐鎮，
+動作依腳本頂端 `$LIFF_ID` 走 `liff.line.me` 全高視窗）→ commit、等 Pages 發布 → 再輸入一次 `建立選單` 即換版。
+腳本不帶 `-ImageOnly` 的舊路徑（本機貼 token 直接呼叫 LINE API）仍保留，給沒有 Worker 的部署用。
 
 原理：圖文選單只是「代替使用者送出文字／開連結」的介面層——按格子等於輸入指令文字，
 由 Worker 的指令路由接手。不想用腳本的話，manager.line.biz → 圖文選單也能手動建立
