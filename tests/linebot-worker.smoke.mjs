@@ -319,6 +319,31 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   step('「我的邀請」→ 重送該筆詢問，附接／不接、剩餘分鐘', new RegExp(rq3).test(replyText()) && /還有約/.test(replyText()) && lastReply().quickReply.items.length === 2, replyText().slice(0, 100));
   await worker.fetch(signed([textEv(U6b, '我的邀請')]), envD1);
   step('沒被問到的人「我的邀請」→ 誠實說沒有', /沒有等你回覆/.test(replyText()));
+
+  // ── Phase 1.6：資料範圍 ──
+  calls.length = 0;
+  await worker.fetch(signed([textEv(USER, '儀表板')]), envD1);                       // USER＝N-04 head，MED-3A
+  let hdr = JSON.stringify(lastReply());
+  step('護理長「儀表板」→ 本單位（內科 3A）', lastReply()?.type === 'flex' && hdr.includes('內科病房 3A'), hdr.slice(0, 100));
+  await worker.fetch(signed([textEv(USER, '儀表板 ICU')]), envD1);
+  hdr = JSON.stringify(lastReply());
+  step('護理長「儀表板 ICU」→ 仍鎖本單位並附註', hdr.includes('內科病房 3A') && hdr.includes('已改顯示本單位'), hdr.slice(0, 120));
+  const EXEC2 = 'Uexec0000000000000000000000000000';                                 // N-03 exec（前面已綁）
+  await worker.fetch(signed([textEv(EXEC2, '儀表板 ICU')]), envD1);
+  hdr = JSON.stringify(lastReply());
+  step('督導「儀表板 ICU」→ 加護病房', hdr.includes('加護病房') && !hdr.includes('已改顯示'), hdr.slice(0, 100));
+  await worker.fetch(signed([textEv(USER, '負荷')]), envD1);
+  step('護理長「負荷」→ 權責閘擋下（負荷屬督導）', /負荷雷達.*督導／主任以上/.test(replyText()), replyText());
+  await worker.fetch(signed([textEv(EXEC2, '負荷')]), envD1);
+  step('督導「負荷」→ 全院', /【負荷雷達】全院/.test(replyText()), replyText().slice(0, 60));
+  await worker.fetch(signed([textEv(OTHER, '選單')]), envD1);                         // OTHER＝N-02 staff
+  let ql = lastReply().quickReply.items.map((i) => i.action.label).join('|');
+  step('護理師「選單」→ 沒有儀表板／調度／負荷／待核准，有通報與我的邀請', !/儀表板|調度|負荷|待核准/.test(ql) && /通報缺班/.test(ql) && /我的邀請/.test(ql), ql);
+  await worker.fetch(signed([textEv(USER, '選單')]), envD1);
+  ql = lastReply().quickReply.items.map((i) => i.action.label).join('|');
+  step('護理長「選單」→ 有儀表板與待核准、沒有調度／負荷', /儀表板/.test(ql) && /待核准/.test(ql) && !/調度|負荷/.test(ql), ql);
+  await worker.fetch(signed([textEv(OTHER, '使用說明')]), envD1);
+  step('護理師「使用說明」→ 護理師視角、不提調度', /護理師視角/.test(replyText()) && !/・調度/.test(replyText()), replyText().slice(0, 60));
   Date.now = realNow;
 }
 

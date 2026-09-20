@@ -627,3 +627,63 @@ test('phase15：我是誰／綁定回傳——whoamiText 含代號、單位、�
   const g = reportGuideMessage();
   assert(g.items.length === 3 && g.items.every((i) => i.text && !i.dataStr), '通報引導用 message 型按鈕');
 });
+
+/* ══ Phase 1.6：資料範圍——矩陣管「能不能按」，範圍管「按了看到誰的」（§2.5）══════════ */
+
+test('phase16：resolveScope——head／staff 鎖本單位，exec 全院，無身分全院', () => {
+  assertEqual(resolveScope({ unit: 'ICU' }, 'head'), { unit: 'ICU' });
+  assertEqual(resolveScope({ unit: 'ICU' }, 'staff'), { unit: 'ICU' });
+  assertEqual(resolveScope({ unit: 'ICU' }, 'exec'), null);
+  assertEqual(resolveScope(null, 'staff'), null, '示範模式無身分→全院（Stage 0 語義）');
+});
+
+test('phase16：parseUnitWord／dashboardUnit——代碼或名稱都認得；有範圍者永遠鎖本單位並附註；全院者可指定', () => {
+  assertEqual(parseUnitWord('ICU'), 'ICU');
+  assertEqual(parseUnitWord('icu'), 'ICU');
+  assertEqual(parseUnitWord('內科'), 'MED-3A');
+  assertEqual(parseUnitWord('外科病房 5B'), 'SUR-5B');
+  assertEqual(parseUnitWord('xyz'), null);
+  assertEqual(dashboardUnit('儀表板', null), { unit: 'MED-3A', note: '' });
+  assertEqual(dashboardUnit('儀表板 ICU', null), { unit: 'ICU', note: '' });
+  assertEqual(dashboardUnit('戰情 外科', null), { unit: 'SUR-5B', note: '' });
+  assertEqual(dashboardUnit('儀表板 ICU', { unit: 'MED-3A' }).unit, 'MED-3A', '有範圍者指定別單位仍鎖本單位');
+  assert(/已改顯示本單位/.test(dashboardUnit('儀表板 ICU', { unit: 'MED-3A' }).note));
+  assertEqual(dashboardUnit('儀表板', { unit: 'SUR-5B' }), { unit: 'SUR-5B', note: '' });
+});
+
+test('phase16：儀表板依單位——標題與代班榜只含該單位；指定別單位的附註出現在標題', () => {
+  const flexOf = (unit, note) => JSON.stringify(buildDashboardFlex('https://x/', '', undefined, unit, note));
+  const med = flexOf('MED-3A', '');
+  const icu = flexOf('ICU', '');
+  assert(med.includes('內科病房 3A') && !med.includes('加護病房・'), 'MED-3A 版標題');
+  assert(icu.includes('加護病房') , 'ICU 版標題');
+  const medIds = STAFF.filter((s) => s.unit === 'MED-3A').map((s) => s.id);
+  const otherIds = STAFF.filter((s) => s.unit !== 'MED-3A').map((s) => s.id);
+  assert(medIds.some((id) => med.includes(id)) && !otherIds.some((id) => med.includes(id)), '代班榜只列本單位人員');
+  assert(flexOf('MED-3A', '你的範圍是 內科病房 3A').includes('你的範圍是'), '附註進標題');
+});
+
+test('phase16：負荷雷達依範圍——有範圍時只列本單位、不做跨單位比較；全院時列全部', () => {
+  const all = retentionCommand('負荷', 'https://x/', undefined, null).text;
+  const med = retentionCommand('負荷', 'https://x/', undefined, { unit: 'MED-3A' }).text;
+  assert(/【負荷雷達】全院/.test(all) && /【負荷雷達】內科病房 3A/.test(med));
+  const otherUnitNames = Object.entries(UNITS).filter(([k]) => k !== 'MED-3A').map(([, n]) => n);
+  assert(!otherUnitNames.some((n) => med.includes(`（${n}）`)), '範圍內不出現別單位的人');
+  assert(!/夜班分佈不均/.test(med), '有範圍時不做跨單位比較');
+});
+
+test('phase16：選單與使用說明依矩陣過濾——護理師看不到儀表板／調度／負荷；督導全開', () => {
+  const labels = (t) => menuMessage('https://x/', '', t).quickReply.items.map((i) => i.action.label);
+  const st = labels('staff'), hd = labels('head'), ex = labels('exec');
+  assert(!st.some((l) => /儀表板|調度|負荷|待核准/.test(l)) && st.some((l) => /通報缺班/.test(l)) && st.some((l) => /我的邀請/.test(l)), st.join());
+  assert(hd.some((l) => /儀表板/.test(l)) && hd.some((l) => /待核准/.test(l)) && !hd.some((l) => /調度|負荷/.test(l)), hd.join());
+  assert(ex.some((l) => /調度/.test(l)) && ex.some((l) => /負荷/.test(l)), ex.join());
+  assert(labels('exec').length <= 13 && labels('staff').length >= 4, 'LINE 上限 13、護理師仍有可用鍵');
+
+  const g = (t) => guideCommand('使用說明', 'https://x/', '', t);
+  assert(/護理師視角/.test(g('staff').text) && !/・調度/.test(g('staff').text) && !/・待核准/.test(g('staff').text) && /・我的邀請/.test(g('staff').text));
+  assert(/・待核准/.test(g('head').text) && /本單位/.test(g('head').text) && !/・調度/.test(g('head').text));
+  assert(/・調度/.test(g('exec').text) && /儀表板 ICU/.test(g('exec').text));
+  assertEqual(g('staff').items.length, 3, '護理師：換班、通報、開啟平台');
+  assertEqual(g('exec').items.length, 5);
+});

@@ -133,12 +133,16 @@ async function lineReplyMessages(channelToken, replyToken, messages) {
 /** 回覆文字訊息（可含快速回覆按鈕） */
 /** botcore 的 items → LINE quickReply：{label, dataStr}＝postback；{label, text}＝直接送出文字 */
 function quickReplyOf(items) {
-  return { items: items.map(({ label, dataStr, text }) => ({
-    type: 'action',
-    action: dataStr !== undefined
-      ? { type: 'postback', label: label.slice(0, 20), data: dataStr, displayText: label }
-      : { type: 'message', label: label.slice(0, 20), text },
-  })) };
+  return { items: items.map((it) => {
+    if (it && it.type === 'action' && it.action) return it;   // 已是 LINE 形狀（使用說明／選單）直接放行
+    const { label, dataStr, text } = it;
+    return {
+      type: 'action',
+      action: dataStr !== undefined
+        ? { type: 'postback', label: label.slice(0, 20), data: dataStr, displayText: label }
+        : { type: 'message', label: label.slice(0, 20), text },
+    };
+  }) };
 }
 
 async function lineReply(channelToken, replyToken, text, quickItems) {
@@ -338,14 +342,17 @@ async function handleEvent(ev, env, { store, live }) {
   } else if (['pending', 'myask', 'manage'].includes(cmdKey)) {
     return lineReply(token, ev.replyToken, store ? BIND_HELP : STORE_DISABLED_TEXT);
   }
+  /* Phase 1.6 資料範圍：head／staff 鎖在自己的單位，exec／管理者／示範模式全院 */
+  const scope = resolveScope(identity, tier);
   if (DASHBOARD_RE.test(text)) {
-    return lineReplyMessages(token, ev.replyToken, [buildDashboardFlex(platformUrl, liffUrl, live)]);
+    const du = dashboardUnit(text, scope);
+    return lineReplyMessages(token, ev.replyToken, [buildDashboardFlex(platformUrl, liffUrl, live, du.unit, du.note)]);
   }
   if (MENU_RE.test(text)) {
-    return lineReplyMessages(token, ev.replyToken, [menuMessage(platformUrl, liffUrl)]);
+    return lineReplyMessages(token, ev.replyToken, [menuMessage(platformUrl, liffUrl, tier)]);
   }
   // 指令四兄弟：換班預檢／調度棋盤／負荷雷達／使用說明（皆為確定性回覆，未命中回 null）
-  const extra = extraCommand(text, platformUrl, liffUrl, live);
+  const extra = extraCommand(text, platformUrl, liffUrl, live, { tier, scope });
   if (extra) return lineReply(token, ev.replyToken, extra.text, extra.items);
   globalThis.GAP_EVENT.raisedAt = `${todayTaipei()} 08:00`;   // 「明天」以台灣今天為基準
   globalThis.LLM.mode = 'mock';                                // 恆為確定性解析
