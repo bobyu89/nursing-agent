@@ -245,11 +245,23 @@ function flexBar(label, right, pct, color) {
  * 深鏈（#swap 等）維持一般網址：LIFF 會把 # 轉進 liff.state，
  * 平台頁未載入 LIFF SDK（CSP 嚴格、零外部腳本），錨點會丟失——誠實取捨。
  */
-function buildDashboardFlex(platformUrl, liffUrl, db) {
+function buildDashboardFlex(platformUrl, liffUrl, db, unit, note) {
   const C = FLEX_C;
   const eng = platformEngine(db);
   const live = liveData(db);
-  const UNIT = 'MED-3A';
+  const UNIT = unit || 'MED-3A';
+  if (!live.staff.some((s) => s.unit === UNIT)) {
+    // 這個單位在目前資料裡沒有任何人員（例：示範資料只有內科 3A）——誠實說，不硬畫
+    return {
+      type: 'flex', altText: `班守戰情：${UNITS[UNIT] || UNIT} 目前沒有人員與班表資料`,
+      contents: { type: 'bubble', body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: [
+        { type: 'text', text: '班守 ShiftGuard｜本週戰情', weight: 'bold', size: 'md', color: C.ink },
+        { type: 'text', text: `${UNITS[UNIT] || UNIT}${note ? '・' + note : ''}`, size: 'xs', color: C.faint, margin: 'sm', wrap: true },
+        { type: 'text', text: '這個單位目前沒有人員與班表資料，無法計算缺口、補足率與代班分佈。', size: 'sm', color: C.ink, wrap: true, margin: 'lg' },
+        { type: 'text', text: '請確認人員快照是否已上傳（tools/snapshot-to-sql.cjs），或改看其他單位。', size: 'xs', color: C.faint, wrap: true, margin: 'md' },
+      ] } },
+    };
+  }
   const gap = eng.workforceGapAnalysis({ dates: WEEK_DATES, demand: UNIT_MIN_STAFF });
   const cap = eng.capabilityAnalysis({ dates: WEEK_DATES, unit: UNIT });
 
@@ -289,7 +301,7 @@ function buildDashboardFlex(platformUrl, liffUrl, db) {
   });
   const s1 = RULE_REGISTRY.soft.find((r) => r.code === 'S1');
   const sat = (s1 && s1.param ? s1.param.value : 5);
-  const topStandby = [...live.staff]
+  const topStandby = live.staff.filter((s) => s.unit === UNIT)
     .sort((a, b) => b.standbyCount30d - a.standbyCount30d || (a.id < b.id ? -1 : 1)).slice(0, 6);
   const maxStandby = Math.max(sat, topStandby.length ? topStandby[0].standbyCount30d : 1);
   const fairBars = topStandby.map((s) => {
@@ -313,7 +325,7 @@ function buildDashboardFlex(platformUrl, liffUrl, db) {
         type: 'box', layout: 'vertical', paddingAll: 'lg',
         contents: [
           { type: 'text', text: '班守 ShiftGuard｜本週戰情', weight: 'bold', size: 'md', color: C.ink },
-          { type: 'text', text: `${UNITS[UNIT]}・本週（示範資料）`, size: 'xs', color: C.faint, margin: 'sm' },
+          { type: 'text', text: `${UNITS[UNIT]}・本週（示範資料）${note ? '・' + note : ''}`, size: 'xs', color: C.faint, margin: 'sm', wrap: true },
           { type: 'separator', margin: 'lg', color: C.line },
           { type: 'text', margin: 'lg', size: 'sm', color: C.ink, wrap: true,
             text: `缺口方程式：需 ${need} − 排 ${sched} ＝ 缺 ${gapCells.length} → 可吸收 ${fills.length} ＝ 殘餘 ${residual}` },
@@ -467,19 +479,20 @@ function dispatchCommand(text, platformUrl, db) {
 
 const RETENTION_RE = /^(?:負荷|留任|雷達)$/;
 
-function retentionCommand(text, platformUrl, db) {
+function retentionCommand(text, platformUrl, db, scope) {
   if (!RETENTION_RE.test(text)) return null;
   const led = platformEngine(db).workloadLedger(WEEK_DATES);
-  const flagged = led.staff.filter((x) => x.flags.length > 0);
+  const inScope = (unit) => !scope || !scope.unit || unit === scope.unit;
+  const flagged = led.staff.filter((x) => x.flags.length > 0 && inScope(x.staff.unit));
   const lines = flagged.length
     ? flagged.map((x) => `⚠ ${x.staff.id}（${UNITS[x.staff.unit] || x.staff.unit}）\n` +
       x.flags.map((f) => `　・${f.text}`).join('\n'))
     : ['以目前班表與門檻，沒有人落入高負荷名單。'];
-  const uneven = led.units.filter((u) => u.staffCount > 0 && u.nightMax - u.nightMin >= 3);
+  const uneven = (scope && scope.unit) ? [] : led.units.filter((u) => u.staffCount > 0 && u.nightMax - u.nightMin >= 3);
 
   return {
     text: [
-      '【負荷雷達】本週（非離職預測——是確定性的負荷會計）', '',
+      `【負荷雷達】${scope && scope.unit ? UNITS[scope.unit] || scope.unit : '全院'}・本週（非離職預測——是確定性的負荷會計）`, '',
       ...lines, '',
       ...(uneven.length ? [uneven.map((u) => `・${UNITS[u.unit] || u.unit} 夜班分佈不均（最多 ${u.nightMax}／最少 ${u.nightMin}）`).join('\n'), ''] : []),
       '完整五維帳與單位比較：' + deepLink(platformUrl, 'retention'),
@@ -493,26 +506,31 @@ function retentionCommand(text, platformUrl, db) {
 const GUIDE_RE = /^(?:使用說明|說明|教學|指南|怎麼用|使用方式)$/;
 
 /** 使用說明：完整教學一頁看完，附「照著打」的快速按鈕（圖文選單底部說明列也指到這裡） */
-function guideCommand(text, platformUrl, liffUrl) {
+function guideCommand(text, platformUrl, liffUrl, tier = 'exec') {
   if (!GUIDE_RE.test(text)) return null;
+  const can = (k) => commandAllowed(tier, k);
+  const cmds = [
+    can('dashboard') && '・儀表板 —— 本週戰情卡：缺口、補足率、代班分佈' + (can('dispatch') ? '（可加單位：儀表板 ICU）' : '（本單位）'),
+    can('pending') && '・待核准 —— 本單位待你核准的替班請求，附核准／駁回／調整鍵',
+    can('swap') && '・換班 N-01 8/3 N-02 8/5 —— 互換前先預檢，\n　兩人各自重跑 H1–H10，紅燈逐條附規則代碼',
+    can('myask') && '・我的邀請 —— 重看正在等你回覆的替班詢問',
+    can('dispatch') && '・調度 8/9 大夜 —— 全院缺口🔴貼線🟡餘裕🟢，\n　借調建議含守恆律檢查（不讓支援單位變缺口）',
+    can('retention') && '・負荷 —— 高負荷名單，誰一直在扛看得見',
+    can('whoami') && '・我是誰 —— 綁定身分與權責層',
+    '・選單 —— 隨時叫出功能快速按鈕',
+  ].filter(Boolean);
   return {
     text: [
-      '【班守 ShiftGuard】使用說明',
+      `【班守 ShiftGuard】使用說明（${TIER_LABEL[tier] || tier}視角）`,
       '',
       '■ 通報缺班（最常用）',
       '直接把請假訊息傳給我，例如：',
       '「護理長不好意思，我明天白班發燒沒辦法上」',
       '沒寫到的條件我會用按鈕問你——不臆測、不亂猜；',
-      '解析完成後給合規替補建議，每一位都附排序依據。',
+      '條件齊全後建立替班請求、送護理長核准；核准後機器人逐一詢問候選，每一步留痕。',
       '',
       '■ 快速指令',
-      '・儀表板 —— 本週戰情卡：缺口、補足率、代班分佈',
-      '・換班 N-01 8/3 N-02 8/5 —— 互換前先預檢，',
-      '　兩人各自重跑 H1–H10，紅燈逐條附規則代碼',
-      '・調度 8/9 大夜 —— 全院缺口🔴貼線🟡餘裕🟢，',
-      '　借調建議含守恆律檢查（不讓支援單位變缺口）',
-      '・負荷 —— 高負荷名單，誰一直在扛看得見',
-      '・選單 —— 隨時叫出功能快速按鈕',
+      ...cmds,
       '',
       '■ 小抄',
       '日期可寫 8/9，也可寫「明天」「禮拜天」；',
@@ -524,41 +542,70 @@ function guideCommand(text, platformUrl, liffUrl) {
       '我不代替主管決定——正式核准與決策留痕請回平台。',
     ].join('\n'),
     items: [
-      { type: 'action', action: { type: 'message', label: '📊 試試儀表板', text: '儀表板' } },
+      can('dashboard') && { type: 'action', action: { type: 'message', label: '📊 試試儀表板', text: '儀表板' } },
       { type: 'action', action: { type: 'message', label: '🔁 試試換班預檢', text: '換班 N-01 8/3 N-02 8/5' } },
-      { type: 'action', action: { type: 'message', label: '🧭 試試調度棋盤', text: '調度 8/9 大夜' } },
-      { type: 'action', action: { type: 'message', label: '📝 通報範例', text: '護理長不好意思，我明天白班發燒沒辦法上，很抱歉' } },
+      can('dispatch') && { type: 'action', action: { type: 'message', label: '🧭 試試調度棋盤', text: '調度 8/9 大夜' } },
+      { type: 'action', action: { type: 'message', label: '📝 通報缺班', text: '通報缺班' } },
       { type: 'action', action: { type: 'uri', label: '🌐 開啟平台', uri: liffUrl || platformUrl } },
-    ],
+    ].filter(Boolean),
   };
 }
 
 /** 四個指令的統一入口：命中回訊息物件，未命中回 null（宿主一行接入） */
-function extraCommand(text, platformUrl, liffUrl, db) {
+function extraCommand(text, platformUrl, liffUrl, db, ctx = {}) {
   return swapCommand(text, platformUrl, db)
     || dispatchCommand(text, platformUrl, db)
-    || retentionCommand(text, platformUrl, db)
-    || guideCommand(text, platformUrl, liffUrl);
+    || retentionCommand(text, platformUrl, db, ctx.scope)
+    || guideCommand(text, platformUrl, liffUrl, ctx.tier || 'exec');
 }
 
-const DASHBOARD_RE = /^(儀表板|戰情|狀態|缺口|dashboard)$/i;
+const DASHBOARD_RE = /^(儀表板|戰情|狀態|缺口|dashboard)(?:\s+(\S+))?$/i;   // 尾端可指定單位（exec 用）
+
+/* ── 資料範圍（Phase 1.6，docs/LINEBOT-STAGE1.md §2.5）──
+ * scope = { unit } 表示只看該單位；null 表示全院。head／staff 鎖在自己的單位，exec 與管理者全院。 */
+function resolveScope(identity, tier) {
+  if (TIERS[tier] >= TIERS.exec) return null;
+  return identity && identity.unit ? { unit: identity.unit } : null;
+}
+/** 把「儀表板 ICU」「儀表板 內科」之類的尾端字詞解析成單位代碼；認不得回 null */
+function parseUnitWord(w) {
+  if (!w) return null;
+  const t = String(w).trim();
+  const byCode = Object.keys(UNITS).find((k) => k.toLowerCase() === t.toLowerCase());
+  if (byCode) return byCode;
+  const byName = Object.entries(UNITS).find(([, name]) => name.includes(t) || t.includes(name.replace(/病房.*$/, '')));
+  return byName ? byName[0] : null;
+}
+/** 儀表板要看哪個單位：有範圍就鎖範圍（指定別單位時附註），全院者可指定，預設示範單位 */
+function dashboardUnit(text, scope) {
+  const m = DASHBOARD_RE.exec(String(text || '').trim());
+  const asked = m ? parseUnitWord(m[2]) : null;
+  if (scope && scope.unit) {
+    return { unit: scope.unit, note: asked && asked !== scope.unit ? `你的範圍是 ${UNITS[scope.unit]}，已改顯示本單位` : '' };
+  }
+  return { unit: asked || 'MED-3A', note: '' };
+}
 const MENU_RE = /^(選單|功能|幫助|menu|help)$/i;
 
 /** 功能選單：快速按鈕（圖文選單 Rich Menu 的輕量版，隨時可叫出） */
-function menuMessage(platformUrl, liffUrl) {
+/** 功能選單：依權責層過濾（§2.5 矩陣），示範模式（無身分）視同 exec 全開 */
+function menuMessage(platformUrl, liffUrl, tier = 'exec') {
+  const all = [
+    ['dashboard',   { type: 'message', label: '📊 戰情儀表板', text: '儀表板' }],
+    ['pending',     { type: 'message', label: '✅ 待核准', text: '待核准' }],
+    ['reportguide', { type: 'message', label: '📝 通報缺班', text: '通報缺班' }],
+    ['swap',        { type: 'message', label: '🔁 換班預檢', text: '換班' }],
+    ['myask',       { type: 'message', label: '🔔 我的邀請', text: '我的邀請' }],
+    ['dispatch',    { type: 'message', label: '🧭 調度棋盤', text: '調度' }],
+    ['retention',   { type: 'message', label: '📈 負荷雷達', text: '負荷' }],
+    ['menu',        { type: 'uri', label: '🌐 開啟平台', uri: liffUrl || platformUrl }],
+    ['guide',       { type: 'message', label: '📖 使用說明', text: '使用說明' }],
+    ['menu',        { type: 'uri', label: 'ℹ️ 功能介紹', uri: platformUrl.replace(/\/?$/, '/') + 'home.html' }],
+  ];
   return {
     type: 'text',
     text: '請選擇功能（也可以直接把請假訊息傳給我）：',
-    quickReply: { items: [
-      { type: 'action', action: { type: 'message', label: '📊 戰情儀表板', text: '儀表板' } },
-      { type: 'action', action: { type: 'message', label: '🔁 換班預檢', text: '換班' } },
-      { type: 'action', action: { type: 'message', label: '🧭 調度棋盤', text: '調度' } },
-      { type: 'action', action: { type: 'message', label: '📈 負荷雷達', text: '負荷' } },
-      { type: 'action', action: { type: 'message', label: '📝 通報範例', text: '護理長不好意思，我明天白班發燒沒辦法上，很抱歉' } },
-      { type: 'action', action: { type: 'uri', label: '🌐 開啟平台', uri: liffUrl || platformUrl } },
-      { type: 'action', action: { type: 'message', label: '📖 使用說明', text: '使用說明' } },
-      { type: 'action', action: { type: 'uri', label: 'ℹ️ 功能介紹', uri: platformUrl.replace(/\/?$/, '/') + 'home.html' } },
-    ] },
+    quickReply: { items: all.filter(([k]) => commandAllowed(tier, k)).map(([, action]) => ({ type: 'action', action })) },
   };
 }
 
@@ -1261,5 +1308,7 @@ if (typeof module !== 'undefined' && module.exports) {
     TIMEOUT_PRESETS, phase15Command, adjustMessage, adjustFlow, topFlow, reorderFlow, timeoutFlow,
     pendingFlow, myAskFlow, whoamiText, reportGuideMessage,
     PENDING_RE, MYASK_RE, WHOAMI_RE, REPORT_GUIDE_RE, BIND_GUIDE_RE,
+    // Phase 1.6 資料範圍
+    resolveScope, parseUnitWord, dashboardUnit,
   };
 }
