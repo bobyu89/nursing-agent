@@ -24,6 +24,9 @@ cloudflare/linebot/richmenu.png
 # 內部文件（商業模式／市場規模），依 docs/BLUEPRINT.md 不入公開 repo
 private/
 
+# Replit Growth Kit 原始技能（第三方內容，已轉成 ~/.claude/skills 的 biz-* 技能包），不入公開 repo
+growth-kit-skills/
+
 # 影片音訊波形快取（建置產物）
 videos/**/.waveform-cache/
 cloudflare/linebot/snapshot.sql
