@@ -18,6 +18,8 @@ const LIVE = {
   exp: 0,            // session 到期（ms）
   scope: null,       // 資料範圍：單位代碼；null＝全院
   loadedAt: null,    // 快照時間
+  version: null,     // 班表版本（樂觀鎖；寫回時帶回去）
+  canWrite: false,   // 護理長才可寫回
   error: null,       // 最後一次失敗的人話說明
 };
 

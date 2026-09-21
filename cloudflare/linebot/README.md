@@ -170,7 +170,8 @@ cron 每分鐘：清過期綁定碼、替班詢問逾時換下一位、預班催
 
 **平台登入與 API（Phase 3）**：已綁定者輸入 `平台` → 回兩個本人專屬的簽章連結（開啟平台／預假日曆，10 分鐘內有效）。
 Worker 提供 `GET /api/session?t=`（換 12 小時 session）、`GET /api/snapshot`（D1 的人員／班表，範圍依權責層）、
-`GET|POST /api/prebook`（日曆頁；POST 的日期轉成同一句「預假 …」走同一套驗證與留痕）。CORS 只放行 `PLATFORM_URL` 來源與本機開發。
+`GET|POST /api/prebook`（日曆頁；POST 的日期轉成同一句「預假 …」走同一套驗證與留痕）、
+`POST /api/shifts`（護理長在平台的班表編輯整份送回：白名單驗證、算差異、`baseVersion` 樂觀鎖 409、批次寫、留痕 `roster.writeback`）。CORS 只放行 `PLATFORM_URL` 來源與本機開發。
 平台端的網址在 `src/config.js`（`PLATFORM_API`）——Worker 網址不同時改那一行。
 
 > 正式導入時 `snapshot.sql` 的來源改為平台匯出的 JSON（`--json export.json`），匯出端請剔除任何可識別個人之欄位——D1 只存代號。

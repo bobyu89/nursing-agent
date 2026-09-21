@@ -587,6 +587,45 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   step('「我的預假」（週期 OPEN）→ 附「用日曆改」連結', uriOf().length === 1 && /prebook\.html#t=/.test(uriOf()[0]), JSON.stringify(uriOf()));
   res = await api('/api/nope', { headers: hs });
   step('未知 API → 404', res.status === 404);
+
+  // ── Phase 3d：平台編輯寫回 ──
+  const hh = { origin: 'https://bobyu89.github.io', authorization: `Bearer ${sessHead.session}`, 'content-type': 'application/json' };
+  res = await api('/api/snapshot', { headers: hh });
+  const snap0 = await res.json();
+  step('護理長快照帶 version 與 canWrite=true；班次帶 source', typeof snap0.version === 'string' && snap0.version.length === 16 && snap0.canWrite === true && snap0.shifts.every((s) => s.source), JSON.stringify({ v: snap0.version, cw: snap0.canWrite }));
+  const staffSnap = await (await api('/api/snapshot', { headers: { origin: 'https://bobyu89.github.io', authorization: `Bearer ${sessStaff}` } })).json();
+  step('護理師快照 canWrite=false', staffSnap.canWrite === false);
+  res = await api('/api/shifts', { method: 'POST', headers: { ...hh, authorization: `Bearer ${sessStaff}` }, body: JSON.stringify({ shifts: staffSnap.shifts, baseVersion: staffSnap.version }) });
+  step('護理師 POST /api/shifts → 403', res.status === 403);
+  res = await api('/api/shifts', { method: 'POST', headers: { ...hh, authorization: `Bearer ${sessExec}` }, body: JSON.stringify({ shifts: [], baseVersion: '' }) });
+  step('督導 POST /api/shifts → 403（檢視模式）', res.status === 403);
+  // 原樣送回 → 零差異、版本不變、不留痕
+  const auditBefore = db.prepare("SELECT COUNT(*) AS n FROM audit WHERE action = 'roster.writeback'").get().n;
+  res = await api('/api/shifts', { method: 'POST', headers: hh, body: JSON.stringify({ shifts: snap0.shifts, baseVersion: snap0.version }) });
+  let wb = await res.json();
+  step('整份原樣送回 → 200、+0／−0、版本不變、不留痕', res.status === 200 && wb.added === 0 && wb.removed === 0 && wb.version === snap0.version && db.prepare("SELECT COUNT(*) AS n FROM audit WHERE action = 'roster.writeback'").get().n === auditBefore, JSON.stringify(wb));
+  // 改一格：拿掉一班、加一班（替補旗標）
+  const edited = snap0.shifts.slice(1).concat([{ staffId: 'N-04', date: '2026-09-15', shift: 'N', unit: 'MED-3A', isReplacement: true }]);
+  const removedKey = `${snap0.shifts[0].staffId}|${snap0.shifts[0].date}|${snap0.shifts[0].shift}`;
+  res = await api('/api/shifts', { method: 'POST', headers: hh, body: JSON.stringify({ shifts: edited, baseVersion: snap0.version }) });
+  wb = await res.json();
+  step('改一格送回 → 200、+1／−1、新版本', res.status === 200 && wb.added === 1 && wb.removed === 1 && wb.version !== snap0.version, JSON.stringify(wb));
+  step('D1：移除的那班不見了、新增的那班 source=substitution', !db.prepare('SELECT 1 FROM shift WHERE staff_id = ? AND date = ? AND shift = ?').get(...removedKey.split('|'))
+    && db.prepare("SELECT source FROM shift WHERE staff_id = 'N-04' AND date = '2026-09-15' AND shift = 'N'").get().source === 'substitution');
+  const wbAudit = JSON.parse(db.prepare("SELECT payload_json FROM audit WHERE action = 'roster.writeback' ORDER BY id DESC LIMIT 1").get().payload_json);
+  step('留痕 roster.writeback：單位、加減筆數、樣本 key', wbAudit.unit === 'MED-3A' && wbAudit.added === 1 && wbAudit.removed === 1 && wbAudit.sample.removed[0] === removedKey && /N-04\|2026-09-15\|N\|substitution/.test(wbAudit.sample.added[0]), JSON.stringify(wbAudit));
+  // 樂觀鎖：拿舊版本再送 → 409、不寫
+  res = await api('/api/shifts', { method: 'POST', headers: hh, body: JSON.stringify({ shifts: snap0.shifts, baseVersion: snap0.version }) });
+  step('拿舊版本再送 → 409、雲端不動', res.status === 409 && /已被更動/.test((await res.json()).message)
+    && db.prepare("SELECT COUNT(*) AS n FROM shift WHERE staff_id = 'N-04' AND date = '2026-09-15' AND shift = 'N'").get().n === 1);
+  // 白名單：別單位／壞代號 → 422
+  res = await api('/api/shifts', { method: 'POST', headers: hh, body: JSON.stringify({ shifts: edited.concat([{ staffId: 'N-08', date: '2026-08-21', shift: 'D', unit: 'SUR-5B' }]), baseVersion: wb.version }) });
+  step('含別單位的班次 → 422 超出範圍', res.status === 422 && /超出你的範圍/.test((await res.json()).message));
+  res = await api('/api/shifts', { method: 'POST', headers: hh, body: JSON.stringify({ shifts: [{ staffId: 'N-99', date: '2026-08-21', shift: 'D', unit: 'MED-3A' }], baseVersion: wb.version }) });
+  step('壞代號 → 422', res.status === 422);
+  // 重新載入快照 → 旗標延續、版本一致
+  const snap1 = await (await api('/api/snapshot', { headers: hh })).json();
+  step('重載快照：新增的班帶 isReplacement、version＝寫回回傳的', snap1.version === wb.version && snap1.shifts.some((s) => s.staffId === 'N-04' && s.date === '2026-09-15' && s.isReplacement === true));
   globalThis.Date = RealDate;
 }
 
@@ -601,7 +640,7 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
     JSON.stringify(actions.slice(0, 7)) === JSON.stringify(['bind_code.issued', 'bind.completed', 'bind.rejected', 'bind_code.issued', 'bind.completed', 'bind_code.issued', 'bind.completed'])
     && ['sub.reported', 'sub.approved', 'sub.asked', 'sub.declined', 'sub.asked', 'sub.filled', 'sub.timeout', 'sub.answer_ignored', 'sub.rejected', 'sub.reordered', 'sub.timeout_changed',
       'prebook.opened', 'prebook.submitted', 'prebook.reminded', 'prebook.closed', 'prebook.generated', 'prebook.held', 'prebook.published',
-      'richmenu.built', 'platform.login', 'req.changed'].every((k) => actions.includes(k)), JSON.stringify(actions));
+      'richmenu.built', 'platform.login', 'req.changed', 'roster.writeback'].every((k) => actions.includes(k)), JSON.stringify(actions));
   // 竄改一筆 → 鏈斷
   db.prepare("UPDATE audit SET payload_json = '{\"tampered\":true}' WHERE id = 1").run();
   const v2 = await store.verifyAuditChain();

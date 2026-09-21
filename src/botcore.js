@@ -1541,6 +1541,48 @@ async function remindNowFlow({ actor, now, store }) {
 }
 
 /* ── 4. 截止 → 預假入 leaves → 生成 → REVIEW（cron 到時自動；護理長可「關閉預班」提前）── */
+/* ── Phase 3d：平台編輯寫回 D1（純函式；D1 與簽章在宿主）──
+ * 平台把「目前這份班表」整份送回，宿主算差異、驗版本（樂觀鎖）、批次寫入、留痕差異。
+ * 這裡只做兩件純的事：逐筆白名單驗證（代號∈人員、日期真實、班別∈D/E/N、單位∈UNITS、單位在範圍內），
+ * 與「現況 vs 送來的」差異（key＝代號|日期|班別；單位或來源不同視為刪＋加）。 */
+const SHIFT_SOURCES = ['imported', 'generated', 'substitution', 'swap', 'manual'];
+function shiftKey(s) { return `${s.staffId}|${s.date}|${s.shift}`; }
+function shiftSourceOf(s) {
+  if (s.source && SHIFT_SOURCES.includes(s.source)) return s.source;
+  return s.isReplacement ? 'substitution' : s.isSwap ? 'swap' : 'manual';
+}
+function validateShiftRows(rows, { staffIds, scopeUnit }) {
+  const errors = [];
+  if (!Array.isArray(rows)) return { ok: false, errors: ['shifts 需為陣列'] };
+  rows.forEach((s, i) => {
+    if (!s || typeof s !== 'object') { errors.push(`#${i}：不是物件`); return; }
+    if (!staffIds.has(s.staffId)) errors.push(`#${i}：代號 ${s.staffId} 不在人員名單`);
+    if (!isValidDateStr(String(s.date || ''))) errors.push(`#${i}：日期 ${s.date} 不存在`);
+    if (!SHIFT_TYPES[s.shift]) errors.push(`#${i}：班別 ${s.shift} 不認得`);
+    if (!UNITS[s.unit]) errors.push(`#${i}：單位 ${s.unit} 不認得`);
+    else if (scopeUnit && s.unit !== scopeUnit) errors.push(`#${i}：單位 ${s.unit} 超出你的範圍（${scopeUnit}）`);
+  });
+  const seen = new Set();
+  rows.forEach((s, i) => { const k = shiftKey(s || {}); if (seen.has(k)) errors.push(`#${i}：${k} 重複`); seen.add(k); });
+  return { ok: errors.length === 0, errors: errors.slice(0, 20) };
+}
+/** current／next 皆為 { staffId, date, shift, unit, source? }；回 { deletes, inserts }（inserts 已帶 source） */
+function diffShifts(current, next) {
+  const cur = new Map(current.map((s) => [shiftKey(s), s]));
+  const nxt = new Map(next.map((s) => [shiftKey(s), { staffId: s.staffId, date: s.date, shift: s.shift, unit: s.unit, source: shiftSourceOf(s) }]));
+  const deletes = []; const inserts = [];
+  for (const [k, s] of cur) { const n = nxt.get(k); if (!n) deletes.push({ staffId: s.staffId, date: s.date, shift: s.shift }); }
+  for (const [k, n] of nxt) { const c = cur.get(k); if (!c || c.unit !== n.unit || (c.source || 'manual') !== n.source) inserts.push(n); }
+  return { deletes, inserts };
+}
+/** 平台快照的班次形狀：D1 的 source → 平台的 isReplacement／isSwap 旗標（徽章才會延續） */
+function shiftRowForPlatform(r) {
+  const o = { staffId: r.staffId, date: r.date, shift: r.shift, unit: r.unit, source: r.source || 'imported' };
+  if (r.source === 'substitution') o.isReplacement = true;
+  if (r.source === 'swap') o.isSwap = true;
+  return o;
+}
+
 /* ── Phase 3b：平台以 LINE 身分登入（docs/LINEBOT-STAGE1.md §0 第 11 個決定）──
  * 平台是靜態頁（GitHub Pages），CSP 不載 LIFF SDK；改由機器人回一條「帶簽章短效連結」：
  * 宿主用自己的 secret 簽 { staff_id, exp }，平台開頁時拿它向 Worker 換 session，再讀 D1 快照。
@@ -1776,5 +1818,7 @@ if (typeof module !== 'undefined' && module.exports) {
     REQ_RE, parseRequirementWords, defaultRequirementCounts, unitRequirements, requirementLabel, requirementFlow,
     // Phase 3b 平台登入
     PLATFORM_LOGIN_RE, platformLoginMessage,
+    // Phase 3d 平台編輯寫回
+    SHIFT_SOURCES, shiftKey, shiftSourceOf, validateShiftRows, diffShifts, shiftRowForPlatform,
   };
 }
