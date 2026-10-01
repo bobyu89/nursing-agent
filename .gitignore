@@ -30,3 +30,6 @@ growth-kit-skills/
 # 影片音訊波形快取（建置產物）
 videos/**/.waveform-cache/
 cloudflare/linebot/snapshot.sql
+
+# 本機設計工具設定（impeccable）
+.impeccable/

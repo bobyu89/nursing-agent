@@ -176,7 +176,12 @@ export function createD1Store(db, { auditCanonical }) {
     },
     /** 全部已綁定者（建選單後整批重掛用） */
     async listAllIdentities() {
-      const { results } = await db.prepare('SELECT line_user_id, staff_id, unit, tier FROM identity').all();
+      const { results } = await db.prepare('SELECT line_user_id, staff_id, unit, tier, bound_at FROM identity').all();
+      return results;
+    },
+    /** 管理頁：還沒用掉、還沒過期的綁定碼（不回代碼本身，只回「誰、什麼層、幾點到期」） */
+    async listActiveBindCodes(nowIso) {
+      const { results } = await db.prepare('SELECT staff_id, tier, expires_at FROM bind_code WHERE used_at IS NULL AND expires_at > ? ORDER BY expires_at DESC').bind(nowIso).all();
       return results;
     },
 

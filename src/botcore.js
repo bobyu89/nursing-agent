@@ -657,6 +657,7 @@ const BIND_CODE_TTL_MIN = 30;
  * 先正規化再比對，代號一律還原成 N-兩位。命中與否只看語義，不看排版。 */
 const ISSUE_RE = /^發碼[:：]?\s*n-?(\d{1,2})(?:\s+(\S+))?$/i;   // 第 2 組：權責層（可省略）
 const BIND_RE = /^綁定[:：]?\s*n-?(\d{1,2})[\s,，、]+(\d{6})$/i;
+const ADMIN_SWITCH_RE = /^我是[:：]?\s*n-?(\d{1,2})(?:\s+(\S+))?$/i;   // 管理者捷徑：直接切換自己的身分（第 2 組：權責層）
 
 /* ── 權責層（tier）與權限矩陣：docs/LINEBOT-STAGE1.md §2.5 ─────────────
  * 職級（role）判資格是引擎的事；權責層判權限是 bot 的事，由管理者發碼時授權。
@@ -771,6 +772,8 @@ function stage1Command(text) {
   if (m) return { kind: 'issue', staffId: padStaffId(m[1]), tierWord: m[2] || '' };
   m = BIND_RE.exec(t);
   if (m) return { kind: 'bind', staffId: padStaffId(m[1]), code: m[2] };
+  m = ADMIN_SWITCH_RE.exec(t);
+  if (m) return { kind: 'switch', staffId: padStaffId(m[1]), tierWord: m[2] || '' };
   return null;
 }
 
@@ -792,6 +795,7 @@ async function issueBindCodeFlow({ staffId, tierWord, adminHash, now, store, db,
   await store.appendAudit({ ts: now, actor: null, action: 'bind_code.issued',
     payload: { staffId, tier, issuedBy: adminHash, expiresAt } });
   return {
+    code, expiresAt, staffId, tier,
     text: [
       `已為 ${staffId}（${UNITS[staff.unit] || staff.unit}｜權責層：${TIER_LABEL[tier]}）產生綁定碼：`,
       '',
@@ -827,13 +831,71 @@ async function bindFlow({ lineUserId, lineUserHash, staffId, code, now, store, d
   });
   await store.appendAudit({ ts: now, actor: staffId, action: 'bind.completed',
     payload: { staffId, tier, lineUser: lineUserHash, replaced: Boolean(replacedLineUserId) } });
+  const next = nextStepsFor(tier, now);
   return {
     text: [
       `已綁定為 ${staffId}（${UNITS[staff.unit] || staff.unit}｜${staff.role}｜權責層：${TIER_LABEL[tier]}）。`,
       replacedLineUserId ? '此代號先前綁定的 LINE 帳號已失效（換手機情境）。' : '',
       '下方選單已切換為你的身分版本；輸入「選單」也可查看可用功能。',
-    ].filter(Boolean).join('\n'),
+    ].filter(Boolean).join('\n') + '\n\n' + next.text,
+    items: next.items,
     bound: { staffId, tier, replacedLineUserId },   // 宿主據此掛對應 tier 的圖文選單、解除舊帳號的
+  };
+}
+
+/** 綁定或切換之後：依權責層告訴本人「現在可以做什麼」，附三個快速按鈕——不讓人綁完卻不知道要幹嘛 */
+function nextStepsFor(tier, now) {
+  const d = new Date(new Date(now || Date.now()).getTime() + 8 * 3600_000);   // 台北
+  const nextMonth = ((d.getUTCMonth() + 1) % 12) + 1;
+  if (tier === 'head') {
+    return {
+      text: ['接下來你可以：',
+        `・開啟下個月的預班：輸入「開啟預班 ${nextMonth}月」，同仁會收到通知、截止前自動催繳`,
+        '・同仁通報缺班時，你會收到核准訊息；核准後機器人才會開始一位一位問人',
+        '・輸入「平台」，用手機開啟班表平台（已登入、讀雲端班表）'].join('\n'),
+      items: [{ label: '預班狀態', text: '預班狀態' }, { label: '待核准', text: '待核准' }, { label: '開啟平台', text: '平台' }],
+    };
+  }
+  if (tier === 'exec') {
+    return {
+      text: ['接下來你可以：', '・看全院缺口與需要行動的事：「儀表板」', '・跨單位借調建議：「調度」', '・誰一直在扛：「負荷」'].join('\n'),
+      items: [{ label: '儀表板', text: '儀表板' }, { label: '調度棋盤', text: '調度' }, { label: '負荷雷達', text: '負荷' }],
+    };
+  }
+  return {
+    text: ['接下來你可以：',
+      '・自己要請假：直接用一句話告訴我，例如「我明天白班發燒沒辦法上」',
+      '・同事缺班找人時，你可能會收到邀請，按「接」或「不接」就好（拒絕不扣分）',
+      '・護理長開啟預班後，回覆下個月想休的日期'].join('\n'),
+    items: [{ label: '通報缺班', text: '通報缺班' }, { label: '我的預假', text: '我的預假' }, { label: '我的邀請', text: '我的邀請' }],
+  };
+}
+
+/**
+ * 管理者捷徑「我是 N-01 護理長」：直接把管理者自己的 LINE 綁成這個代號與權責層，不必發碼給自己。
+ * 是否為管理者由宿主判定後才呼叫；真實同仁仍走「發碼 → 綁定」。每次切換留痕（bind.admin_switch）。
+ */
+async function adminSwitchFlow({ lineUserId, lineUserHash, staffId, tierWord, now, store, db }) {
+  if (!store) return { text: STORE_DISABLED_TEXT };
+  const tier = tierFromWord(tierWord);
+  if (!tier) return { text: `權責層「${tierWord}」不認得。可用：護理長、督導（或主任）；省略＝護理師。例：我是 ${staffId} 護理長` };
+  const staff = liveData(db).staff.find((s) => s.id === staffId);
+  if (!staff) return { text: `查無人員 ${staffId}。請確認代號（如 N-04）與人員快照是否已上傳。` };
+  const { replacedLineUserId } = await store.bindIdentity({
+    lineUserId, staffId, unit: staff.unit, role: staff.role, tier, boundAt: now,
+  });
+  await store.appendAudit({ ts: now, actor: staffId, action: 'bind.admin_switch',
+    payload: { staffId, tier, lineUser: lineUserHash, replaced: Boolean(replacedLineUserId) } });
+  const next = nextStepsFor(tier, now);
+  return {
+    text: [
+      `已切換為 ${staffId}（${UNITS[staff.unit] || staff.unit}｜${staff.role}｜權責層：${TIER_LABEL[tier]}）。`,
+      '這是管理者捷徑，不需要綁定碼；這次切換已留痕。',
+      replacedLineUserId ? `原本綁定 ${staffId} 的另一個 LINE 帳號已解除。` : '',
+      '下方選單已換成這個身分的版本。',
+    ].filter(Boolean).join('\n') + '\n\n' + next.text,
+    items: next.items,
+    bound: { staffId, tier, replacedLineUserId },
   };
 }
 
@@ -1820,5 +1882,7 @@ if (typeof module !== 'undefined' && module.exports) {
     PLATFORM_LOGIN_RE, platformLoginMessage,
     // Phase 3d 平台編輯寫回
     SHIFT_SOURCES, shiftKey, shiftSourceOf, validateShiftRows, diffShifts, shiftRowForPlatform,
+    // 管理者：身分切換捷徑與綁定後引導
+    ADMIN_SWITCH_RE, adminSwitchFlow, nextStepsFor, padStaffId,
   };
 }

@@ -227,7 +227,7 @@ async function handleApi(request, env, url) {
     const exp = nowMs + SESSION_TTL_MS;
     const session = await signToken(env, { k: 'sess', s: identity.staff_id, exp });
     await store.appendAudit({ ts: nowIso, actor: identity.staff_id, action: 'platform.login', payload: { tier: identity.tier, unit: identity.unit, exp: new Date(exp).toISOString() } });
-    return json({ session, exp, identity: { staff_id: identity.staff_id, unit: identity.unit, role: identity.role, tier: identity.tier } }, 200, cors);
+    return json({ session, exp, admin: isAdmin(env, identity.line_user_id), identity: { staff_id: identity.staff_id, unit: identity.unit, role: identity.role, tier: identity.tier } }, 200, cors);
   }
 
   // 其餘一律要 session
@@ -250,6 +250,34 @@ async function handleApi(request, env, url) {
       staff: snap.staff.filter((s) => inScope(s.unit)),
       shifts: shifts.map(shiftRowForPlatform),
     }, 200, cors);
+  }
+
+  /* 管理頁（admin.html）：人員與綁定狀態、產生綁定碼——只有 ADMIN_USER_ID 的 LINE 帳號能用 */
+  if (url.pathname.startsWith('/api/admin/')) {
+    if (!isAdmin(env, identity.line_user_id)) return json({ error: 'forbidden', message: '人員與綁定管理限管理者使用。' }, 403, cors);
+    if (url.pathname === '/api/admin/staff' && request.method === 'GET') {
+      const [snap, ids, codes] = [await store.loadDb(), await store.listAllIdentities(), await store.listActiveBindCodes(nowIso)];
+      const byStaff = new Map(ids.map((i) => [i.staff_id, i]));
+      const codeBy = new Map();
+      for (const c of codes) if (!codeBy.has(c.staff_id)) codeBy.set(c.staff_id, c);
+      return json({ identity: me, generatedAt: nowIso, staff: snap.staff.map((s) => {
+        const b = byStaff.get(s.id); const c = codeBy.get(s.id);
+        return { id: s.id, unit: s.unit, unitName: UNITS[s.unit] || s.unit, role: s.role, ladder: s.ladder || null,
+          bound: b ? { tier: b.tier, bound_at: b.bound_at, isMe: b.line_user_id === identity.line_user_id } : null,
+          pendingCode: c ? { tier: c.tier, expires_at: c.expires_at } : null };
+      }) }, 200, cors);
+    }
+    if (url.pathname === '/api/admin/bindcode' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch { return json({ error: 'bad_json' }, 400, cors); }
+      const word = { staff: '', head: '護理長', exec: '督導' }[body && body.tier];
+      if (word === undefined) return json({ error: 'bad_request', message: '權責層需為 staff／head／exec。' }, 400, cors);
+      const staffId = padStaffId(String((body && body.staffId) || '').replace(/^n-?/i, ''));
+      const out = await issueBindCodeFlow({ staffId, tierWord: word, adminHash: userHash(identity.line_user_id), now: nowIso, store, db: await store.loadDb() });
+      if (!out.code) return json({ error: 'invalid', message: out.text }, 422, cors);
+      return json({ ok: true, staffId: out.staffId, tier: out.tier, code: out.code, expiresAt: out.expiresAt, sendText: `綁定 ${out.staffId} ${out.code}` }, 200, cors);
+    }
+    return json({ error: 'not_found' }, 404, cors);
   }
 
   /* Phase 3d：平台編輯寫回——整份送回、宿主算差異、樂觀鎖（baseVersion）、批次寫、留痕差異 */
@@ -459,7 +487,7 @@ async function handleEvent(ev, env, { store, live }) {
         const out = await bindFlow({ lineUserId: userId, lineUserHash: userHash(userId),
           staffId: cmd.staffId, code: cmd.code, now: nowIso, store, db: live });
         if (out.bound) await applyRichMenu(env, store, userId, out.bound);
-        return lineReply(token, ev.replyToken, out.text);
+        return lineReply(token, ev.replyToken, out.text, out.items);
       }
       secLog('unbound-user', userHash(userId));
       if (ev.replyToken && (ev.type === 'message' || ev.type === 'follow' || ev.type === 'postback')) {
@@ -579,14 +607,25 @@ async function handleEvent(ev, env, { store, live }) {
       return lineReply(token, ev.replyToken, out.text);
     }
     // 已綁定者再綁（換代號／換手機／升權責層）：同一流程，consumeBindCode 保證一碼一用
+    if (s1.kind === 'switch') {
+      if (!isAdmin(env, userId)) {
+        secLog('switch-denied', userHash(userId));
+        return lineReply(token, ev.replyToken, '「我是 N-xx」是管理者切換自己身分的捷徑。同仁請用管理者給的綁定碼：綁定 你的代號 六位數碼');
+      }
+      const out = await adminSwitchFlow({ lineUserId: userId, lineUserHash: userHash(userId),
+        staffId: s1.staffId, tierWord: s1.tierWord, now: nowIso, store, db: live });
+      if (out.bound) await applyRichMenu(env, store, userId, out.bound);
+      return lineReply(token, ev.replyToken, out.text, out.items);
+    }
     const out = await bindFlow({ lineUserId: userId, lineUserHash: userHash(userId),
       staffId: s1.staffId, code: s1.code, now: nowIso, store, db: live });
     if (out.bound) await applyRichMenu(env, store, userId, out.bound);
-    return lineReply(token, ev.replyToken, out.text);
+    return lineReply(token, ev.replyToken, out.text, out.items);
   }
   /* Phase 3b：「平台」→ 本人專屬的簽章登入連結（未綁定者走一般閘門：classifyCommand → platform 需 staff＝先綁定） */
   if (store && identity && PLATFORM_LOGIN_RE.test(normalizeCmdText(text))) {
     const m = platformLoginMessage(identity);
+    if (isAdmin(env, userId)) m.items.push({ label: '👥 人員與綁定', page: 'admin.html' });
     return lineReply(token, ev.replyToken, m.text, await resolvePageItems(env, platformUrl, m.items, identity.staff_id, Date.now()));
   }
   /* 管理者專用：建立四份圖文選單（Worker 自己拿 token 做，本機零設定） */
