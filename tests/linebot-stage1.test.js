@@ -1010,3 +1010,32 @@ test('phase3d：validateShiftRows 逐筆白名單——代號／日期／班別�
   assertEqual(shiftRowForPlatform({ staffId: 'N-01', date: '2026-10-05', shift: 'D', unit: 'MED-3A', source: 'substitution' }).isReplacement, true);
   assertEqual(shiftRowForPlatform({ staffId: 'N-01', date: '2026-10-05', shift: 'D', unit: 'MED-3A', source: 'swap' }).isSwap, true);
 });
+
+/* ══ 管理者：身分切換捷徑與綁定後引導 ══ */
+test('admin：「我是 N-01 護理長」歸 switch；綁定與切換都回「接下來你可以」三個按鈕；發碼回傳代碼本身給管理頁', async () => {
+  assertEqual(stage1Command('我是 N-1 護理長'), { kind: 'switch', staffId: 'N-01', tierWord: '護理長' });
+  assertEqual(stage1Command('我是n04'), { kind: 'switch', staffId: 'N-04', tierWord: '' });
+  assertEqual(stage1Command('我是誰'), null, '「我是誰」不能被當成切換');
+  assertEqual(nextStepsFor('head', '2026-10-01T01:00:00.000Z').items.map((i) => i.text), ['預班狀態', '待核准', '平台']);
+  assert(/開啟預班 11月/.test(nextStepsFor('head', '2026-10-01T01:00:00.000Z').text), '建議開啟的是下個月');
+  assert(/開啟預班 1月/.test(nextStepsFor('head', '2026-12-20T01:00:00.000Z').text), '12 月的下個月是 1 月');
+  assertEqual(nextStepsFor('staff').items.map((i) => i.text), ['通報缺班', '我的預假', '我的邀請']);
+  assertEqual(nextStepsFor('exec').items.map((i) => i.text), ['儀表板', '調度', '負荷']);
+
+  const st = memStore();
+  const sw = await adminSwitchFlow({ lineUserId: 'Uadm', lineUserHash: 'h', staffId: 'N-01', tierWord: '護理長', now: T0, store: st, db: null });
+  assert(/已切換為 N-01/.test(sw.text) && /管理者捷徑/.test(sw.text) && /接下來你可以/.test(sw.text), sw.text);
+  assertEqual(st.idByUser.get('Uadm').tier, 'head');
+  assertEqual(sw.bound, { staffId: 'N-01', tier: 'head', replacedLineUserId: null });
+  assertEqual(st.audit.at(-1).action, 'bind.admin_switch');
+  assertEqual(sw.items.length, 3);
+  assert(/不認得/.test((await adminSwitchFlow({ lineUserId: 'Uadm', lineUserHash: 'h', staffId: 'N-01', tierWord: '院長', now: T0, store: st, db: null })).text));
+  assert(/查無人員/.test((await adminSwitchFlow({ lineUserId: 'Uadm', lineUserHash: 'h', staffId: 'N-99', tierWord: '', now: T0, store: st, db: null })).text));
+
+  const iss = await issueBindCodeFlow({ staffId: 'N-02', tierWord: '', adminHash: 'h', now: T0, store: st, db: null, rand: fixedRand([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]) });
+  assertEqual([iss.code, iss.staffId, iss.tier], ['123456', 'N-02', 'staff']);
+  const b = await bindFlow({ lineUserId: 'Un2', lineUserHash: 'h2', staffId: 'N-02', code: iss.code, now: T0, store: st, db: null });
+  assert(/已綁定為 N-02/.test(b.text) && /接下來你可以/.test(b.text), b.text);
+  assertEqual(b.items.map((i) => i.text), ['通報缺班', '我的預假', '我的邀請']);
+});
+

@@ -629,6 +629,65 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   globalThis.Date = RealDate;
 }
 
+/* ── 8¹³⁄₁₄. 管理者：「我是 N-xx」切換身分、平台多「人員與綁定」、管理頁 API 發碼 → 同仁用碼綁定 ── */
+{
+  const RealDate = Date; let skew = 0;
+  class FakeDate extends RealDate { constructor(...a) { super(...(a.length ? a : [FakeDate.now()])); } static now() { return RealDate.now() + (skew += 7000); } }
+  globalThis.Date = FakeDate;
+  const api = (path, init) => worker.fetch(new Request('https://x' + path, { headers: { origin: 'https://bobyu89.github.io' }, ...init }), envD1);
+  const uriOf = () => (lastReply().quickReply?.items || []).map((i) => i.action).filter((a) => a.type === 'uri').map((a) => a.uri);
+  // 前面的段落綁了不少代號（含替班候選），這裡挑兩個還沒綁的：A 給管理者切換、B 給管理頁發碼
+  const [A, B] = db.prepare('SELECT staff_id FROM staff WHERE staff_id NOT IN (SELECT staff_id FROM identity) ORDER BY staff_id').all().map((r) => r.staff_id);
+
+  await worker.fetch(signed([textEv(OTHER, `我是 ${A}`)]), envD1);
+  step('非管理者「我是 N-xx」→ 拒絕並指向綁定碼、身分不變', /管理者切換自己身分的捷徑/.test(replyText()) && db.prepare('SELECT COUNT(*) AS n FROM identity WHERE staff_id = ?').get(A).n === 0 && db.prepare('SELECT staff_id FROM identity WHERE line_user_id = ?').get(OTHER).staff_id === 'N-02', replyText());
+  calls.length = 0;
+  await worker.fetch(signed([textEv(ADMIN, `我是 ${A} 督導`)]), envD1);
+  const idAdm = db.prepare('SELECT staff_id, tier FROM identity WHERE line_user_id = ?').get(ADMIN);
+  step('管理者「我是 N-xx 督導」→ 直接綁成該代號／exec，不用綁定碼', new RegExp(`已切換為 ${A}`).test(replyText()) && idAdm && idAdm.staff_id === A && idAdm.tier === 'exec', replyText());
+  step('切換後掛督導選單、回三個快速按鈕', calls.some((c) => c.method === 'POST' && c.url.endsWith(`/user/${ADMIN}/richmenu/RM_EXEC`)) && lastReply().quickReply.items.length === 3);
+  step('留痕 bind.admin_switch', db.prepare("SELECT COUNT(*) AS n FROM audit WHERE action = 'bind.admin_switch'").get().n === 1);
+
+  await worker.fetch(signed([textEv(ADMIN, '平台')]), envD1);
+  const admUris = uriOf();
+  step('管理者「平台」→ 三個連結，第三個是 admin.html', admUris.length === 3 && /admin\.html#t=/.test(admUris[2]), JSON.stringify(admUris));
+  await worker.fetch(signed([textEv(OTHER, '平台')]), envD1);
+  step('非管理者「平台」→ 只有兩個連結', uriOf().length === 2 && !uriOf().some((u) => /admin\.html/.test(u)));
+  const linkStaff2 = /#t=(.+)$/.exec(uriOf()[0])[1];
+
+  let res = await api(`/api/session?t=${/#t=(.+)$/.exec(admUris[2])[1]}`);
+  const sAdm = await res.json();
+  step('管理者換 session → admin=true', res.status === 200 && sAdm.admin === true && sAdm.identity.staff_id === A, JSON.stringify(sAdm).slice(0, 160));
+  const sStaff = (await (await api(`/api/session?t=${linkStaff2}`)).json()).session;
+  const ha = { origin: 'https://bobyu89.github.io', authorization: `Bearer ${sAdm.session}`, 'content-type': 'application/json' };
+
+  res = await api('/api/admin/staff', { headers: { ...ha, authorization: `Bearer ${sStaff}` } });
+  step('非管理者 GET /api/admin/staff → 403', res.status === 403);
+  res = await api('/api/admin/staff', { headers: ha });
+  let list = await res.json();
+  const row = (id) => list.staff.find((s) => s.id === id);
+  const allStaff = db.prepare('SELECT COUNT(*) AS n FROM staff').get().n;
+  step(`管理頁列出全部 ${allStaff} 人；管理者那列標「這是你」、另一位未綁定`, res.status === 200 && list.staff.length === allStaff && row(A).bound.isMe === true && row(A).bound.tier === 'exec' && row(B).bound === null, JSON.stringify(row(A)));
+  step('管理頁不外洩 LINE userId', !JSON.stringify(list).includes('Uadmin') && !JSON.stringify(list).includes('line_user_id'));
+
+  res = await api('/api/admin/bindcode', { method: 'POST', headers: ha, body: JSON.stringify({ staffId: B, tier: 'head' }) });
+  const bc = await res.json();
+  step('管理頁產生護理長綁定碼 → 六位數＋要對方輸入的那句話', res.status === 200 && /^\d{6}$/.test(bc.code) && bc.sendText === `綁定 ${B} ${bc.code}` && bc.tier === 'head', JSON.stringify(bc));
+  list = await (await api('/api/admin/staff', { headers: ha })).json();
+  step('發碼後該列顯示「有一組綁定碼未使用」（不回代碼本身）', row(B).pendingCode && row(B).pendingCode.tier === 'head' && !JSON.stringify(row(B)).includes(bc.code));
+  res = await api('/api/admin/bindcode', { method: 'POST', headers: ha, body: JSON.stringify({ staffId: B, tier: 'boss' }) });
+  step('權責層亂填 → 400', res.status === 400);
+  res = await api('/api/admin/bindcode', { method: 'POST', headers: ha, body: JSON.stringify({ staffId: 'N-99', tier: 'staff' }) });
+  step('查無人員 → 422', res.status === 422 && /查無人員/.test((await res.json()).message));
+
+  const U11 = 'Ustaff11000000000000000000000000000';
+  await worker.fetch(signed([textEv(U11, bc.sendText)]), envD1);
+  step('同仁照那句話送出 → 綁定為護理長，附「接下來你可以」', new RegExp(`已綁定為 ${B}`).test(replyText()) && /權責層：護理長/.test(replyText()) && /接下來你可以/.test(replyText()) && lastReply().quickReply.items.length === 3, replyText().slice(0, 120));
+  list = await (await api('/api/admin/staff', { headers: ha })).json();
+  step('管理頁：該列變已綁定、待用碼消失', row(B).bound && row(B).bound.tier === 'head' && !row(B).pendingCode);
+  globalThis.Date = RealDate;
+}
+
 /* ── 9. 留痕鏈 ── */
 {
   const { createD1Store } = await import(pathToFileURL(path.join(ROOT, 'cloudflare/linebot/store-d1.mjs')).href);
@@ -640,7 +699,7 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
     JSON.stringify(actions.slice(0, 7)) === JSON.stringify(['bind_code.issued', 'bind.completed', 'bind.rejected', 'bind_code.issued', 'bind.completed', 'bind_code.issued', 'bind.completed'])
     && ['sub.reported', 'sub.approved', 'sub.asked', 'sub.declined', 'sub.asked', 'sub.filled', 'sub.timeout', 'sub.answer_ignored', 'sub.rejected', 'sub.reordered', 'sub.timeout_changed',
       'prebook.opened', 'prebook.submitted', 'prebook.reminded', 'prebook.closed', 'prebook.generated', 'prebook.held', 'prebook.published',
-      'richmenu.built', 'platform.login', 'req.changed', 'roster.writeback'].every((k) => actions.includes(k)), JSON.stringify(actions));
+      'richmenu.built', 'platform.login', 'req.changed', 'roster.writeback', 'bind.admin_switch'].every((k) => actions.includes(k)), JSON.stringify(actions));
   // 竄改一筆 → 鏈斷
   db.prepare("UPDATE audit SET payload_json = '{\"tampered\":true}' WHERE id = 1").run();
   const v2 = await store.verifyAuditChain();

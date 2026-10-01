@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- CSP 與 index.html 同一套：只允許同源 JS；connect-src https 供呼叫 Worker API -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' file: data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'">
+  <meta name="referrer" content="no-referrer">
+  <title>人員與綁定｜班守 ShiftGuard</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+  <style>
+    /* 管理者的手機頁：看誰綁了、誰還沒，按一下產生綁定碼——不必在聊天室裡打「發碼」 */
+    body { background: var(--bg); margin: 0; font-family: 'Inter', 'Noto Sans TC', system-ui, sans-serif; color: var(--ink); }
+    .ad-wrap { max-width: 760px; margin: 0 auto; padding: 16px 16px 48px; box-sizing: border-box; }
+    .ad-brand { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; }
+    .ad-brand b { font-size: 16px; }
+    .ad-brand small { color: var(--ink-faint); display: block; font-size: 12px; }
+    .ad-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px; box-sizing: border-box; }
+    .ad-title { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
+    .ad-meta { color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+    .ad-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+    .ad-filter button { border: 1px solid var(--line); background: var(--field); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--ink-soft); }
+    .ad-filter button.on { background: var(--brand); color: var(--on-brand); border-color: var(--brand-dark); }
+    .ad-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line-soft); }
+    .ad-row:first-child { border-top: 0; }
+    .ad-id { font-weight: 700; font-size: 15px; }
+    .ad-sub { color: var(--ink-faint); font-size: 12px; margin-top: 2px; }
+    .ad-state { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .ad-act { display: flex; gap: 6px; align-items: center; }
+    .ad-act select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; font-size: 13px; background: var(--surface); color: var(--ink); }
+    .ad-act .btn { padding: 8px 12px; font-size: 13px; white-space: nowrap; }
+    .btn-primary { background: var(--brand); color: var(--on-brand); border-color: var(--brand-dark); }
+    .ad-code { margin-top: 10px; grid-column: 1 / -1; background: var(--brand-tint); border: 1px solid var(--brand); border-radius: 10px; padding: 12px; }
+    .ad-code .big { font-size: 30px; font-weight: 700; letter-spacing: 6px; color: var(--brand-dark); font-variant-numeric: tabular-nums; }
+    .ad-code .send { margin-top: 6px; font-size: 14px; }
+    .ad-code code { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+    .ad-code .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    .ad-msg { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 14px; line-height: 1.6; }
+    .ad-msg.err { background: var(--danger-tint); color: var(--danger); border: 1px solid var(--danger-line); }
+    .ad-fine { color: var(--ink-faint); font-size: 12px; line-height: 1.7; }
+    @media (max-width: 520px) {
+      .ad-row { grid-template-columns: minmax(0, 1fr); }
+      .ad-act { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+<div class="ad-wrap">
+  <div class="ad-brand">
+    <svg viewBox="0 0 64 64" width="34" height="34" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="14.5" cy="15" r="9.2" fill="#f7efdf"/><circle cx="49.5" cy="15" r="9.2" fill="#f7efdf"/><circle cx="15.5" cy="16" r="4.8" fill="#d9d4c8"/><circle cx="48.5" cy="16" r="4.8" fill="#d9d4c8"/><path d="M32 9 C48.5 9 58 22 58 38 C58 53 47 61.5 32 61.5 C17 61.5 6 53 6 38 C6 22 15.5 9 32 9 Z" fill="#f7efdf"/><ellipse cx="32" cy="45" rx="11.5" ry="9" fill="#e6e1d4"/><circle cx="22.5" cy="33.5" r="2.9" fill="#16233a"/><circle cx="41.5" cy="33.5" r="2.9" fill="#16233a"/><circle cx="23.5" cy="32.5" r="1" fill="#ffffff"/><circle cx="42.5" cy="32.5" r="1" fill="#ffffff"/><rect x="27.4" y="39.2" width="9.2" height="5.6" rx="2.8" fill="#16233a"/><path d="M28.5 49.5 Q32 52.5 35.5 49.5" fill="none" stroke="#16233a" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <div><b>人員與綁定</b><small>班守 ShiftGuard｜管理者專用：誰已經綁定、誰還沒有，按一下產生綁定碼</small></div>
+  </div>
+
+  <div class="ad-card">
+    <div class="ad-title" id="ad-title">載入中…</div>
+    <div class="ad-meta" id="ad-meta"></div>
+    <div class="ad-filter" id="ad-filter"></div>
+  </div>
+
+  <div class="ad-card" id="ad-list"></div>
+
+  <div class="ad-fine">
+    綁定碼 30 分鐘內有效、用過即作廢，每次產生都會留痕。請用院內管道把代碼交給本人，由本人在自己的 LINE 輸入。<br>
+    你自己要換身分不必發碼：在 LINE 對機器人輸入「我是 N-01 護理長」即可（管理者限定）。<br>
+    這個連結只給你、10 分鐘內有效；逾時請回 LINE 輸入「平台」重新取得。
+  </div>
+</div>
+
+<script src="src/config.js"></script>
+<script src="src/live.js"></script>
+<script src="src/admin.js"></script>
+</body>
+</html>
