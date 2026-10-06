@@ -1,331 +1,368 @@
 # 班守 ShiftGuard — 系統架構書
 
-> 版本：2.0（2026-08-09）
-> 相對 1.0 的主要變化：決策模型從「單筆替補」擴為**第 0–3 層決策階梯**
-> （新增第 0 層班表生成、第三層任務重分配）、Bedrock LLM Proxy 完成實作（`aws/lambda/`）、
-> 引擎測試 22 → 37 項、新增系統藍圖（本文件講**現在**，[BLUEPRINT.md](BLUEPRINT.md) 講**未來**）。
+> 版本：3.0（2026-10-06）　用途：現況架構說明與交接
 >
-> 關聯文件：[README.md](../README.md)（快速開始）、[CONTEXT.md](CONTEXT.md)（領域語義權威定義）、
-> [BLUEPRINT.md](BLUEPRINT.md)（平台藍圖）、[REVIEW.md](REVIEW.md)（功能與資安審查紀錄）、
-> [aws/README.md](../aws/README.md)（Bedrock 部署步驟）
+> 相對 2.0（2026-08-09）的主要變化：系統從「純前端示範」變成**有後端、會主動聯絡人的兩條迴路**。
+> 新增 LINE 機器人（Cloudflare Worker）、雲端資料庫（Cloudflare D1）、身分綁定與三層權責、
+> 替班迴路與預班迴路、平台以 LINE 身分登入並讀寫雲端班表、預假日曆、管理者的人員與綁定頁。
+> 測試從 37 項擴為單元 156 項加端到端 164 步。
+>
+> 本文件講**現在已經在跑的系統**。下一階段設計（單位客製化、管理端與使用端分層、AI 介入點）另見系統設計書。
+> 關聯文件：[CONTEXT.md](CONTEXT.md)（領域語義權威定義）、[LINEBOT-STAGE1.md](LINEBOT-STAGE1.md)（LINE 迴路設計與決策紀錄）、
+> [SECURITY.md](SECURITY.md)（資安事件應對）、[BLUEPRINT.md](BLUEPRINT.md)（長期藍圖）、[cloudflare/linebot/README.md](../cloudflare/linebot/README.md)（部署步驟）。
 
 ---
 
 ## 1. 系統定位
 
-**醫護排班治理平台。** 讓每一次人力調度——排班、替補、調度、重分配——都做到
-**算得準、說得清、留得下**。當醫護人員臨時請假，系統在幾秒內給出合格替補候選人、
-排序理由與風險提示，且每一個判斷都交代得出依據（規則代碼、法規條文、分數構成）。
+**護理人力調度的決策輔助系統。** 處理兩件護理長每天、每月都要做的行政工作：
 
-系統的決策模型是一條**四層決策階梯**，從源頭治理到極端情境的韌性降級：
+1. **臨時缺班找人**：同仁通報請假，系統找出合格人選並排序，護理長核准後，機器人一次問一位，有人接就寫回班表。
+2. **每月預班與排班**：收集同仁的預假，截止後由引擎產生下月班表草稿，護理長核准才公告。
 
-```
-第 0 層  班表生成（generateSchedule）──── 源頭治理：排出來的那一刻就合規（畫面 8）
-第 1 層  找合格替補（evaluateGap）─────── 硬性排除＋軟性排序（畫面 1–3）
-第 2 層  放寬試算＋全局指派 ───────────── 只試算不放寬；多筆缺班整體最佳（畫面 2、7）
-第 3 層  任務重新分配（reallocateTasks）─ 缺的不是「一個人」，是「一班的任務」（畫面 7）
-```
+每一個判斷都交代得出依據：規則代碼、法規條文、分數構成，並留下不可竄改的紀錄。
 
-上層做得越好，下層被觸發得越少——平台的北極星指標是
-**「第三層韌性模式的啟動次數逐季下降」**（詳見 BLUEPRINT.md §3）。
+### 1.1 系統邊界
 
-### 1.1 系統邊界（明確不做的事）
-
-| 不做 | 原因 |
+| 做 | 不做 |
 |---|---|
-| 不寫入院內正式班表 | 本平台是決策輔助；替補寫回為 demo 模擬，班表生成僅產出**草稿** |
-| 不自動通知員工 | 通知一律停在草稿，發送權在主管 |
-| 不自行放寬規則、不補完缺漏欄位 | Agent 治理原則：確定性歸程式、決定權歸人 |
-| 不自動刪任務、不自動降載 | 第三層的缺口誠實標示，交主管決策 |
-| 不使用病患資料與真實姓名 | 人員一律代號化（N-01 ~ N-11），資料全數虛構 |
+| 依規則找出合格人選、排序並說明原因 | 不替護理長決定找誰；核准前不聯絡任何人 |
+| 核准後經 LINE 逐一詢問、寫回班表 | 不自行放寬任何法規或院內規則 |
+| 產生月班表草稿 | 草稿未經護理長核准不公告、不寫入正式班表 |
+| 以人員代號運作 | 不存姓名、不碰病人資料 |
+| 與院內系統並存（FHIR 匯出入） | 不取代院內人事、薪資、出勤系統 |
+
+---
 
 ## 2. 核心設計原則
 
-### 2.1 確定性歸程式、語言歸模型
+| 原則 | 落實方式 |
+|---|---|
+| **確定性歸程式，語言歸模型** | 工時、班距、連續天數、證照效期、排序分數全部由規則引擎計算；語言模型只把自由文字變成結構化欄位，輸出必經白名單消毒 |
+| **人在迴路** | 找誰由引擎排，要不要問由護理長決定；月班表由護理長核准才公告 |
+| **誠實** | 缺漏轉追問不臆測；排除逐筆給原因；排不出的格子連同擋下它的規則一起列出，不硬塞 |
+| **一個身分** | 一個 LINE 機器人、一個綁定身分；平台登入沿用 LINE 綁定，不另建帳號 |
+| **權限與範圍分開** | 權責層決定「能不能按」，資料範圍決定「按了看到誰的」；兩者都在後端執行，不靠介面隱藏 |
 
-| 職責 | 負責模組 | 內容 |
+---
+
+## 3. 系統全貌
+
+```
+                 ┌──────────────────── 使用者 ────────────────────┐
+                 │ 護理師／護理長／督導（LINE）   管理者（LINE＋網頁） │
+                 └──────┬───────────────────────────────┬─────────┘
+                        │ 訊息、按鈕                     │ 本人專屬短效連結
+                        ▼                               ▼
+   ┌───────────────────────────┐        ┌──────────────────────────────────┐
+   │ LINE Messaging API         │        │ GitHub Pages（靜態網站）           │
+   │  webhook／reply／push       │        │  index.html   平台（班表、戰情…）   │
+   │  圖文選單（四份，依權責層）  │        │  prebook.html 預假日曆              │
+   └─────────────┬─────────────┘        │  admin.html   人員與綁定（管理者）   │
+                 │ HTTPS（HMAC 驗章）     │  home.html    介紹頁                │
+                 ▼                        └───────────────┬──────────────────┘
+   ┌──────────────────────────────────────────────────────▼──────────────┐
+   │ Cloudflare Worker  shiftguard-linebot                                 │
+   │  POST /          LINE webhook：身分閘 → 頻率限制 → 權責閘 → 指令路由    │
+   │  /api/*          平台 API：session、快照、預假、班表寫回、管理頁        │
+   │  scheduled()     每分鐘：清綁定碼、替班逾時、預班催繳與截止、選單工作   │
+   │  共用核心 src/botcore.js、engine.js、rules.js、data.js、llm.js          │
+   └───────────────────────────────┬──────────────────────────────────────┘
+                                   ▼
+                     ┌───────────────────────────┐
+                     │ Cloudflare D1（SQLite）     │
+                     │ 身分、班表、預班、替班、留痕 │
+                     └───────────────────────────┘
+
+   選配：aws/lambda（Bedrock 語言模型代理，平台的 api 模式使用）；aws/linebot（Stage 0 無狀態版機器人）
+```
+
+**同一份核心程式在三個地方執行**：瀏覽器（平台）、Cloudflare Worker（機器人與 API）、Node（測試與 CI）。
+規則改一次，三處同時生效，由同一套測試保證行為一致。
+
+---
+
+## 4. 程式模組
+
+| 檔案 | 行數 | 職責 |
+|---|---:|---|
+| `src/data.js` | 493 | 示範資料與常數：班別、單位、證照、職級、進階制度、護病比、模擬人員與班表 |
+| `src/rules.js` | 184 | 規則庫：硬性 H1–H10、軟性 S1–S5，含參數、法規依據、可否放寬 |
+| `src/engine.js` | 1,601 | 確定性決策引擎：缺班評估、放寬試算、全局指派、班表生成、任務重分配、合規掃描 |
+| `src/llm.js` | 440 | 語言轉接層：mock（確定性解析）與 api（Bedrock）雙模式、合約驗證、白名單消毒 |
+| `src/fhir.js` | 332 | FHIR R4 匯出入（Practitioner、Schedule、Slot） |
+| `src/botcore.js` | 1,888 | 機器人的全部業務邏輯（純函式）：指令解析、權限矩陣、替班與預班狀態機、綁定、訊息組裝 |
+| `src/app.js` | 4,540 | 平台畫面與流程控制；登入模式下改讀寫雲端班表 |
+| `src/live.js` | 104 | 平台與預假頁共用：LINE 登入 session、API 呼叫 |
+| `src/config.js` | 19 | 平台唯一需依環境修改的設定：Worker 網址 |
+| `src/prebook.js` | 106 | 預假日曆頁 |
+| `src/admin.js` | 128 | 人員與綁定頁（管理者） |
+| `cloudflare/linebot/worker.mjs` | 792 | Worker 宿主：驗章、身分閘、頻率限制、路由、推播、API、排程；不含業務判斷 |
+| `cloudflare/linebot/store-d1.mjs` | 289 | D1 的資料存取與留痕雜湊鏈；只有 SQL 與雜湊 |
+| `cloudflare/linebot/schema.sql` | 147 | 資料表定義；`migrations/0001–0004` 為既有庫的增量 |
+| `cloudflare/linebot/richmenu.ps1` | 379 | 產生四份圖文選單的圖與定義檔 |
+| `tools/snapshot-to-sql.cjs` | 83 | 把人員與班表快照轉成 D1 匯入 SQL |
+
+**分層紀律**：業務邏輯只在 `src/botcore.js` 與 `src/engine.js`；`worker.mjs` 只做 I/O 與路由；`store-d1.mjs` 只做 SQL。
+botcore 透過注入的 `store` 介面存取資料，所以測試可以用記憶體假物件，未來換資料庫只需重寫 store。
+
+---
+
+## 5. 資料模型（D1）
+
+D1 只存人員代號，永不存姓名；LINE userId 原值只在 `identity` 表（推播需要），留痕一律存雜湊。
+
+| 資料表 | 內容 | 重點欄位 |
 |---|---|---|
-| **算得準** | `src/engine.js`（確定性規則引擎） | 工時累計、班間休息、連續天數、證照效期、加權評分、指派最佳化、班表生成、任務重分配 |
-| **說得清** | `src/llm.js`（語言模型轉接層） | 解析請假訊息、追問缺漏、把數字寫成人話、生成摘要與草稿 |
+| `identity` | LINE 帳號與人員代號的綁定 | staff_id（唯一）、unit、role（職級）、tier（權責層）、bound_at |
+| `bind_code` | 一次性綁定碼 | code、staff_id、tier、expires_at（30 分鐘）、used_at |
+| `staff` | 人員快照 | role、ladder、unit、certs_json（含效期）、willing_json、familiar_json、standby_30d |
+| `shift` | 班表 | staff_id、date、shift、unit、source（imported／generated／substitution／swap／manual） |
+| `leave` | 請假與預假 | from_date、to_date、type、source（imported／prebook／substitution） |
+| `setting` | 系統設定 | 圖文選單 id、各單位生成需求、選單建立工作 |
+| `prebook_cycle` | 預班週期（每單位每月一個） | deadline、max_days、state、draft_json、uncovered_json |
+| `prebook_request` | 每人預假 | dates_json、state（PENDING／SUBMITTED／NO_REQUEST）、reminded_count |
+| `sub_request` | 替班請求 | unit、date、shift、state、candidates_json（核准時凍結）、timeout_min |
+| `sub_ask` | 逐一詢問紀錄 | seq、staff_id、asked_at、expired_at、answer |
+| `audit` | 留痕（append-only 雜湊鏈） | ts、actor、action、payload_json、prev_hash、hash |
 
-算錯工時在醫療場域是**合規事故**，不是體驗瑕疵；語言模型會產生流暢但錯誤的數字，
-所以所有數字一律來自引擎，模型不得改寫、不得自行計算、不得補完缺漏欄位。
+**留痕雜湊鏈**：每筆的 hash 由「前一筆 hash、時間、操作者、動作、內容」計算，改任何一筆，之後整條鏈驗證失敗。
+已知取捨：同一毫秒兩筆並發寫入可能分叉，驗證會指出分叉點；正式規模需改用序列化寫入。
 
-### 2.2 人在迴路（Human-in-the-loop）
+---
 
-Agent 的每一個關鍵動作都停在「建議」：追問而非臆測、試算放寬而非自行放寬、
-草稿而非發送、主管確認後才寫回。決策留痕記錄每一步是誰做的。
+## 6. 身分、權責層與資料範圍
 
-### 2.3 誠實原則（不粉飾）
+### 6.1 綁定
 
-系統性地拒絕「假裝問題解決了」，在四個層面各有落實：
-解析時**缺漏轉追問**（不臆測）；替補時**排除逐筆給原因**（不隱藏）；
-重分配時**無人可承接的任務標示缺口與原因**（不硬塞）；
-生成時**排不出的格子彙整各規則擋下幾人**（不放寬）。
+- 同仁的 LINE 必須先綁定人員代號才能使用；未綁定者只看得到綁定說明。
+- 綁定碼由**管理者**產生，兩條路走同一流程：LINE 輸入 `發碼 N-04 護理長`，或在「人員與綁定」頁按鈕產生。
+- 同仁在自己的 LINE 輸入 `綁定 N-04 六位數碼`，權責層隨碼帶入。換手機重綁時舊帳號自動失效。
+- 管理者捷徑 `我是 N-01 護理長`：管理者直接切換自己的身分，不必發碼給自己，留痕標 `bind.admin_switch`。
 
-## 3. 系統架構總覽
+### 6.2 權責層與權限矩陣
 
-### 3.1 現況：純前端零依賴架構
+| 權責層 | 可用功能 |
+|---|---|
+| 護理師（staff） | 通報缺班、換班預檢、我的邀請、預假、我的預假、平台登入、使用說明 |
+| 護理長（head） | 以上全部＋儀表板、待核准、核准／調整替班、開啟預班、預班狀態、催繳、截止、核准公告班表、設定生成需求、平台班表寫回 |
+| 督導／主任（exec） | 以上全部＋調度棋盤、負荷雷達 |
+| 管理者 | 發碼、我是、建立選單、人員與綁定頁；繞過權責閘 |
 
-整個平台是靜態網頁（HTML + 原生 JS，無框架、無打包、無外部資源），
-可雙擊 `index.html` 離線執行，或由 GitHub Pages 託管。
+矩陣定義在 `botcore.js` 的 `COMMAND_MIN_TIER`，是唯一真相來源：LINE 指令閘門、選單、使用說明、圖文選單都由它產生。
+權限不足時誠實回覆「此功能屬哪一層」，不假裝指令不存在。
 
-```mermaid
-flowchart TB
-    subgraph browser["瀏覽器（單一頁面）"]
-        UI["index.html + assets/styles.css<br/>八個畫面"]
-        APP["src/app.js<br/>畫面渲染與流程控制<br/>（狀態機、留痕、localStorage）"]
-        ENGINE["src/engine.js<br/>確定性決策引擎<br/>createEngine(db) 工廠＋reallocateTasks"]
-        LLMA["src/llm.js<br/>LLM 轉接層<br/>mock ↔ api（含消毒與合約驗證）"]
-        DATA["src/data.js<br/>模擬資料<br/>（人員／班表／請假／演示情境）"]
-        RULES["src/rules.js<br/>規則庫 Rule Registry<br/>（H1–H6／S1–S5／F1–F4）"]
-    end
-    LS[("localStorage<br/>規則調整快照")]
-    EXT["（api 模式，預設關閉）<br/>Lambda Function URL → Bedrock<br/>（aws/lambda 已完成實作）"]
+### 6.3 資料範圍
 
-    UI --> APP
-    APP -->|"注入 db（同一份參照）"| ENGINE
-    APP --> LLMA
-    DATA --> APP
-    RULES --> APP
-    APP <-->|"存讀（載入時夾限範圍）"| LS
-    LLMA -.->|"https + 逾時 + 端點白名單 + 消毒"| EXT
-```
+護理長與護理師的查詢一律鎖在自己的單位（儀表板、負荷、待核准、平台快照）；督導與管理者看全院。範圍在後端切，不是介面藏起來。
 
-### 3.2 模組職責
-
-| 檔案 | 職責 | 關鍵設計 |
-|---|---|---|
-| `index.html` | 八個畫面的骨架 | 無 inline script；CSP 限制同源資源 |
-| `src/data.js` | 模擬資料層 | 全虛構、代號化；正式導入時整層替換為 API 讀取 |
-| `src/rules.js` | 規則庫 | 規則是**可維護的資料**，不是寫死的程式碼 |
-| `src/engine.js` | 決策引擎 | `createEngine(db)` 依賴注入，零全域讀取，可移植至 Lambda |
-| `src/llm.js` | LLM 轉接層 | mock／api 雙模式；api 回應經合約驗證＋白名單消毒 |
-| `src/app.js` | 畫面與流程 | 唯一操作 DOM 的模組；輸出一律經 `esc()` 跳脫 |
-| `aws/lambda/index.mjs` | Bedrock LLM Proxy | 金鑰只存在 Lambda IAM 角色；structured outputs 強制回應格式 |
-| `tests/engine.test.js` | 邊界測試（37 項） | 瀏覽器（tests.html）與 CI（Node）共用同一份 |
-| `tests/run-node.js` | CI runner | 把 module.exports 掛回 globalThis，模擬瀏覽器載入順序 |
-
-**依賴方向**：`app.js → (engine, llm, data, rules)`；`engine.js` 不依賴任何模組（資料全部注入）；
-`llm.js` 依賴 `data.js` 的常數表（SHIFT_TYPES 等）做關鍵詞比對與白名單驗證。
-
-## 4. 資料流：一筆缺班事件的完整旅程
-
-```mermaid
-sequenceDiagram
-    actor 護理長
-    participant UI as app.js（畫面）
-    participant LLM as llm.js（語言）
-    participant ENG as engine.js（計算）
-
-    護理長->>UI: 貼上 LINE 請假訊息
-    UI->>LLM: llmParseGapMessage(rawText)
-    LLM-->>UI: {extracted, missing}（沒寫的欄位轉為追問，不臆測）
-    UI-->>護理長: 顯示解析結果＋追問表單
-    護理長->>UI: 補充單位／資格，確認條件
-    UI->>UI: 日期嚴格驗證（isValidDateStr）
-    UI->>LLM: completeGapEvent(extracted, answers)（最後一道白名單閘門）
-    UI->>ENG: evaluateGap(gap)
-    ENG-->>UI: {candidates（排序＋評分卡＋風險標記）, excluded（逐筆原因）}
-    UI->>LLM: llmExplainCandidate(每位候選)（只把數字寫成人話）
-    護理長->>UI: 選定替補人選
-    UI->>LLM: llmSupervisorSummary / llmNotificationDraft
-    UI-->>護理長: 確認摘要＋人工確認事項＋通知草稿（停在草稿）
-    護理長->>UI: 完成主管確認
-    UI->>ENG: applyReplacement(gap, staffId)（班次寫回＋替補次數 +1）
-    UI->>UI: logAction(...)（雜湊鏈留痕）
-```
-
-候選人不足時進入第 2 層（`relaxationAnalysis` 試算＋畫面 7 全局指派）；
-連放寬都無解時進入第 3 層（畫面 7 韌性模式，`reallocateTasks`）。
-第 0 層（畫面 8 班表生成）獨立於缺班事件流程，直接對「下一週」產出合規班表草稿。
-
-## 5. 缺班事件生命週期
-
-```mermaid
-stateDiagram-v2
-    [*] --> 草稿: 貼上訊息並解析
-    草稿 --> 已確認條件: 主管補充＋確認（嚴格驗證）
-    已確認條件 --> 已確認條件: 調整規則庫 → 重算排序
-    已確認條件 --> 已結案: 主管確認替補（寫回班表）
-    已結案 --> [*]: 開始下一筆缺班（狀態重置，<br/>班表與公平性延續累計）
-    note right of 已結案
-        已結案事件不可變：
-        不得重新選人、不得重算
-        （重算會讓剛指派的人被 H2 排除，
-        出現「已補完卻顯示缺口」的矛盾）
-    end note
-```
-
-## 6. 決策引擎內部設計
-
-### 6.1 三層規則模型
+### 6.4 平台登入（不另建帳號）
 
 ```
-評估一位人員 = 硬性約束（過濾）→ 軟性偏好（排序）→ 風險標記（知情）
+LINE 輸入「平台」→ 機器人回本人專屬連結 index.html#t=<link token>（HMAC 簽章，10 分鐘）
+  → 平台開頁：GET /api/session 換 session token（12 小時，只存在該分頁）
+  → GET /api/snapshot 讀雲端人員與班表（依資料範圍），視角鎖定為綁定時授權的權責層
 ```
 
-| 層 | 代碼 | 行為 | 例 |
+金鑰由 channel secret 派生；token 只含代號、種類、到期時間，不含姓名。連結 token 進頁即從網址列移除。
+
+---
+
+## 7. 核心流程
+
+### 7.1 替班迴路
+
+```
+REPORTED ──護理長核准──▶ APPROVED ──▶ ASKING ──有人接──▶ FILLED（寫回班表、通知相關人）
+    │                                    │
+    └──駁回──▶ REJECTED                   └──全部不接或逾時──▶ EXHAUSTED（回護理長人工處理）
+```
+
+- 通報時引擎排出前 5 位合格候選與理由；核准時候選序列凍結，成為「為什麼找你不找他」的正本。
+- 護理長可略過、置頂、調整順序、改逾時；**不能加入被規則排除的人**。
+- 一次只問一位。逾時依距離上班的時間分級：12 小時內 15 分鐘、48 小時內 60 分鐘、更遠 240 分鐘。
+- 逾時後才按「接」不算數；拒絕與逾時不影響任何評分；代班次數只在真的接了才加一。
+- 寫回前重新驗證硬性規則（班表可能在等待期間變動）。
+
+### 7.2 預班迴路
+
+```
+OPEN ──截止──▶ CLOSED ──生成──▶ REVIEW ──護理長核准──▶ PUBLISHED（寫入正式班表、推播全單位）
+```
+
+- 護理長 `開啟預班 11月`（可設截止日與每人上限，預設前月 25 日、4 天），全單位收到公告。
+- 同仁以文字 `預假 11/3 11/4`、`預假 無`，或預假日曆頁回覆；截止前可改，最後一次為準。
+- 截止前 3 天與 1 天只催未回覆者；逾期未回視同無預假並留痕。
+- 截止時預假寫入 leave，引擎依單位的生成需求產生草稿；排不出的格子連同規則代碼列出。
+
+### 7.3 平台班表寫回
+
+護理長在平台的每次班表變更，停手 0.8 秒後整份送回 `POST /api/shifts`。Worker 逐筆白名單驗證、算出差異、
+以載入時的版本做樂觀鎖（雲端已被動過就回 409 不覆蓋）、批次寫入、留痕差異。只有護理長可寫。
+
+### 7.4 圖文選單建立
+
+管理者輸入 `建立選單`，Worker 登記一個工作，由每分鐘的排程一步步完成：四份選單、重掛已綁定者、清舊版、推播報告。
+（一個請求做完會超過免費方案的單次預算，實測會被中斷，所以拆成多步。）
+
+---
+
+## 8. 決策引擎
+
+### 8.1 規則庫
+
+| 代碼 | 規則 | 參數（預設） | 依據 |
 |---|---|---|---|
-| 硬性約束 | H1–H6 | 違反即排除，附規則代碼與原因 | H4 班間休息 ≥ 11h（勞基法 §34） |
-| 軟性偏好 | S1–S5 | 加權評分（權重總和 100），決定排序 | S1 公平性 30 分（治理核心訊號） |
-| 風險標記 | F1–F4 | 不排除，但主管必須知情；F1 需額外核准 | F3 跨單位支援需加強交班 |
+| H1 | 職務與資格符合 | — | 院內護理人員資格管理 |
+| H2 | 當日未排其他班別 | — | — |
+| H3 | 非請假或不可排班狀態 | — | — |
+| H4 | 班間休息時間充足 | 11 小時 | 勞基法 §34 |
+| H5 | 連續上班天數上限 | 6 天 | 勞基法 §36；四週彈性工時下法定 12 日，院內從嚴 |
+| H6 | 週工時絕對上限 | 60 小時 | 勞基法 §32 延長工時上限 |
+| H7 | 雙週例假保障 | 二週至少 2 日 | 勞基法 §36 II ③ |
+| H8 | 四週正常工時總量 | 160 小時 | 勞基法 §30-1 |
+| H9 | 四週例假與休息日總量 | 8 日 | 勞基法 §36 II ③ |
+| H10 | 個人限制班別 | 依登錄 | 勞基法 §49 母性保護等 |
+| S1 | 班別分配公平性 | 5 次飽和 | 加權評分 |
+| S2 | 工時餘裕 | 週 48 小時 | 加權評分 |
+| S3 | 班別型態相符 | — | 加權評分 |
+| S4 | 可支援意願 | — | 加權評分 |
+| S5 | 單位熟悉度 | — | 加權評分 |
 
-各規則的完整定義、法規依據與可否放寬，見 `src/rules.js` 與 [CONTEXT.md](CONTEXT.md)。
+硬性規則違反即排除並附代碼；軟性規則加權成 0–100 分排序。四週彈性工時以固定週期錨點計算。
 
-### 6.2 決策階梯的演算法
+### 8.2 主要函式
 
-| 層 | 函式 | 目標與方法 |
-|---|---|---|
-| 0 | `generateSchedule(spec)` | 逐格生成下週班表：每格以 **同一份 `checkHardConstraints`** 過濾合格者，依「總量均衡 → 班別輪值均衡 → 意願 → 字典序」確定性排序取人。既有班表為邊界條件（跨週 H4／H5）。生成後疊上現有班表以 `rosterWarnings` 整表重掃（**第二道獨立驗證**），新增「已違規」必為 0；排不出的格子逐格彙整各規則擋下幾人 |
-| 1 | `evaluateGap(gap)` | 全員跑硬性檢查 → 合格者評分排序；原班人員一律排除但據實呈現 |
-| 2 | `relaxationAnalysis(gap)` | 候選不足時逐條試算「放寬哪條會多出誰」；只試算，不放寬 |
-| 2 | `assignGreedy(gaps)`／`assignJointly(gaps)` | 多筆缺班對照：貪心 vs 全局。全局指派枚舉全部可行組合，字典序最佳化（先填補筆數、再總分），組合可行性經完整模擬（同一人接多筆的 H2/H4/H5/H6 交互檢查） |
-| 3 | `reallocateTasks({tasks, onDuty, maxExtraLoad})` | 缺班者任務拆解重分配：資格硬性匹配、負荷上限嚴守，字典序最佳化（未覆蓋關鍵任務最少 → 未覆蓋總數最少 → 最大負荷最平衡）；無人可承接的任務標示原因（`no_qualified`／`over_capacity`） |
-| — | `rosterWarnings()` | 主動預警：對已排定班表靜態掃描，high／medium／low 三級；也是第 0 層的驗證器 |
-| — | `coverageGaps(dates)` | 配置缺口掃描：每單位每班別在班人數 vs 最低配置；無資料單位回報 noData |
-
-**規模聲明**：demo 為 11 人 × 少量缺班／28 格週班表，暴力枚舉與貪心＋確定性排序即為可審計的解；
-正式導入若規模放大，`assignJointly` 與 `generateSchedule` 應改用匹配／整數規劃求解器，
-**目標函數與硬性約束不變**。
-
-### 6.3 可移植性
-
-引擎以 `createEngine(db)` 建立，人員／班表／規則皆由外部注入，內部不讀取任何全域資料、
-不接觸 DOM。同一份檔案在瀏覽器、tests.html、Node CI 與未來的 Lambda 端點上行為一致——
-由 `tests/engine.test.js` 的 37 項邊界測試保證。
-
-## 7. LLM 轉接層與 Bedrock Proxy
-
-### 7.1 前端轉接層的四道防線
-
-```mermaid
-flowchart LR
-    A["呼叫方（app.js）"] --> B{"LLM.mode"}
-    B -->|mock（預設）| C["關鍵詞規則比對<br/>決定性、離線可跑"]
-    B -->|api| D["llmCallApi()"]
-    D --> E["assertEndpointAllowed<br/>（強制 https＋端點白名單）"]
-    E --> F["fetch ＋ 15 秒逾時<br/>（AbortController）"]
-    F --> G["LLM_CONTRACTS<br/>回應形狀合約驗證"]
-    G --> H["sanitizeParsed<br/>欄位值白名單消毒"]
-    F -->|任何失敗| I["llmFallbackToMock<br/>自動退回 mock＋畫面標示"]
-    G -->|不符合約| I
-```
-
-1. **合約驗證**（形狀）：模型輸出永遠可能跑格式，畫面不能因此壞掉。
-2. **白名單消毒**（值）：通報訊息是不可信輸入，可能夾帶 prompt injection；
-   模型吐回的欄位值必須通過白名單（日期真實存在、班別∈SHIFT_TYPES、單位∈UNITS、
-   資格⊆CERTS）才能進入引擎與畫面，不合法的值降級為「未解析→追問」。
-3. **傳輸安全**：endpoint 強制 https（本機開發除外）；以 URL 參數切換端點時僅接受
-   `*.on.aws` 與 localhost 白名單——防止惡意連結把通報訊息導向第三方端點；15 秒逾時不卡畫面。
-4. **失敗退路**：任何一次呼叫失敗立即退回 mock 並標示，演示不中斷。
-
-### 7.2 Bedrock LLM Proxy（`aws/lambda/`，已完成實作）
-
-```mermaid
-flowchart LR
-    FE["前端 llm.js<br/>（api 模式）"] -->|"https + x-demo-token"| FU["Lambda Function URL<br/>（CORS 限定）"]
-    FU --> LB["Lambda：index.mjs<br/>存取權杖檢查＋任務路由"]
-    LB --> BR["Amazon Bedrock<br/>claude-sonnet-5<br/>structured outputs（json_schema）"]
-    LB -.->|"日期由 calendarTable 確定性計算<br/>missing 由 Lambda 推導"| LB
-```
-
-| 設計決定 | 理由 |
+| 函式 | 用途 |
 |---|---|
-| 金鑰永不落地前端 | Bedrock 憑證只存在 Lambda 的 IAM 執行角色；前端只持有 demo token |
-| structured outputs（`json_schema`＋`additionalProperties:false`） | 三種任務（parse／explain／summary）的回應形狀由 schema 強制，前端合約驗證是第二道 |
-| 相對日期不交給模型換算 | Lambda 端以 `calendarTable` 確定性計算「明天／下週三」對應日期，模型只選不算 |
-| `missing`（追問清單）由 Lambda 推導 | 缺漏判定是規則不是語言，模型不參與 |
-| 成本護欄 | 低 effort、短輸出上限、單一模型；部署步驟與成本估算見 aws/README.md |
+| `evaluateGap` | 全員跑硬性檢查，合格者評分排序，排除者逐筆附原因 |
+| `relaxationAnalysis` | 候選不足時試算「放寬哪條會多出誰」，只試算不放寬 |
+| `assignJointly` | 多筆缺班的全局指派 |
+| `generateSchedule` | 逐格生成班表，生成後整表重掃驗證，新增違規必為 0 |
+| `reallocateTasks` | 無人可補時的任務重分配 |
+| `rosterWarnings`、`workforceGapAnalysis`、`dispatchAnalysis` | 合規掃描、缺口分析、跨單位調度 |
 
-## 8. 狀態與持久化
+引擎由 `createEngine(db)` 建立，資料全部注入，不讀全域、不碰畫面，所以三個執行環境行為一致。
 
-| 資料 | 存放 | 生命週期 | 保護 |
+---
+
+## 9. 語言模型層
+
+- **平台**：`llm.js` 有 mock（確定性關鍵字解析）與 api（呼叫 `aws/lambda` 的 Bedrock 代理）兩種模式；api 失敗自動退回 mock。
+- **機器人**：一律使用確定性解析，不呼叫外部模型。
+- 四道防線：合約驗證（形狀）、白名單消毒（值）、傳輸安全（https、端點白名單）、失敗退路。
+- 相對日期（「明天」「下週三」）由程式換算，模型只選不算。
+
+---
+
+## 10. 介面清單
+
+### 10.1 LINE 指令
+
+| 類別 | 指令 |
+|---|---|
+| 綁定 | `綁定 N-04 碼`、`綁定說明`、`我是誰`；管理者 `發碼 N-04 [護理長／督導]`、`我是 N-01 [權責層]`、`建立選單` |
+| 缺班 | 直接傳請假訊息、`通報缺班`、`我的邀請`、`待核准`、`調序 R… N-04 N-08`、`逾時 R… 30` |
+| 預班 | `開啟預班 11月 [截止 10/25] [上限 3]`、`預假 11/3 11/4`、`預假 無`、`我的預假`、`預班狀態`、`催繳`、`關閉預班` |
+| 設定 | `需求`、`設定需求 D2 E1 N1` |
+| 其他 | `儀表板 [單位]`、`換班 N-01 8/3 N-02 8/5`、`調度`、`負荷`、`平台`、`選單`、`使用說明` |
+| 按鈕 | 替班：核准、駁回、調整、略過、置頂、逾時、接、不接；預班：核准並公告、暫緩 |
+
+### 10.2 HTTP API（Worker）
+
+| 方法與路徑 | 權限 | 用途 |
+|---|---|---|
+| `POST /` | LINE 簽章 | webhook |
+| `GET /api/session?t=` | 有效連結 | 換 session |
+| `GET /api/snapshot` | session | 人員與班表（依範圍），含版本與可否寫回 |
+| `GET`、`POST /api/prebook` | session | 預假日曆讀取與送出 |
+| `POST /api/shifts` | 護理長 | 班表寫回（差異、樂觀鎖） |
+| `GET /api/admin/staff` | 管理者 | 人員綁定狀態 |
+| `POST /api/admin/bindcode` | 管理者 | 產生綁定碼 |
+
+CORS 只放行平台來源與本機開發。
+
+---
+
+## 11. 資安與個資
+
+### 11.1 目前已實作
+
+| 威脅 | 防護 |
+|---|---|
+| 偽造 LINE 請求 | HMAC-SHA256 驗章，失敗回 403 並記錄 |
+| 陌生人使用 | 未綁定者只能綁定；綁定碼一次性、30 分鐘失效 |
+| 洗版或濫用 | 每人每分鐘 10 則，超過先警告後靜默丟棄，並通知管理者 |
+| 越權 | 權責閘與資料範圍都在後端；平台 API 每次驗 session 與權責層 |
+| 竄改紀錄 | 留痕雜湊鏈，可驗證並指出斷點 |
+| 個資外洩 | 只存代號；LINE userId 只在身分表；留痕只存雜湊；管理頁不回傳 userId |
+| 模型注入 | 模型輸出必經白名單；機器人不使用外部模型 |
+
+事件應對步驟見 [SECURITY.md](SECURITY.md)。
+
+### 11.2 正式導入必要補強
+
+| 項目 | 現況 | 正式導入需要 |
+|---|---|---|
+| 資料存放 | Cloudflare 境外節點 | 院方核可的主機（院內或境內雲端）；store 介面已抽象 |
+| 認證 | LINE 綁定加簽章短效 token | 依院方要求介接院內帳號（SSO）；管理者與稽核角色分離 |
+| 留痕 | SHA-256 雜湊鏈，可驗證 | 序列化寫入避免分叉；定期將鏈尾雜湊錨定到外部 |
+| 輸入防護 | 驗章、頻率限制、白名單 | 加上 WAF 與院方資安掃描 |
+| 個資治理 | 只存代號、不碰病人資料 | 資料處理協議、保存期限政策；若啟用外部語言模型，需去識別前處理與協議 |
+| 稽核與監控 | 即時日誌 | 集中日誌保存；規則與設定變更需雙人核可 |
+
+---
+
+## 12. 部署與維運
+
+| 元件 | 位置 | 部署方式 |
+|---|---|---|
+| 平台與頁面 | GitHub Pages | 合併到 main 後自動發布（約 1 分鐘） |
+| Worker | Cloudflare Workers（免費方案） | `cloudflare/linebot/deploy.ps1`（含中文路徑處理） |
+| 資料庫 | Cloudflare D1（APAC） | 新庫跑 `schema.sql`；既有庫依序跑 `migrations/0001–0004` |
+| 排程 | Worker cron 每分鐘 | 隨 Worker 部署 |
+| 圖文選單 | LINE | 改 `richmenu.ps1` → `-ImageOnly` → commit → LINE 輸入 `建立選單` |
+
+**機密**（只存在 Cloudflare，不進 repo）：`LINE_CHANNEL_SECRET`、`LINE_CHANNEL_ACCESS_TOKEN`、`ADMIN_USER_ID`。
+**環境變數**（`wrangler.toml`）：`PLATFORM_URL`、`LIFF_ID`、D1 綁定。
+**觀察**：`npx wrangler tail shiftguard-linebot` 看即時日誌；D1 可用 `npx wrangler d1 execute shiftguard --remote --command "…"` 查詢。
+
+---
+
+## 13. 測試
+
+| 套件 | 規模 | 執行 | 範圍 |
 |---|---|---|---|
-| 規則調整（權重／門檻／啟用） | localStorage | 跨重新整理保存 | 載回時逐值夾限（`PARAM_RANGE`／`WEIGHT_RANGE`），防止被改寫成 0 或負數而無聲關閉法定下限 |
-| 班表寫回、替補次數 | 記憶體 | 重新整理即重置 | 刻意設計：方便重複演示 |
-| 決策留痕 audit | 記憶體＋可匯出 JSON | 重新整理即重置 | 雜湊鏈結（tamper-evident）：每筆含前筆雜湊，改任一筆即斷鏈；匯出含 `chainValid` |
+| 單元測試 | 156 項 | `node tests/run-node.js`；瀏覽器開 `tests.html`；每次 push 由 GitHub Actions 自動跑 | 引擎邊界、規則、FHIR、機器人各流程 |
+| 端到端煙霧測試 | 164 步 | `node tests/linebot-worker.smoke.mjs`（Node 22.5 以上，部署前手動跑） | 真 Worker＋記憶體 D1，模擬簽章請求與 LINE 呼叫，走完綁定、替班、預班、選單、平台 API、寫回、管理頁 |
 
-## 9. 測試與 CI
+部署前兩套都要全綠。測試數字寫在 `home.html` 與 `docs/DEMO-SCRIPT.md`，新增測試要同步更新。
 
-- `tests/engine.test.js`（37 項）釘住合規事故等級的邊界：
-  班間休息恰 11h、連 6／7 天、自然週歸屬、大夜跨日、demo 資料集完整結果、
-  解析不臆測與多線索模糊偵測、api 失敗退路與消毒、
-  任務重分配（資格硬性／負荷上限／關鍵優先／確定性）、
-  班表生成（零違規、跨週 H4/H5 邊界、誠實缺格、確定性、公平輪值）。
-- 三種執行方式，同一份測試：雙擊 `tests.html`（離線）、`node tests/run-node.js`（本機）、
-  GitHub Actions（每次 push 自動跑，`.github/workflows/test.yml`）。
-- 語義權威在 [CONTEXT.md](CONTEXT.md)：文件與程式不一致時，以文件為準修程式並補測試。
+---
 
-## 10. 部署架構
+## 14. 已知限制
 
-### 10.1 現況
-
-| 環境 | 方式 |
-|---|---|
-| 線上 demo | GitHub Pages（push 即自動更新）https://bobyu89.github.io/nursing-agent/ |
-| 離線 demo | 雙擊 `index.html`（CSP 含 `file:` 來源，離線流程不受影響） |
-| 本機開發 | `python -m http.server 8777` |
-| LLM api 模式 | 依 aws/README.md 部署 Lambda + Bedrock 後，以 `?llm=<Function URL>` 切換 |
-
-### 10.2 正式導入目標架構（AWS）
-
-```mermaid
-flowchart TB
-    U["主管／護理長（瀏覽器）"] --> CF["CloudFront + S3<br/>靜態前端"]
-    U --> APIGW["API Gateway<br/>（認證、限流）"]
-    APIGW --> COG["Cognito + IAM<br/>主管／規則管理員角色分離"]
-    APIGW --> L1["Lambda：決策引擎<br/>（同一份 engine.js）"]
-    APIGW --> L2["Lambda：LLM Proxy<br/>（aws/lambda 直接沿用）"]
-    L2 --> BR["Amazon Bedrock<br/>（訊息解析、理由生成）"]
-    L1 --> RR[("DynamoDB<br/>Rule Registry（版本化）")]
-    L1 --> DDB[("RDS／DynamoDB<br/>人員／班表")]
-    L1 --> AUDIT[("Audit Log<br/>append-only 儲存")]
-    EB["EventBridge<br/>每日風險掃描（M2）"] --> L1
-```
-
-關鍵遷移原則（完整的四階段演進路線圖見 [BLUEPRINT.md](BLUEPRINT.md) §4–§5）：
-
-- **引擎零改寫**：`createEngine(db)` 的資料改由資料庫注入，計算邏輯與測試不變。
-- **金鑰永不落地前端**：Bedrock 呼叫一律經 Lambda proxy；前端只拿短效 token（Cognito）。
-- **規則版本化**：「當時是用哪一版規則做的決定」是稽核的核心問題，規則變更本身也要留痕。
-- **留痕升級**：前端雜湊鏈保留作為跨系統核對的輕量證據，正式儲存改後端 append-only
-  （DynamoDB 條件寫入或 QLDB）。
-- **公平性訊號**：`standbyCount30d` 由靜態快照改為「院內實際叫班紀錄的滾動 30 天窗口」。
-
-## 11. 資安設計
-
-### 11.1 前端現況防護（本版已實作）
-
-| 面向 | 機制 |
-|---|---|
-| XSS | 所有動態輸出經 `esc()` 跳脫（含屬性值）；未來後端資料欄位已預先跳脫 |
-| CSP | `default-src 'self'`（含 `file:` 保離線流程）；禁 object；不載入任何第三方資源 |
-| 不可信輸入 | 通報訊息（使用者輸入）與 api 模式模型輸出，一律經白名單消毒才進入引擎 |
-| 輸入驗證 | 日期嚴格日曆驗證（拒絕 2026-02-31 這類會被 JS Date 無聲進位的值） |
-| localStorage | 載回值逐項夾限，防止規則門檻被竄改成無效值 |
-| 傳輸 | LLM endpoint 強制 https ＋ 15 秒逾時；URL 參數切換端點僅限 `*.on.aws`／localhost 白名單 |
-| 端點存取 | Lambda 驗證 `x-demo-token`；CORS 限定來源；Bedrock 金鑰只在 IAM 角色 |
-| 隱私 | 無 PII（代號化虛構資料）；`referrer no-referrer`；mock 模式訊息內容不離開瀏覽器 |
-
-### 11.2 正式導入必要補強（前端 demo 做不到、也不假裝做到的）
-
-1. **認證與授權**：Cognito ＋ IAM 角色分離（護理長／規則管理員／稽核）；規則調整需權限。
-2. **留痕不可竄改**：後端 append-only 儲存；雜湊鏈改用密碼學雜湊（SHA-256）並定期錨定。
-3. **API 防護**：限流、WAF、輸入 schema 驗證（API Gateway ＋ Lambda 雙層）。
-4. **個資治理**：api 模式會將通報訊息（含病情描述）送往模型端點——需 BAA／資料處理協議、
-   去識別化前處理、傳輸與儲存加密、保存期限政策。
-5. **稽核與監控**：CloudTrail／CloudWatch；規則變更需雙人核可流程。
-
-## 12. 已知限制
-
-| 限制 | 揭露位置 | 說明 |
+| 限制 | 影響 | 方向 |
 |---|---|---|
-| mock 解析理解力有限 | README、畫面標示 | 關鍵詞規則，非真實模型推論 |
-| `standbyCount30d` 為靜態快照 | CONTEXT.md | 不隨時間滾動過期 |
-| 請假粒度為「日」 | CONTEXT.md | 半天假／時段假視為全日不可排班 |
-| H5／H6 為簡化的院內政策 | CONTEXT.md | 比法規更嚴；正式導入依變形工時制度重定義 |
-| `assignJointly` 指數複雜度 | CONTEXT.md | demo 規模下暴力枚舉即最佳解；放大需求解器 |
-| `generateSchedule` 為貪心 MVP | CONTEXT.md | 週班表、單一單位；月班表與整數規劃最佳化為藍圖下一步 |
-| 任務重分配為獨立演示情境 | CONTEXT.md | 任務清單正式導入應來自護理排程／醫囑系統 |
-| 前端雜湊鏈非密碼學強度 | CONTEXT.md、REVIEW.md | djb2 僅 tamper-evident 展示用 |
+| 班別固定為白、小夜、大夜三班 | 洗腎室、急診等不同班型無法直接套用 | 改為單位設定檔（見系統設計書） |
+| 單位差異只有「每班最低人數」 | 崗位、區域、特定資格無法表達 | 同上 |
+| 管理功能與日常操作混在同一介面 | 臨床主管面對過多設定 | 分成系統管理端與使用端（見系統設計書） |
+| 示範資料為模擬人員 | 尚無真實使用者驗證 | 場域試辦與可用性研究 |
+| 資料存放於 Cloudflare 境外節點 | 醫院導入多要求境內或院內 | 正式導入改院方核可的主機，store 介面已抽象 |
+| 留痕並發寫入可能分叉 | 高流量時需序列化 | 改用序列化寫入 |
+| AWS 宿主未實作狀態功能 | 只有 Cloudflare 版有完整迴路 | 明寫不支援，或依 store 介面實作 |
+| 程式庫與平台公開於 GitHub | 影響專利新穎性與院方資安評估 | 計畫執行前請學校技轉單位評估 |
+
+---
+
+## 15. 交接清單
+
+| 項目 | 內容 |
+|---|---|
+| 原始碼 | GitHub `bobyu89/nursing-agent`（main 為線上版本，功能以 PR 合併） |
+| 線上平台 | <https://bobyu89.github.io/nursing-agent/> |
+| Worker | Cloudflare 帳號下的 `shiftguard-linebot`；D1 資料庫 `shiftguard` |
+| LINE | LINE Developers 的 Messaging API channel 與 LIFF；管理者 LINE 帳號設定在 `ADMIN_USER_ID` |
+| 權限移交 | GitHub 協作者、Cloudflare 成員、LINE channel 管理員需由現任擁有者邀請 |
+| 開發流程 | 開分支 → 改程式 → 兩套測試全綠 → 部署 Worker → 開 PR → 合併後 Pages 自動發布 |
+| 領域語義 | 任何「這個規則為什麼這樣」的問題先查 `docs/CONTEXT.md` |
