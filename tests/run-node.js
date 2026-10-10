@@ -24,11 +24,15 @@ Object.assign(globalThis, require('../src/engine.js'));
 Object.assign(globalThis, require('../src/fhir.js'));
 Object.assign(globalThis, require('../src/llm.js'));
 Object.assign(globalThis, require('../src/botcore.js'));
+Object.assign(globalThis, require('../src/profile.js'));
+Object.assign(globalThis, require('../src/demand.js'));
+Object.assign(globalThis, require('../src/coverage.js'));
 
 require('./engine.test.js');
 require('./fhir.test.js');
 require('./botcore.test.js');
 require('./linebot-stage1.test.js');
+require('./nursing-core.test.js');
 
 (async () => {
   let pass = 0, fail = 0;
