@@ -659,14 +659,14 @@ async function handleEvent(ev, env, { store, live }) {
     }
     /* Phase 2：預班迴路（開啟／預假／查詢／進度／催繳／截止）；每個 flow 自己驗單位與狀態 */
     const p2 = { text, actor: identity, now: nowIso, store, db: live };
-    const p2flow = { opencycle: openCycleFlow, prebook: prebookFlow, myprebook: myPrebookFlow,
+    const p2flow = { opencycle: openCycleFlow, prebook: prebookFlow, myprebook: myPrebookFlow, myroster: myRosterFlow,
       cyclestatus: cycleStatusFlow, remindnow: remindNowFlow, closecycle: closeCycleFlow, requirement: requirementFlow }[cmdKey];
     if (p2flow) {
       const o = await p2flow(p2);
       await dispatchPushes(env, store, o.pushes);
       return lineReply(token, ev.replyToken, o.reply.text, await resolvePageItems(env, platformUrl, o.reply.items, identity.staff_id, Date.now()));
     }
-  } else if (['pending', 'myask', 'manage', 'opencycle', 'prebook', 'myprebook', 'cyclestatus', 'remindnow', 'closecycle', 'requirement'].includes(cmdKey)) {
+  } else if (['pending', 'myask', 'manage', 'opencycle', 'prebook', 'myprebook', 'myroster', 'cyclestatus', 'remindnow', 'closecycle', 'requirement'].includes(cmdKey)) {
     return lineReply(token, ev.replyToken, store ? BIND_HELP : STORE_DISABLED_TEXT);
   }
   /* Phase 1.6 資料範圍：head／staff 鎖在自己的單位，exec／管理者／示範模式全院 */
