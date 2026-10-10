@@ -2646,11 +2646,17 @@ async function chooseCandidate(idx) {
     $('#btn-confirm').textContent = '已完成確認 ✓';
     $('#btn-confirm').disabled = true;
     // 寫回：班次進入班表、替補次數累計 → 下一次評估會看到新的公平性狀態
+    // 登入模式：原班人員該班取消（快速通報已先取消，一般通報在此補做）後，整份班表送回雲端（版本鎖、差異留痕）。
+    // 示範模式維持只在本次連線生效，方便重複演示。
+    if (LIVE.active && state.gap.originalStaffId) {
+      vacateForQuickGap({ staffId: state.gap.originalStaffId, date: state.gap.date, shift: state.gap.shift });
+    }
     engine.applyReplacement(state.gap, chosen.staff.id);
+    if (LIVE.active) saveSchedule();
     logAction('主管確認替補',
       `核定 ${chosen.staff.id} 替補 ${shortDate(state.gap.date)} ${SHIFT_TYPES[state.gap.shift].name}` +
       `${chosen.needsApproval ? '（含需額外核准事項）' : ''}；${chkItems.length} 項人工確認事項已逐項勾選，` +
-      '正式調班登錄由主管於院內系統執行');
+      (LIVE.active ? '班表已送回雲端（請假紀錄仍請於院內系統登錄）' : '正式調班登錄由主管於院內系統執行'));
     toast(`已核定 ${chosen.staff.id} 替補，班表與公平性同步更新`);
     renderFairness();
     renderWarnings();

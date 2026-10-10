@@ -183,7 +183,7 @@ test('stage1：auditCanonical 欄位順序固定、系統動作 actor 為空字�
 
 test('stage1：權限矩陣——三層照抄平台 ROLES，上級涵蓋下級', () => {
   const allowed = (t) => Object.keys(COMMAND_MIN_TIER).filter((k) => commandAllowed(t, k)).sort();
-  const base = ['bindguide', 'guide', 'menu', 'myask', 'myprebook', 'platform', 'prebook', 'report', 'reportguide', 'swap', 'whoami'];
+  const base = ['bindguide', 'guide', 'menu', 'myask', 'myprebook', 'myroster', 'platform', 'prebook', 'report', 'reportguide', 'swap', 'whoami'];
   const headExtra = ['dashboard', 'manage', 'pending', 'opencycle', 'cyclestatus', 'remindnow', 'closecycle', 'publish', 'requirement'];
   assertEqual(allowed('staff'), base, '護理師：通報、換班、選單、說明、我的邀請、我是誰、預假');
   assertEqual(allowed('head'), [...base, ...headExtra].sort(), '護理長：多儀表板、待核准、調整、預班週期');
@@ -721,6 +721,7 @@ function prebookStore() {
     async listPrebookRequests(cycleId, state) { return reqs2.filter((r) => r.cycle_id === cycleId && (!state || r.state === state)).map((r) => ({ ...r })); },
     async insertLeaves(rows) { leaves.push(...rows); },
     async insertShifts(rows) { shifts.push(...rows); },
+    async listShifts(unit) { return shifts.filter((x) => !unit || x.unit === unit).map((x) => ({ ...x })); },
     async loadDb() {
       const staff = STAFF.map((s) => ({ ...s, leaves: [...(s.leaves || []), ...leaves.filter((l) => l.staffId === s.id).map((l) => ({ from: l.from, to: l.to, type: l.type }))] }));
       return { staff, shifts: SHIFTS, empty: false };
@@ -880,6 +881,46 @@ test('phase2：審核——別單位護理長不得公告；暫緩不寫班表�
   const exec = { staff_id: 'N-03', unit: 'ICU', tier: 'exec' };
   assert(/狀態為 PUBLISHED/.test((await publishFlow({ cy: id, actor: exec, now: Q0, store: st, db: null })).reply.text), '督導跨單位可核准（這裡因已公告而被狀態擋）');
   assert(/已存在.*PUBLISHED/.test((await openCycleFlow({ text: '開啟預班 10月', actor: head, now: Q0, store: st })).reply.text));
+});
+
+test('fix：「我的班表」歸 myroster（不再被當成缺班通報）；只列本人今天起 35 天內的正式班次，含借調，附平台連結', async () => {
+  assertEqual(['我的班表', '我的班', '查班表', '班表查詢', '我的班表明天不能來'].map(classifyCommand),
+    ['myroster', 'myroster', 'myroster', 'myroster', 'report'], '整句才算指令，帶事由仍是通報');
+  const labels = menuMessage('https://x/', '', 'staff').quickReply.items.map((i) => i.action.label).join('|');
+  assert(/我的班表/.test(labels), '護理師選單有「我的班表」');
+  const rows = [
+    { staffId: 'N-02', date: '2026-10-09', shift: 'D', unit: 'MED-3A' },   // 昨天：不列
+    { staffId: 'N-02', date: '2026-10-12', shift: 'N', unit: 'MED-3A' },
+    { staffId: 'N-02', date: '2026-10-10', shift: 'E', unit: 'ICU' },      // 今天、借調
+    { staffId: 'N-05', date: '2026-10-11', shift: 'D', unit: 'MED-3A' },   // 別人
+    { staffId: 'N-02', date: '2026-11-20', shift: 'D', unit: 'MED-3A' },   // 超過 35 天
+  ];
+  const store = { async listShifts(unit) { return rows.filter((x) => !unit || x.unit === unit); } };
+  const actor = { staff_id: 'N-02', unit: 'MED-3A', tier: 'staff' };
+  const out = await myRosterFlow({ actor, now: '2026-10-09T17:00:00.000Z', store });   // 台北 10/10 01:00
+  const lines = out.reply.text.split('\n');
+  assert(/共 2 班/.test(lines[0]), lines[0]);
+  assert(/10\/10.*小夜.*支援/.test(lines[1]) && /10\/12.*大夜/.test(lines[2]), '依日期排序、借調註明支援單位');
+  assertEqual(out.reply.items.map((i) => i.page), ['index.html']);
+  const none = await myRosterFlow({ actor: { staff_id: 'N-09', unit: 'MED-3A' }, now: '2026-10-09T17:00:00.000Z', store });
+  assert(/沒有排定的班次/.test(none.reply.text));
+});
+
+test('fix：公告合併而非覆蓋——草稿生成後主管已在平台排定的同人同日班次保留，該格草稿不寫入並據實回報', async () => {
+  const st = prebookStore();
+  const { id, head } = await opened(st);
+  await closeCycleFlow({ actor: head, now: '2026-09-20T00:00:00.000Z', store: st });
+  const draft = JSON.parse(st.cycles.get(id).draft_json);
+  const victim = draft[0];
+  // 主管在平台把這位同仁當天改排別的班（模擬 /api/shifts 寫回後的正式班表）
+  st.shifts.push({ staffId: victim.staffId, date: victim.date, shift: victim.shift === 'D' ? 'E' : 'D', unit: victim.unit, source: 'manual', writtenAt: Q0 });
+  const sameDay = draft.filter((a) => a.staffId === victim.staffId && a.date === victim.date).length;
+  const pub = await publishFlow({ cy: id, actor: head, now: Q0, store: st, db: null });
+  const generated = st.shifts.filter((x) => x.source === 'generated');
+  assertEqual(generated.length, draft.length - sameDay, '同人同日的草稿格不寫入');
+  assert(!generated.some((x) => x.staffId === victim.staffId && x.date === victim.date), '平台上的修改未被覆蓋');
+  assert(new RegExp(`${sameDay} 格因該員當日已有正式班次`).test(pub.reply.text), pub.reply.text);
+  assertEqual(st.audit.at(-1).payload.keptExisting, sameDay);
 });
 
 test('phase2：選單與使用說明——護理師多「我的預假」、護理長多「預班狀態」；classifyCommand 把預班指令歸對鍵，含「預假」開頭的通報句不誤判', () => {
