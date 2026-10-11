@@ -195,7 +195,7 @@ docs/BLUEPRINT.md           系統藍圖（五模組平台視野、四階段演�
 docs/PROJECT-BRIEF.md       一頁式專案 Brief（給院方第一次會議用）
 docs/PILOT-SCOPE.md         試行範圍界定書（七維度收案準則：時間／使用者／案件／事件／環境／成本／代價）
 docs/ROLLOUT-MAP-PROMPT.md  ChatGPT 產圖提示詞（把導入路線圖畫成一頁投影片）
-docs/ARCHITECTURE.md        系統架構書（模組、資料流、資安設計、AWS 目標架構）
+docs/ARCHITECTURE.md        系統架構書 v3.0（LINE 機器人、Worker、D1、身分與權責、兩條迴路、API、部署與交接）；Word 版同目錄
 docs/REVIEW.md              功能與資安審查報告（發現、修復與驗證紀錄）
 docs/CONTEXT.md             領域語義定義（自然週、連續天數、生命週期…的權威出處）
 docs/FHIR.md                FHIR 介接規格（資源對映、TW Core 對齊聲明、匯入驗證鏈）
