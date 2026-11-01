@@ -294,6 +294,17 @@ test('班表覆蓋：示範週內科 3A 只計有排人的 16 班——11 班缺
   const empty = r.slots.filter((s) => !s.assigned.length).map((s) => s.slotId);
   assertEqual(empty, ['2026-08-03|E|WARD', '2026-08-03|N|WARD', '2026-08-06|N|WARD', '2026-08-09|D|WARD', '2026-08-09|N|WARD']);
   assert(empty.every((id) => !t.atLeast.SENIOR.includes(id)), '空班（如 8/06 大夜）是人數缺口，不算帶班缺口');
+
+  // rosterCoverage 照列對不上的列；名單外代號排進空班＝有人排入（計入已排、為衝突、算帶班缺口），不當成空班略過
+  const ward = wardProfile();
+  const odd = { staffId: 'N-03', date: '2026-08-03', shift: 'X', unit: 'MED-3A' };
+  const ghost = { staffId: 'Z-99', date: '2026-08-06', shift: 'N', unit: 'MED-3A' };
+  const r2 = rosterCoverage(ward, careDemand(ward, { dates: WEEK_DATES }), SHIFTS.concat([odd, ghost]), STAFF);
+  assertEqual(r2.unmapped, [{ row: odd, reason: '設定檔無此班別' }], '對不上的列原樣傳出，不默默丟棄');
+  const t2 = r2.tally;
+  assertEqual([t2.staffed, t2.empty, t2.conflict], [17, 4, 1], '8/06 大夜由空班變成有人排入的衝突班');
+  assertEqual(t2.atLeast.SENIOR, [...t.atLeast.SENIOR.slice(0, 6), '2026-08-06|N|WARD', ...t.atLeast.SENIOR.slice(6)],
+    '名單外代號無法確認能力，不算帶班');
 });
 
 test('班表覆蓋：帶班缺口與引擎能力分析逐班同判——示範週 11 班、8 月整月 54 班（有排人 85 班）', () => {
@@ -334,7 +345,7 @@ test('能力覆蓋：效期無法判讀 fail closed——寫出原值、視同�
   assertEqual(resus.issues.map((i) => [i.code, i.short]), [['C-ATLEAST', 1]], 'X-02 的 ACLS 無法判讀，不算在具備者內');
 });
 
-test('班表覆蓋：臨床進階未登錄者不計為帶班且被點名——N-10 未登錄時，示範週缺口由 11 班變 13 班', () => {
+test('班表覆蓋：臨床進階未登錄或無法辨識者不計為帶班且被點名——N-10 未登錄時，示範週缺口由 11 班變 13 班', () => {
   const staff = STAFF.map((s) => (s.id === 'N-10' ? { ...s, ladder: null } : s));
   const t = wardWeek(staff).tally;
   assertEqual(t.unrated, ['N-10']);
@@ -342,4 +353,9 @@ test('班表覆蓋：臨床進階未登錄者不計為帶班且被點名——N-
   assert(['2026-08-07|D|WARD', '2026-08-08|D|WARD'].every((id) => t.atLeast.SENIOR.includes(id)),
     'N-10 在 8/07、8/08 白班，未登錄即不算帶班');
   assertEqual(STAFF.find((s) => s.id === 'N-10').ladder, 'N4', '測試用副本，不改示範資料');
+
+  const typo = wardWeek(STAFF.map((s) => (s.id === 'N-04' ? { ...s, ladder: 'n3' } : s))).tally;
+  assertEqual(typo.unrated, ['N-04'], '不在階梯內的值（小寫 n3）＝無法辨識，同樣點名');
+  assertEqual(typo.atLeast.SENIOR.length, 12, 'N-04 在 8/04 白班，登錄值無法辨識即不算帶班');
+  assert(typo.atLeast.SENIOR.includes('2026-08-04|D|WARD'), JSON.stringify(typo.atLeast.SENIOR));
 });

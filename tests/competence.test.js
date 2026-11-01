@@ -32,6 +32,9 @@ test('能力判定核心：效期邊界——到期當日仍有效、隔日過�
   assertEqual(pick(badgeOf(K_CAT, K_PERSON, 'ACLS', '2026-08-03', { expiringDays: 30 })),
     ['cert', 'expiring', true, '2026-08-31', 28, 'ACLS將於 2026-08-31 到期（剩 28 天）'], '即將到期仍計入');
   assertEqual(badgeOf(K_CAT, K_PERSON, 'ACLS', '2026-08-03').status, 'valid', '不給提醒視窗就不區分即將到期');
+  const edge = (days) => badgeOf(K_CAT, K_PERSON, 'ACLS', '2026-08-03', { expiringDays: days });
+  assertEqual([edge(28).status, edge(28).daysLeft, edge(27).status], ['expiring', 28, 'valid'],
+    '剩餘天數恰等於提醒視窗仍為即將到期（含端點，與引擎 expiry <= 基準日＋視窗同判）');
   let err = null;
   try { badgeOf(K_CAT, K_PERSON, 'ACLS', '2026/08/31'); } catch (e) { err = e; }
   assert(err instanceof TypeError, '基準日不是 YYYY-MM-DD 應拋 TypeError，不得靜默比較字串');
@@ -52,13 +55,17 @@ test('能力判定核心：無法判讀的效期 fail closed——寫出原值�
 });
 
 /* K3 */
-test('能力判定核心：true＝持有無效期；未定義的能力代碼與查無此人皆為「無法確認」，不拋錯', () => {
+test('能力判定核心：true＝持有無效期；未定義的能力代碼、認不得的能力形狀與查無此人皆為「無法確認」，不拋錯', () => {
   const held = badgeOf(K_CAT, { id: 'T-3', certs: { ACLS: true } }, 'ACLS', '2026-08-03');
   assertEqual([held.status, held.counts, held.noExpiry, held.expiry, held.daysLeft], ['valid', true, true, null, null]);
   const pals = badgeOf(K_CAT, K_PERSON, 'PALS', '2026-08-03');
   assertEqual([pals.kind, pals.status, pals.counts, pals.text], ['unknown', 'missing', false, '無法確認']);
   const nobody = badgeOf(K_CAT, null, 'ACLS', '2026-08-03');
   assertEqual([nobody.kind, nobody.status, nobody.counts, nobody.text], ['unknown', 'missing', false, '無法確認']);
+  // 既非 cert 也非 ladderAtLeast 的定義（如保留給 1.1.0 的分級形狀）不得落入臨床進階分支、以 undefined 門檻放行
+  const grade = { competences: { G: { label: '呼吸器 Lv2', skill: '呼吸器', atLeast: 'Lv2', scale: ['Lv1', 'Lv2'] } }, ladder: K_CAT.ladder };
+  const g = badgeOf(grade, { id: 'T-3', ladder: 'N4', certs: {} }, 'G', '2026-08-03');
+  assertEqual([g.kind, g.status, g.counts, g.text], ['unknown', 'missing', false, '無法確認'], '認不得的能力形狀 fail closed');
   const proto = { competences: { X: { label: 'X', cert: 'constructor' } }, ladder: [] };
   assertEqual(badgeOf(proto, { id: 'T-3', certs: {} }, 'X', '2026-08-03').status, 'missing', '原型鍵不算持有');
 });
@@ -101,6 +108,15 @@ test('能力判定核心：補位差異與後備深度——只篩不排；N-04 
     '只篩不排：輸入反轉，輸出跟著反轉');
   const covered = candidateDelta(ward, needs, [kStaff('N-10')], kStaff('N-02'), date);
   assertEqual([covered.fills, covered.still, covered.restores], [[], [], true], '班上已有 N4 帶班，N-02 補進即完整');
+  // 「至少 2 位」：補上的人要讓在班具備者達標才算 fills，只是本人具備而仍不足者歸 still；min 省略時為 1
+  const two = { allMust: [], atLeast: [{ competence: 'SENIOR', min: 2 }] };
+  const d2 = (on, who) => candidateDelta(ward, two, on.map(kStaff), kStaff(who), date);
+  const alone = d2([], 'N-10');
+  assertEqual([alone.fills, alone.still, alone.restores], [[], ['SENIOR'], false], '需 2 位、班上 0 位：N4 補進仍只有 1 位');
+  const pair = d2(['N-01'], 'N-10');
+  assertEqual([pair.fills, pair.still, pair.restores], [['SENIOR'], [], true], '需 2 位、班上已有 AHN：N4 補進即達標');
+  const dflt = candidateDelta(ward, { allMust: [], atLeast: [{ competence: 'SENIOR' }] }, [], kStaff('N-02'), date);
+  assertEqual([dflt.fills, dflt.still, dflt.restores], [[], ['SENIOR'], false], 'min 省略＝1：N2 補不上');
   assertEqual([0, 1, 2, 5].map((n) => benchLevel(n)), ['broken', 'thin', 'ok', 'ok']);
 });
 

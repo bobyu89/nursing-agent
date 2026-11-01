@@ -33,7 +33,7 @@ declare namespace kernel {
   interface Badge {
     code: string;
     label: string;
-    /** unknown＝設定檔沒有此能力代碼，或查無此人 */
+    /** unknown＝設定檔沒有此能力代碼、能力定義既非 cert 也非 ladderAtLeast，或查無此人 */
     kind: 'cert' | 'ladder' | 'unknown';
     status: BadgeStatus;
     counts: boolean;

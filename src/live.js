@@ -20,6 +20,7 @@ const LIVE = {
   loadedAt: null,    // 快照時間
   version: null,     // 班表版本（樂觀鎖；寫回時帶回去）
   canWrite: false,   // 護理長才可寫回
+  guests: [],        // 外單位支援者（跨單位替補進本單位班表）的能力欄位：只供帶班／資格列判定，不併入 STAFF
   error: null,       // 最後一次失敗的人話說明
 };
 

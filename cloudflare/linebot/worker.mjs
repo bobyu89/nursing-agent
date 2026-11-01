@@ -248,11 +248,18 @@ async function handleApi(request, env, url) {
     const snap = await store.loadDb();
     const inScope = (u) => !scope || u === scope.unit;
     const shifts = snap.shifts.filter((s) => inScope(s.unit));
+    const staff = snap.staff.filter((s) => inScope(s.unit));
+    // 外單位支援者：跨單位替補以缺班單位寫進本單位班表，人員名單卻只有本單位（§2.5）。
+    // 另附他們的能力欄位（不併入 staff），平台「帶班／資格」列才不會把人當成名單外代號、少算帶班與 ACLS
+    const own = new Set(staff.map((s) => s.id));
+    const onRoster = new Set(shifts.map((s) => s.staffId));
+    const guests = snap.staff.filter((s) => !own.has(s.id) && onRoster.has(s.id))
+      .map((s) => ({ id: s.id, unit: s.unit, ladder: s.ladder, certs: s.certs }));
     return json({
       identity: me, scope: scope ? scope.unit : null, generatedAt: nowIso,
       version: rosterVersion(shifts),
       canWrite: identity.tier === 'head',   // 寫回類動作一律屬護理長（docs/CONTEXT.md 身份視角）
-      staff: snap.staff.filter((s) => inScope(s.unit)),
+      staff, guests,
       shifts: shifts.map(shiftRowForPlatform),
     }, 200, cors);
   }

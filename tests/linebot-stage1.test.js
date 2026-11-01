@@ -935,7 +935,11 @@ test('phase2：選單與使用說明——護理師多「我的預假」、護�
 /* ══ 圖文選單定義（cloudflare/linebot/richmenu-defs.json）對矩陣：格子送出的文字，該層一定按得動 ══ */
 {
   test('richmenu：四份選單的每一格＝該層打勾的指令；unbound 只送綁定說明／使用說明；座標鋪滿 2500×1686', async () => {
-    // Node 讀檔、瀏覽器（tests.html）fetch 同一份 json——兩邊跑的是同一個測試
+    // Node 讀檔、瀏覽器（tests.html）fetch 同一份 json——兩邊跑的是同一個測試。
+    // 雙擊開啟（file://）時瀏覽器一律禁止 fetch 本機檔：照列原因略過，由 Node（CI）與 http 開啟時實跑
+    if (typeof require !== 'function' && typeof location !== 'undefined' && location.protocol === 'file:') {
+      return { skipped: '以 file:// 開啟時瀏覽器禁止讀取 richmenu-defs.json；本項由 Node（CI）與 http 開啟時實跑' };
+    }
     const defs = typeof require === 'function'
       ? JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'cloudflare/linebot/richmenu-defs.json'), 'utf8'))
       : await (await fetch('cloudflare/linebot/richmenu-defs.json', { cache: 'no-store' })).json();
@@ -1103,14 +1107,14 @@ test('phase4a：預班草稿審核加「帶班與資格」段——已排 93 班
   assert(text.includes(`帶班與資格（單位設定檔 ${fp}）`), '訊息引用的是內建預設的指紋');
   assert(text.includes('每位在班者皆具 ACLS') && text.includes('例：10/01 小夜、10/01 大夜、10/02 白班') && text.includes('（共 65 班）'), text);
   assert(text.includes('（生成器尚未把帶班列為排班條件——此處只標示、不改草稿）'), '寫明生成器尚未把帶班列為條件');
-  assert(!/臨床進階未登錄/.test(text) && !/有誤/.test(text), '示範資料無未登錄者、設定無誤');
+  assert(!/臨床進階未登錄/.test(text) && !/有誤/.test(text) && !/對不上/.test(text), '示範資料無未登錄者、設定無誤、草稿列全數對得上');
   assert(/已排 \d+／124 格/.test(text), '原本的草稿摘要行不變（格＝人次，班＝班別）');
   assertEqual([gen.profile, gen.profileSource, gen.profileProblems], [fp, 'default', []]);
   assertEqual(gen.coverage, { staffed: 93, empty: 0, conflict: 0, atLeast: { SENIOR: 65 }, allMust: { ACLS: 0 }, unmapped: 0, unrated: 0 });
   assertEqual(gen.requirements, { D: 2, E: 1, N: 1 }, '生成需求照舊');
 });
 
-test('phase4a：setting profile.<unit> 覆寫——可編譯即採用（N2 以上帶班 → 31 班）；壞 JSON 或不過編譯整份不採用、回落預設並列出代碼', async () => {
+test('phase4a：setting profile.<unit> 覆寫——可編譯即採用（N2 以上帶班 → 31 班）；壞 JSON 或不過編譯整份不採用、回落預設並列出代碼；草稿列對不上覆寫時照列筆數與原因、不報「皆具」', async () => {
   const fp = compileProfile(UNIT_PROFILE_DRAFTS['MED-3A']).profile.fingerprint;
   const n2 = await closed4a(draft4a({ label: 'N2 以上帶班', ladderAtLeast: 'N2' }));
   assertEqual(n2.gen.profileSource, 'setting');
@@ -1124,6 +1128,13 @@ test('phase4a：setting profile.<unit> 覆寫——可編譯即採用（N2 以�
   const n9 = await closed4a(draft4a({ label: 'N9 以上帶班', ladderAtLeast: 'N9' }));
   assertEqual([n9.gen.profileSource, n9.gen.profile], ['default', fp], '任一欄位不過＝整份不採用，絕不套用半份');
   assert(n9.text.includes('已排 93 班中 65 班缺 N3 以上帶班') && n9.text.includes('P-COMPETENCE'), n9.text);
+  // 可編譯的多崗位覆寫：生成器的草稿列不帶崗位，124 列全數對不上——不得報成「已排 0 班…每位在班者皆具 ACLS」
+  const base = UNIT_PROFILE_DRAFTS['MED-3A'];
+  const two = await closed4a(JSON.stringify({ ...base, demand: { ...base.demand,
+    posts: [...base.demand.posts, { id: 'TEAMB', label: '第二組', min: 1, allMust: ['ACLS'], atLeast: [] }] } }));
+  assertEqual([two.gen.profileSource, two.gen.coverage.staffed, two.gen.coverage.unmapped], ['setting', 0, 124]);
+  assert(two.text.includes(`帶班與資格（單位設定檔 ${two.gen.profile}）：已排 0 班，沒有可檢核的班\n`) && !two.text.includes('皆具'), two.text);
+  assert(two.text.includes('⚠ 班表列對不上設定檔 124 筆，未納入上述計數：多崗位單位須指明崗位×124（例：10/01 白班 '), two.text);
   assertEqual((await unitProfile(subStore(), 'MED-3A')).source, 'default', '宿主 store 沒有 getSetting → 內建預設');
   assertEqual(await unitProfile(subStore(), 'SUR-5B'), { profile: null, source: 'none', problems: [] }, '沒有內建預設的單位');
 });

@@ -1831,7 +1831,11 @@ function slotWhen(slotId) {
   return `${date.slice(5).replace('-', '/')} ${(SHIFT_TYPES[shift] || {}).name || shift}`;
 }
 
-/** 預班草稿審核的「帶班與資格」段；cov＝closeAndGenerate 的 gen.coverage，prof＝編譯後的設定檔 */
+/**
+ * 預班草稿審核的「帶班與資格」段；cov＝closeAndGenerate 的 gen.coverage，prof＝編譯後的設定檔。
+ * 班表列對不上設定檔（如多崗位覆寫、班別代碼不是 D／E／N——生成器的列不帶崗位）時照列筆數、原因與例子，
+ * 計數不含這些列；沒有可檢核的班時不說「每位在班者皆具…」，免得空集合讀成全數合格。
+ */
 function coverageReviewLines(cov, prof) {
   const t = cov.tally;
   const label = (code) => (prof.competences[code] || {}).label || code;
@@ -1839,10 +1843,16 @@ function coverageReviewLines(cov, prof) {
   const must = Object.keys(t.allMust).map((code) => (t.allMust[code].length
     ? `${label(code)}不符 ${t.allMust[code].length} 人次` : `每位在班者皆具 ${label(code)}`));
   const short = [...new Set(Object.keys(t.atLeast).flatMap((code) => t.atLeast[code]))];
+  const unmapped = cov.unmapped || [];
+  const reasons = [...new Set(unmapped.map((u) => u.reason))]
+    .map((r) => `${r}×${unmapped.filter((u) => u.reason === r).length}`);
   return [
-    `帶班與資格（單位設定檔 ${cov.fp}）：已排 ${t.staffed} 班${gaps.length ? `中 ${gaps.join('、')}` : ''}${must.map((m) => `；${m}`).join('')}`,
+    `帶班與資格（單位設定檔 ${cov.fp}）：已排 ${t.staffed} 班${t.staffed
+      ? `${gaps.length ? `中 ${gaps.join('、')}` : ''}${must.map((m) => `；${m}`).join('')}` : '，沒有可檢核的班'}`,
     ...(short.length ? [`　例：${short.slice(0, 6).map(slotWhen).join('、')}（共 ${short.length} 班）`] : []),
     ...(t.unrated.length ? [`臨床進階未登錄、不計為帶班：${t.unrated.join('、')}`] : []),
+    ...(unmapped.length ? [`⚠ 班表列對不上設定檔 ${unmapped.length} 筆，未納入上述計數：${reasons.join('、')}`
+      + `（例：${unmapped.slice(0, 3).map((u) => `${slotWhen(`${u.row.date}|${u.row.shift}`)} ${u.row.staffId}`).join('、')}）`] : []),
     ...(cov.problems.length ? [`⚠ 單位設定檔 profile.${prof.unit} 有誤，暫用預設（${[...new Set(cov.problems.map((p) => p.code))].join('、')}）`] : []),
     '（生成器尚未把帶班列為排班條件——此處只標示、不改草稿）',
   ];

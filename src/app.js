@@ -1002,21 +1002,21 @@ function renderCapability() {
       <td>${lvBadge(b.ladder)}</td>
       <td style="white-space:normal">${b.certs.map((c) => {
         const label = { valid: '', expiring: `（${c.expiry} 到期）`, expired: '（已過期）' }[c.status];
-        return `<span class="cert-badge cert-${c.status}" title="${CERTS[c.code]}｜效期 ${c.expiry}">${esc(CERT_SHORT[c.code])}${label}</span>`;
+        return `<span class="cert-badge cert-${c.status}" title="${esc(CERTS[c.code] || c.code)}｜效期 ${esc(c.expiry)}">${esc(CERT_SHORT[c.code] || c.code)}${label}</span>`;
       }).join('')}</td>
     </tr>`).join('');
 
   /* C. 單點依賴 + 到期雷達 */
   const spRows = r.certSinglePoints.map((c) => `
     <div class="fact">
-      <span>${esc(CERTS[c.code])}</span>
+      <span>${esc(CERTS[c.code] || c.code)}</span>
       <span>${c.count === 0 ? '<b class="expired">0 人——能力已消失</b>'
         : c.count === 1 ? `<b class="expired">僅 ${esc(c.holders[0])} 一人——單點故障</b>`
         : `${c.count} 人（${c.holders.map(esc).join('、')}）`}</span>
     </div>`).join('');
   const radarRows = r.expiring.length ? r.expiring.map((x) => `
     <div class="fact">
-      <span>${esc(x.id)}｜${esc(CERT_SHORT[x.code])}</span>
+      <span>${esc(x.id)}｜${esc(CERT_SHORT[x.code] || x.code)}</span>
       <span class="${x.status === 'expired' ? 'expired' : ''}">${x.status === 'expired' ? `已於 ${x.expiry} 過期——回訓後才可計入戰力` : `${x.expiry} 到期，請排回訓`}</span>
     </div>`).join('') : '<div class="sc-evi">未來 90 天內無證照到期。</div>';
 
@@ -1053,11 +1053,11 @@ function renderCapability() {
   }));
   expired.forEach((x) => actions.push({
     level: 'warn',
-    text: `${x.id} 的 ${CERT_SHORT[x.code]} 已於 ${x.expiry} 過期 → 安排回訓（回訓前不計入戰力）`,
+    text: `${esc(x.id)} 的 ${esc(CERT_SHORT[x.code] || x.code)} 已於 ${esc(x.expiry)} 過期 → 安排回訓（回訓前不計入戰力）`,
   }));
   expSoon.forEach((x) => actions.push({
     level: 'warn',
-    text: `${x.id} 的 ${CERT_SHORT[x.code]} 將於 ${x.expiry} 到期 → 預排回訓`,
+    text: `${esc(x.id)} 的 ${esc(CERT_SHORT[x.code] || x.code)} 將於 ${esc(x.expiry)} 到期 → 預排回訓`,
   }));
   if (saturated.length) actions.push({
     level: 'warn',
@@ -1633,10 +1633,10 @@ function renderToday() {
         <div class="card-head"><h2>證照效期警示</h2>
           <span class="tag ${expired.length || expSoon.length ? 'tag-danger' : 'tag-ok'}">${expired.length ? `${expired.length} 張已過期` : ''}${expired.length && expSoon.length ? '、' : ''}${expSoon.length ? `${expSoon.length} 張 7 日內到期` : ''}${!expired.length && !expSoon.length ? '全數有效' : ''}</span></div>
         ${expired.map((x) => `
-          <div class="fact"><span><b>${esc(x.s.id)}</b>　${esc(CERTS[x.code])}</span>
+          <div class="fact"><span><b>${esc(x.s.id)}</b>　${esc(CERTS[x.code] || x.code)}</span>
             <span class="expired">已於 ${x.exp} 過期，未回訓</span></div>`).join('')}
         ${expSoon.map((x) => `
-          <div class="fact"><span><b>${esc(x.s.id)}</b>　${esc(CERTS[x.code])}</span>
+          <div class="fact"><span><b>${esc(x.s.id)}</b>　${esc(CERTS[x.code] || x.code)}</span>
             <span style="color:var(--warn)">將於 ${x.exp} 到期</span></div>`).join('')}
         ${!expired.length && !expSoon.length ? '<p class="fineprint" style="margin:4px 0 0">未來 7 天內無證照到期。</p>' : ''}
         <p class="fineprint">效期三態與 90 天到期雷達的完整清單見「能力與出勤」。</p>
@@ -2901,12 +2901,13 @@ function renderRoster() {
   }).join('');
   // 帶班／資格列（護理長、督導／主任）：有排人的班逐格交能力判定核心檢核 N3 以上帶班與 ACLS 效期——
   // 只標示、不改班表；每次重繪都重算，循環編輯格子後立即反映。
-  // 標示會點名同事的過期資格，護理師視角不顯示；班別間休息等合法性歸規則引擎，不在此列
+  // 標示會點名同事的過期資格，護理師視角不顯示；班別間休息等合法性歸規則引擎，不在此列。
+  // 登入模式的護理長快照只有本單位人員：跨單位替補者的能力欄位另在 LIVE.guests，一併交給檢核，免得被當成名單外代號
   let covRow = '';
   const prof = CURRENT_ROLE !== 'staff' ? rosterProfile() : null;
   if (prof) {
     const COMPETENCE_ISSUES = ['C-ATLEAST', 'C-ALL', 'C-STAFF'];
-    const rc = rosterCoverage(prof, careDemand(prof, { dates }), SHIFTS, STAFF);
+    const rc = rosterCoverage(prof, careDemand(prof, { dates }), SHIFTS, STAFF.concat(LIVE.guests || []));
     const t = rc.tally;
     const staffed = rc.slots.filter((s) => s.assigned.length || s.issues.some((i) => i.code === 'C-STAFF'));
     const flagged = staffed.filter((s) => s.issues.some((i) => COMPETENCE_ISSUES.includes(i.code)));
@@ -2926,7 +2927,8 @@ function renderRoster() {
     const must = Object.keys(t.allMust).map((code) => (t.allMust[code].length
       ? `${label(code)}不符 ${t.allMust[code].length} 人次` : `每位在班者皆具 ${label(code)}`));
     const sumTip = [
-      `單位設定檔 ${t.profile}：本月已排 ${t.staffed} 班${gaps.length ? `中 ${gaps.join('、')}` : ''}${must.map((x) => `；${x}`).join('')}`,
+      `單位設定檔 ${t.profile}：本月已排 ${t.staffed} 班${t.staffed
+        ? `${gaps.length ? `中 ${gaps.join('、')}` : ''}${must.map((x) => `；${x}`).join('')}` : '，沒有可檢核的班'}`,
       ...(t.unrated.length ? [`臨床進階未登錄、不計為帶班：${t.unrated.join('、')}`] : []),
       ...(rc.unmapped.length ? [`班表列對不上設定檔 ${rc.unmapped.length} 筆：${rc.unmapped.map((u) => `${u.row.staffId} ${shortDate(u.row.date)} ${u.row.shift}（${u.reason}）`).join('、')}`] : []),
       '生成器尚未把帶班列為排班條件——此處只標示、不改班表',
@@ -4509,6 +4511,7 @@ async function bootLive() {
     LIVE.scope = snap.scope || null;
     LIVE.version = snap.version || null;
     LIVE.canWrite = !!snap.canWrite;
+    LIVE.guests = Array.isArray(snap.guests) ? snap.guests : [];
     LIVE.loadedAt = snap.generatedAt || new Date().toISOString();
     LIVE.active = true;
   } catch (e) {

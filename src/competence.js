@@ -16,7 +16,7 @@
  *   needs    { allMust: [代碼], atLeast: [{ competence, min }] }（careDemand 的一格，或特護的一案）
  *
  * badgeOf 七態：valid 有效／expiring 即將到期（呼叫端給 expiringDays 才區分）／expired 已過期／
- *   missing 未持有（未定義的能力代碼或查無此人時為「無法確認」）／invalid 登錄值無法判讀／
+ *   missing 未持有（未定義的能力代碼、認不得的能力形狀或查無此人時為「無法確認」）／invalid 登錄值無法判讀／
  *   below 臨床進階未達門檻／unrated 臨床進階未登錄。只有 valid 與 expiring 計入（counts）。
  * 效期只認真實存在的 ISO 日期：'2026/1/5'、Excel 日期序號、'2027-02-30' 一律 invalid＝視同未具備，
  *   核心不猜格式、不補零、不換算。true＝持有、無效期（特護的技術標籤與無效期證書；班守 D1 不寫入 true）。

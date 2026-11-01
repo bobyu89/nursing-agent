@@ -151,7 +151,8 @@ tier 寫進 `bind_code`，隨綁定進 `identity`，發碼與綁定的留痕都�
 ```
 LINE「平台」→ 機器人回本人專屬連結 index.html#t=<link token>（HMAC，含代號與到期，10 分鐘）
   → 平台開頁：拿 #t= 向 Worker GET /api/session 換 session token（12 小時，存 sessionStorage、只在這個分頁）
-  → GET /api/snapshot：D1 的 staff／shifts／leaves，範圍依 §2.5（head／staff 本單位、exec 全院）
+  → GET /api/snapshot：D1 的 staff／shifts／leaves，範圍依 §2.5（head／staff 本單位、exec 全院）；
+    另附 guests＝跨單位替補進本單位班表者的能力欄位（代號、單位、臨床進階、證照），只供帶班／資格列判定
   → 平台把 STAFF／SHIFTS 就地換掉、視角鎖定為綁定時授權的權責層、本機 localStorage 的舊編輯不疊上
 ```
 
@@ -322,8 +323,11 @@ setting         (key PK, value, updated_at)
 ```
 
 **`profile.<unit>`（Phase 4a）**：值為單位設定檔草稿 JSON（形狀同 `data.js` 的 `UNIT_PROFILE_DRAFTS`），或字串 `off`（該單位關閉帶班與資格覆蓋）。
-讀取時整份經 `compileProfile` 編譯：JSON 壞掉（`P-JSON`）或任一欄位不過（列出 `P-…` 代碼），**整份不採用**、回落程式內建預設，
+讀取時整份經 `compileProfile` 編譯：JSON 壞掉（`P-JSON`）、結構無法編譯（`P-SHAPE`）、草稿的 `unit` 與鍵名單位不符（`P-UNIT`）
+或任一欄位不過（列出 `P-…` 代碼），**整份不採用**、回落程式內建預設，
 審核訊息寫明「⚠ 單位設定檔 profile.<unit> 有誤，暫用預設」並列出代碼；沒有內建預設的單位則不顯示覆蓋。
+可編譯但與生成器的草稿列對不上（多崗位——草稿列不帶崗位；班別代碼不是 D／E／N）時照常採用，
+審核訊息照列「⚠ 班表列對不上設定檔 n 筆，未納入上述計數：原因×筆數（例：…）」，不把 0 班報成全數合格。
 沒有設定＝內建預設（內科 3A：每班至少一位 N3 以上帶班、每位在班者具 ACLS）。目前由維運以 wrangler 寫入，LINE 與平台都沒有編輯介面。
 
 `STAFF` 的靜態欄位（資格、職級、意願）Stage 1 仍由平台 Excel 匯入後上傳到 D1（`staff` 表，同 `data.js` 形狀）；

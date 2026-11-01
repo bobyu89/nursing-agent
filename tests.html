@@ -45,12 +45,14 @@
     async function runTests() {
       const out = document.getElementById('results');
       const summary = document.getElementById('summary');
-      let pass = 0, fail = 0;
+      let pass = 0, fail = 0, skipped = 0;
       for (const t of TESTS) {
         const li = document.createElement('div');
         try {
-          await t.fn();
-          pass += 1; li.className = 't pass'; li.textContent = '✓ ' + t.name;
+          // 測試可回 { skipped: '原因' }：此環境做不到（如 file:// 禁止 fetch），照列原因、不算失敗
+          const r = await t.fn();
+          if (r && r.skipped) skipped += 1;
+          pass += 1; li.className = 't pass'; li.textContent = '✓ ' + t.name + (r && r.skipped ? `\n（此環境略過：${r.skipped}）` : '');
         } catch (err) {
           fail += 1; li.className = 't fail'; li.textContent = '✗ ' + t.name + '\n' + err.message;
           console.error(t.name, err);
@@ -60,7 +62,7 @@
       summary.className = fail ? 'bad' : 'ok';
       summary.textContent = fail
         ? `✗ ${fail} 項失敗（${pass} 項通過）——引擎行為與規格不符，請勿上場 demo`
-        : `✓ 全數通過（${pass} 項）`;
+        : `✓ 全數通過（${pass} 項）${skipped ? `——其中 ${skipped} 項此環境無法實跑，見該項說明` : ''}`;
       document.title = fail ? `✗ ${fail} 失敗｜引擎測試` : `✓ ${pass} 通過｜引擎測試`;
     }
   </script>
