@@ -102,12 +102,19 @@ flowchart TB
 | `src/engine.js` | 決策引擎 | `createEngine(db)` 依賴注入，零全域讀取，可移植至 Lambda |
 | `src/llm.js` | LLM 轉接層 | mock／api 雙模式；api 回應經合約驗證＋白名單消毒 |
 | `src/app.js` | 畫面與流程 | 唯一操作 DOM 的模組；輸出一律經 `esc()` 跳脫 |
+| `src/profile.js` | 單位設定檔編譯器 | `compileProfile(draft, floor)`：透析／急診／一般病房（`ward`）三類；單位只能比全院底線嚴；未通過不產生設定檔，通過者深度凍結＋內容指紋 |
+| `src/demand.js` | 照護需求換算 | `careDemand(profile, { dates, … })` → 每格 `{ headcount, allMust, atLeast }`，數字標明來源（known／baseline／forecast／assumed） |
+| `src/competence.js`（＋`.d.ts`） | 能力判定核心（與特護共用） | 零依賴、不讀全域、單檔可移植；`badgeOf` 七態、`candidateDelta`／`benchFor` 只篩不排；`COMPETENCE_KERNEL_VERSION` 版本戳記；`.d.ts` 只給 TypeScript 宿主，執行期不載入（§6.3） |
+| `src/coverage.js` | 能力覆蓋檢核 | `assessCoverage`／`diffCoverage`／`rosterCoverage`：逐格檢核人數、必備能力、帶班、重疊時段與休息；對不上設定檔的班表列逐列列出原因；不呼叫 `careDemand`，格子由呼叫端傳入 |
 | `aws/lambda/index.mjs` | Bedrock LLM Proxy | 金鑰只存在 Lambda IAM 角色；structured outputs 強制回應格式 |
 | `tests/engine.test.js` | 邊界測試（37 項） | 瀏覽器（tests.html）與 CI（Node）共用同一份 |
 | `tests/run-node.js` | CI runner | 把 module.exports 掛回 globalThis，模擬瀏覽器載入順序 |
 
 **依賴方向**：`app.js → (engine, llm, data, rules)`；`engine.js` 不依賴任何模組（資料全部注入）；
 `llm.js` 依賴 `data.js` 的常數表（SHIFT_TYPES 等）做關鍵詞比對與白名單驗證。
+護理知識核心：`profile.js`、`demand.js` 零依賴；`coverage.js → competence.js（全域 badgeOf）；competence.js 零依賴`——
+載入 coverage.js 的每個宿主（index.html、tests.html、run-node、Cloudflare Worker）都先載入 competence.js。
+`botcore.js` 與 `app.js` 以 `typeof` 檢查這些全域，宿主沒載入時靜默略過覆蓋報告。
 
 ## 4. 資料流：一筆缺班事件的完整旅程
 
@@ -195,6 +202,19 @@ stateDiagram-v2
 不接觸 DOM。同一份檔案在瀏覽器、tests.html、Node CI 與未來的 Lambda 端點上行為一致——
 由 `tests/engine.test.js` 的 37 項邊界測試保證。
 
+**共用核心的移植契約（`src/competence.js`，班守 ↔ 特護）**：能力判定只有一份，兩個產品語義相同。
+
+1. **原樣複製兩個檔**：`src/competence.js` 與 `src/competence.d.ts` 逐字複製到 `tehu-platform/app/src/lib/kernel/`
+   （保留 CommonJS 防護段），以 default import 使用；不改寫、不轉成 TypeScript。
+2. **釘版本**：宿主的契約測試釘住 `COMPETENCE_KERNEL_VERSION`，並跑同一組特護形狀的測資
+   （nurse-tsai 的 ACLS 於 2026-09-30 過期）——兩邊測同一個案例，班守這邊的改動不會無聲弄壞特護。
+3. **合法性由宿主注入**：班間休息、連續上班、勞基法、休假與派案規則都在宿主判，只把合法的人交給 `benchFor`；
+   核心只判能力，只篩選、保留輸入順序、不重排。
+4. **`true` 不進班守 D1**：`true`＝持有無效期，只給特護的技術標籤與無效期證書；班守 D1 的 `certs_json` 只收 ISO 效期。
+5. **只做加法的小版本**：介面變更只能是向下相容的 minor 版本（例：1.1.0 預留的分級能力 `grade`），不出破壞性的大版本。
+
+`profile.js`、`demand.js`、`coverage.js` 是班守的宿主模組，不在契約內（`coverage.js` 依賴全域 `badgeOf`）。
+
 ## 7. LLM 轉接層與 Bedrock Proxy
 
 ### 7.1 前端轉接層的四道防線
@@ -253,6 +273,13 @@ flowchart LR
   解析不臆測與多線索模糊偵測、api 失敗退路與消毒、
   任務重分配（資格硬性／負荷上限／關鍵優先／確定性）、
   班表生成（零違規、跨週 H4/H5 邊界、誠實缺格、確定性、公平輪值）。
+- `tests/competence.test.js`（8 項，K1–K8）釘住共用能力判定核心：效期邊界與七態、無法判讀的效期 fail closed、
+  `true`＝持有無效期、臨床進階與通用分級、`candidateDelta`／`benchFor` 只篩不排、特護形狀測資（nurse-tsai）、
+  與引擎能力徽章逐筆比對（30 筆零差異），以及 `.d.ts` 契約——Node 端比對匯出名稱與執行期結果形狀，
+  瀏覽器端檢查全域介面，兩邊都不會空跑通過。
+  覆蓋檢核接上核心後的行為由 `tests/nursing-core.test.js`（N1–N7：一般病房設定檔、班表列對應、
+  帶班計數與引擎 `capabilityAnalysis` 同口徑）與 `tests/linebot-stage1.test.js`（L1–L4：Phase 4a 審核、覆寫回落、
+  核准標籤不改排序、沒有設定檔的單位訊息不變）釘住。
 - 三種執行方式，同一份測試：雙擊 `tests.html`（離線）、`node tests/run-node.js`（本機）、
   GitHub Actions（每次 push 自動跑，`.github/workflows/test.yml`）。
 - 語義權威在 [CONTEXT.md](CONTEXT.md)：文件與程式不一致時，以文件為準修程式並補測試。

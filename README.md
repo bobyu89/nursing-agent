@@ -172,6 +172,8 @@ F1 週工時超過 48 小時軟性上限（需額外核准）／F2 連續上班�
 home.html                   Landing Page（電影感影片首頁；排班／替班雙入口）
 index.html                  平台主程式（系統入口 → 排班系統/替班系統/總覽/治理）
 tests.html                  引擎與介接測試頁（雙擊即可跑，零依賴）
+admin.html                  人員與綁定（管理者專用；src/admin.js 呼叫 Worker API 發綁定碼）
+prebook.html                預假日曆（從 LINE 專屬連結進入；src/prebook.js 送出走 Worker 的預班流程）
 assets/styles.css           樣式
 assets/anime.umd.min.js     anime.js v4 官方 UMD 打包（MIT；vendored 以符合 CSP 同源與離線雙擊）
 src/data.js                 模擬資料（人員／班表／請假／缺班事件／四週彈性工時錨點）
@@ -180,10 +182,19 @@ src/engine.js               確定性決策引擎（createEngine，資料由外�
 src/fhir.js                 FHIR R4 介接層（匯出/匯入 Bundle，對齊 TW Core IG）
 src/botcore.js              LINE bot 共用互動核心（兩套 bot 同一份流程與引擎）
 src/llm.js                  語言模型轉接層（mock／api）
+src/profile.js              單位設定檔編譯器（compileProfile；透析／急診／一般病房 ward）
+src/demand.js               照護需求換算（careDemand：設定檔 × 日期 → 每格人數與能力需求）
+src/competence.js           能力判定核心（badgeOf／candidateDelta／benchFor；零依賴，班守與特護共用）
+src/competence.d.ts         能力判定核心的型別宣告（給特護的 TypeScript 宿主；契約測試比對執行期）
+src/coverage.js             能力覆蓋檢核（逐格帶班與資格、班表對應 rosterCoverage；判定交給核心）
 src/app.js                  畫面渲染與流程
 tests/engine.test.js        引擎邊界條件測試（瀏覽器與 CI 共用同一份）
 tests/fhir.test.js          FHIR 介接測試（roundtrip／白名單／跨日班次）
 tests/botcore.test.js       LINE bot 互動核心測試（與平台引擎同規則同錨點）
+tests/linebot-stage1.test.js  LINE Stage 1 測試（D1 注入、綁定碼、留痕鏈、替班與預班迴路、帶班標示）
+tests/nursing-core.test.js  護理知識核心測試（設定檔編譯、照護需求、能力覆蓋、內科 3A 班表對應）
+tests/competence.test.js    能力判定核心測試（七態、fail closed、後備深度、與引擎同判、.d.ts 契約）
+tests/linebot-worker.smoke.mjs  Worker 端到端煙霧測試（node:sqlite 模擬 D1；Node ≥ 22.5，部署前手動跑）
 tests/run-node.js           CI 用的 Node 測試 runner
 .github/workflows/test.yml  GitHub Actions：每次 push 自動跑引擎測試
 cloudflare/linebot/         LINE 通報機器人（零成本版：確定性解析＋botcore 互動＋H1–H10 引擎）
@@ -225,6 +236,7 @@ docs/proposal.md            完整提案素材
 - **換班互換預檢**：大夜殘影（H4）、換完連上第 7 天（H5）、同日雙班（H2）、資格不符（H1）——兩張班表各自看都合法、交叉互換才違法的邊界全數釘住
 - **LINE 指令三兄弟**：「換班」預檢與平台 analyzeSwap 同判定（綠燈深鏈／紅燈代碼／防呆）、「調度」守恆律棋盤（貼線不拆、無人可借誠實說）、「負荷」與留任雷達同一本帳；一般請假訊息不被指令攔截
 - **FHIR 介接**：匯出→匯入 roundtrip 一筆不差、大夜跨日的起訖時間、白名單逐筆拒絕不合法 Slot
+- **能力判定核心與帶班覆蓋**：七態中只有有效／將到期計入、無法判讀的效期（如 `2026/1/5`）視同未具備、`true`＝持有且無效期；內科 3A 示範班表只數有排人的班（8 月 85 班中 54 班缺 N3 以上帶班，空班不算缺口）；替補候選逐位標示補上什麼、仍缺什麼與後備深度——只標示、不重排、不擋核准；`competence.d.ts` 與執行期的匯出、版本、結果形狀一致（特護移植契約）
 
 同一份測試也會在 **GitHub Actions** 上以 Node 自動執行（`tests/run-node.js`），
 每次 push 都會重新驗證；本機不需要安裝任何東西。

@@ -33,10 +33,15 @@ import rules from '../../src/rules.js';
 import engineMod from '../../src/engine.js';
 import llm from '../../src/llm.js';
 import botcore from '../../src/botcore.js';
+// Phase 4a 帶班與資格覆蓋：單位設定檔、每格需求、能力判定核心、覆蓋檢核（botcore 以全域呼叫；缺了就靜默略過）
+import profileMod from '../../src/profile.js';
+import demandMod from '../../src/demand.js';
+import competenceMod from '../../src/competence.js';
+import coverageMod from '../../src/coverage.js';
 import { createD1Store, userHash, sha256Hex } from './store-d1.mjs';
 
 // 依 index.html 的載入語義把全域掛回（與 tests/run-node.js 同一招）
-Object.assign(globalThis, data, rules, engineMod, llm, botcore);
+Object.assign(globalThis, data, rules, engineMod, llm, botcore, profileMod, demandMod, competenceMod, coverageMod);
 
 /* ── 濫用防護（偵測 → 應對 → 告警）────────────────────────
  * 白名單：ALLOWED_USERS（逗號分隔的 LINE userId）設定後，名單外的使用者
@@ -243,11 +248,18 @@ async function handleApi(request, env, url) {
     const snap = await store.loadDb();
     const inScope = (u) => !scope || u === scope.unit;
     const shifts = snap.shifts.filter((s) => inScope(s.unit));
+    const staff = snap.staff.filter((s) => inScope(s.unit));
+    // 外單位支援者：跨單位替補以缺班單位寫進本單位班表，人員名單卻只有本單位（§2.5）。
+    // 另附他們的能力欄位（不併入 staff），平台「帶班／資格」列才不會把人當成名單外代號、少算帶班與 ACLS
+    const own = new Set(staff.map((s) => s.id));
+    const onRoster = new Set(shifts.map((s) => s.staffId));
+    const guests = snap.staff.filter((s) => !own.has(s.id) && onRoster.has(s.id))
+      .map((s) => ({ id: s.id, unit: s.unit, ladder: s.ladder, certs: s.certs }));
     return json({
       identity: me, scope: scope ? scope.unit : null, generatedAt: nowIso,
       version: rosterVersion(shifts),
       canWrite: identity.tier === 'head',   // 寫回類動作一律屬護理長（docs/CONTEXT.md 身份視角）
-      staff: snap.staff.filter((s) => inScope(s.unit)),
+      staff, guests,
       shifts: shifts.map(shiftRowForPlatform),
     }, 200, cors);
   }

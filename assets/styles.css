@@ -573,6 +573,8 @@ select option { background: var(--surface); color: var(--ink); }
 .roster-foot td { font-size: 12px; font-weight: 700; color: var(--ink-faint); border-top: 1.5px solid var(--line); }
 .roster-foot .foot-day { color: var(--ink); }
 .roster-foot .foot-short { color: var(--warn-ink, #a15c00); background: #fdf3e4; }
+/* 帶班／資格列（護理長、督導）不貼底：兩列都 bottom:0 會疊在同一處、蓋住日合計；日合計維持常駐，此列捲到表底即見 */
+.roster-scroll tfoot .roster-cov td { bottom: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
 th { font-size: 12px; color: var(--ink-faint); font-weight: 700; background: var(--field); }

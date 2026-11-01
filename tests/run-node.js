@@ -26,6 +26,7 @@ Object.assign(globalThis, require('../src/llm.js'));
 Object.assign(globalThis, require('../src/botcore.js'));
 Object.assign(globalThis, require('../src/profile.js'));
 Object.assign(globalThis, require('../src/demand.js'));
+Object.assign(globalThis, require('../src/competence.js'));
 Object.assign(globalThis, require('../src/coverage.js'));
 
 require('./engine.test.js');
@@ -33,14 +34,15 @@ require('./fhir.test.js');
 require('./botcore.test.js');
 require('./linebot-stage1.test.js');
 require('./nursing-core.test.js');
+require('./competence.test.js');
 
 (async () => {
   let pass = 0, fail = 0;
   for (const t of TESTS) {
     try {
-      await t.fn();
+      const r = await t.fn();   // 與 tests.html 同：回 { skipped } 者照列原因、不算失敗（Node 下目前沒有）
       pass += 1;
-      console.log('✓ ' + t.name);
+      console.log('✓ ' + t.name + (r && r.skipped ? `\n  （此環境略過：${r.skipped}）` : ''));
     } catch (err) {
       fail += 1;
       console.error('✗ ' + t.name + '\n  ' + String(err.message).replace(/\n/g, '\n  '));

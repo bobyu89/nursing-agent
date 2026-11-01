@@ -73,6 +73,21 @@ function signed(events) {
 }
 const textEv = (userId, text) => ({ type: 'message', replyToken: 'r' + calls.length, source: { userId }, message: { type: 'text', text } });
 
+/* ── 時鐘：整支煙霧測試從固定時刻起跑（台北 2026-11-01 08:00），之後照常流動 ──
+ * 測資寫死「8/9」通報（年份依當下推算）、「開啟預班 12月」（預設截止 11/25）等；跟著真實日期走，
+ * 過了截止日或跨年就會變紅，部署閘門不該隨日曆變色。各段的假時鐘（快轉、跳日）疊在這個時鐘上，8⅞ 另釘在 2026-09-20 */
+{
+  const RealDate = Date;
+  const t0 = RealDate.now();
+  const PIN = RealDate.parse('2026-11-01T00:00:00.000Z');
+  const pinnedNow = () => PIN + (RealDate.now() - t0);
+  class PinnedDate extends RealDate {
+    constructor(...a) { super(...(a.length ? a : [pinnedNow()])); }
+    static now() { return pinnedNow(); }
+  }
+  globalThis.Date = PinnedDate;
+}
+
 /* ── 準備 DB ── */
 const db = new DatabaseSync(':memory:');
 db.exec(fs.readFileSync(path.join(ROOT, 'cloudflare/linebot/schema.sql'), 'utf8'));
@@ -195,6 +210,9 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   const row = db.prepare('SELECT * FROM sub_request WHERE id = ?').get(rq);
   step('D1 sub_request＝REPORTED、原班人員＝通報者、候選序列已凍結存檔', row && row.state === 'REPORTED' && row.original_staff_id === 'N-02' && JSON.parse(row.candidates_json).length > 1);
   const cands = JSON.parse(row.candidates_json);
+  // Phase 4a：Worker 載入了設定檔四模組，標籤才會在通報當下凍結進 D1（缺模組時靜默略過，這一步就會紅）
+  step('D1 候選序列每位附 cov（設定檔模組已載入 Worker）', cands.every((c) => c.cov && Array.isArray(c.cov.fills) && Array.isArray(c.cov.still)
+    && Array.isArray(c.cov.lacks) && typeof c.cov.ok === 'boolean'), row.candidates_json.slice(0, 200));
 
   await worker.fetch(signed([pb(OTHER, encodeParams({ rq, act: 'approve' }), 2)]), envD1);
   step('通報者（staff）自己按核准 → 權責閘擋下', /核准／調整替班.*護理長以上/.test(replyText()), replyText());
@@ -366,7 +384,8 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
 /* ── 8⅞. Phase 2 預班迴路：開啟 → 預假 → 進度 → cron 催繳 → cron 截止生成 → 暫緩 → 公告寫回 ── */
 {
   // worker 的 nowIso 來自 new Date()，只改 Date.now 跳不動時鐘；換成整個 Date（無參數建構＝假時間），段末還原
-  const RealDate = Date; let skew = 0; let jump = null;
+  // 起點釘在 2026-09-20（台北 9/20 08:00）：本段寫死「開啟預班 11月」、截止 10/25，若跟著真實時鐘走，過了截止日整段就會變紅
+  const RealDate = Date; let skew = 0; let jump = Date.parse('2026-09-20T00:00:00.000Z');
   class FakeDate extends RealDate {
     constructor(...a) { super(...(a.length ? a : [FakeDate.now()])); }
     static now() { return (jump ?? RealDate.now()) + (skew += 7000); }
@@ -432,6 +451,7 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   const reviewPushes = pushes().filter((p) => /11 月班表草稿/.test(p.messages[0].text));
   const headsMed = db.prepare("SELECT COUNT(*) AS n FROM identity WHERE unit = 'MED-3A' AND tier IN ('head','exec')").get().n;
   step(`草稿通知推給本單位護理長（${headsMed} 人），附核准／暫緩鍵`, reviewPushes.length === headsMed && reviewPushes.every((p) => p.messages[0].quickReply.items.length === 2), `got ${reviewPushes.length}`);
+  step('11 月草稿推播含「帶班與資格（單位設定檔 p-」', reviewPushes.length > 0 && reviewPushes.every((p) => p.messages[0].text.includes('帶班與資格（單位設定檔 p-')), reviewPushes[0]?.messages[0].text || 'no push');
   const publishData = reviewPushes[0].messages[0].quickReply.items[0].action.data;
   const holdData = reviewPushes[0].messages[0].quickReply.items[1].action.data;
 
@@ -550,6 +570,21 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   const snapExec = await res.json();
   const allN = db.prepare('SELECT COUNT(*) AS n FROM staff').get().n;
   step(`督導的快照：全院（${allN} 人）、scope=null`, snapExec.scope === null && snapExec.staff.length === allN, JSON.stringify({ scope: snapExec.scope, staff: snapExec.staff.length }));
+  // 跨單位支援：外單位人員經替補寫進本單位班表（store-d1 applySubstitution 以缺班單位寫入）——
+  // 護理長快照的 staff 仍只有本單位，另附 guests：只含能力判定欄位，平台「帶班／資格」列才判得出他的進階與 ACLS
+  db.prepare("INSERT INTO shift (staff_id, date, shift, unit, source, written_at) VALUES ('N-08', '2026-08-12', 'E', 'MED-3A', 'substitution', ?)").run(new Date().toISOString());
+  const snapG = await (await api('/api/snapshot', { headers: { origin: 'https://bobyu89.github.io', authorization: `Bearer ${sessHead.session}` } })).json();
+  const offUnit = db.prepare("SELECT DISTINCT s.staff_id AS id FROM shift s JOIN staff t ON t.staff_id = s.staff_id WHERE s.unit = 'MED-3A' AND t.unit <> 'MED-3A' ORDER BY s.staff_id").all().map((r) => r.id);
+  const gs = Array.isArray(snapG.guests) ? snapG.guests : [];
+  const g8 = gs.find((x) => x.id === 'N-08');
+  step('跨單位替補寫進本單位班表 → 護理長快照 staff 仍只有本單位、guests 附外單位支援者的能力欄位；督導全院、guests 為空',
+    snapG.staff.length === medN && snapG.staff.every((s) => s.unit === 'MED-3A')
+    && JSON.stringify(gs.map((x) => x.id).sort()) === JSON.stringify(offUnit)
+    && !!g8 && g8.unit === 'SUR-5B' && g8.ladder === 'N2' && g8.certs.ACLS === '2027-11-30'
+    && gs.every((x) => Object.keys(x).every((k) => ['id', 'unit', 'ladder', 'certs'].includes(k)))
+    && Array.isArray(snapExec.guests) && snapExec.guests.length === 0,
+    JSON.stringify({ guests: snapG.guests, offUnit, exec: snapExec.guests }));
+  db.prepare("DELETE FROM shift WHERE staff_id = 'N-08' AND date = '2026-08-12' AND shift = 'E'").run();
 
   // 設定需求（3a）→ 之後生成用它
   await worker.fetch(signed([textEv(OTHER, '設定需求 D2 E1 N1')]), envD1);

@@ -1,8 +1,9 @@
 /**
  * nursing-core.test.js — 護理知識核心三模組：設定檔編譯、照護需求換算、能力覆蓋
  *
- * 測試只經過模組介面（compileProfile／careDemand／assessCoverage／diffCoverage），
- * 情境為血液透析室與急診兩種相反的配置型態。
+ * 測試只經過模組介面（compileProfile／careDemand／assessCoverage／diffCoverage／
+ * rosterAssignments／rosterCoverage），情境為血液透析室與急診兩種相反的配置型態，
+ * 加上內科 3A 一般病房（ward，data.js 的 UNIT_PROFILE_DRAFTS）對示範班表的帶班與資格覆蓋。
  */
 
 const HD_DRAFT = {
@@ -207,4 +208,154 @@ test('變更漣漪：把隔離區唯一的人借去一般區，一般區補好�
   const before = assessCoverage(hd, slots, [...base, { slotId: `${MON}|AM|HBV`, staffId: 'H-06' }], NURSES);
   const after = assessCoverage(hd, slots, [...base, { slotId: `${MON}|AM|GEN`, staffId: 'H-06' }], NURSES);
   assertEqual(diffCoverage(before, after), { broke: [`${MON}|AM|HBV`], fixed: [`${MON}|AM|GEN`] });
+});
+
+/* ── 一般病房（ward）：內科 3A 預設設定檔對示範班表的帶班與資格覆蓋 ── */
+
+const wardProfile = () => ok(UNIT_PROFILE_DRAFTS['MED-3A']);
+const wardWeek = (staff) => {
+  const ward = wardProfile();
+  return rosterCoverage(ward, careDemand(ward, { dates: WEEK_DATES }), SHIFTS, staff);
+};
+
+test('設定檔：內科 3A 一般病房（ward）走班別 × 崗位、指紋穩定；未知類型與 0 人保底皆退件', () => {
+  const draft = UNIT_PROFILE_DRAFTS['MED-3A'];
+  const r = compileProfile(draft);
+  assertEqual([r.ok, r.profile.kind], [true, 'ward']);
+  const ward = r.profile;
+  assertEqual(ward.demand.shifts, [
+    { id: 'D', label: '白班', start: '07:00', end: '15:00' },
+    { id: 'E', label: '小夜', start: '15:00', end: '23:00' },
+    { id: 'N', label: '大夜', start: '23:00', end: '07:00' },
+  ], '班別取 SHIFT_TYPES');
+  assertEqual(ward.demand.posts[0], {
+    id: 'WARD', label: '病房', min: 1, visitsPerNurse: null,
+    allMust: ['ACLS'], atLeast: [{ competence: 'SENIOR', min: 1 }],
+  });
+  assertEqual(ward.constraints.minRestHours, 11);
+  assert(/^p-[0-9a-f]{8}$/.test(ward.fingerprint), ward.fingerprint);
+  assertEqual(compileProfile(draft).profile.fingerprint, ward.fingerprint, '重新編譯，指紋不變');
+  const kind = compileProfile({ ...draft, kind: 'homecare' });
+  assertEqual([kind.problems[0].path, kind.problems[0].code], ['kind', 'P-KIND']);
+  assert(kind.problems[0].message.includes('ward'), kind.problems[0].message);
+  const zero = compileProfile({ ...draft, demand: { ...draft.demand, posts: [{ ...draft.demand.posts[0], min: 0 }] } });
+  assert(codesOf(zero).includes('demand.posts.0.min:P-NUM'), JSON.stringify(zero.problems));
+});
+
+test('照護需求：一般病房每日三班各一格，大夜跨日，人數取設定檔保底', () => {
+  const slots = careDemand(wardProfile(), { dates: WEEK_DATES });
+  assertEqual(slots.length, 21, '7 天 × 3 班 × 1 崗位');
+  const night = slots[2];
+  assertEqual([night.id, night.start, night.end], ['2026-08-03|N|WARD', '2026-08-03T23:00', '2026-08-04T07:00']);
+  assertEqual(night.headcount, { min: 1, source: 'baseline', basis: '設定檔保底 1 人' });
+  assertEqual([night.allMust, night.atLeast], [['ACLS'], [{ competence: 'SENIOR', min: 1 }]]);
+});
+
+test('班表對應：他單位與範圍外日期略過；對不上設定檔的列附原因列出，不默默丟棄', () => {
+  const ward = wardProfile();
+  const odd = { staffId: 'N-03', date: '2026-08-03', shift: 'X', unit: 'MED-3A' };
+  const r = rosterAssignments(ward, careDemand(ward, { dates: WEEK_DATES }), [
+    { staffId: 'N-01', date: '2026-08-03', shift: 'D', unit: 'MED-3A' },
+    { staffId: 'N-08', date: '2026-08-03', shift: 'D', unit: 'SUR-5B' },   // 他單位：不在本次範圍
+    { staffId: 'N-02', date: '2026-09-01', shift: 'D', unit: 'MED-3A' },   // 範圍外日期
+    odd,
+  ]);
+  assertEqual(r.assignments, [{ slotId: '2026-08-03|D|WARD', staffId: 'N-01' }], '單一崗位單位，列不必指明崗位');
+  assertEqual(r.unmapped, [{ row: odd, reason: '設定檔無此班別' }]);
+  assert(r.unmapped[0].row === odd, '列出原列本身');
+
+  const er = ok(ER_DRAFT);
+  const erSlots = careDemand(er, { dates: [MON] });
+  const resus = { staffId: 'E-01', date: MON, shift: 'D', unit: 'ER', post: 'RESUS' };
+  assertEqual(rosterAssignments(er, erSlots, [resus]).assignments, [{ slotId: `${MON}|D|RESUS`, staffId: 'E-01' }]);
+  const noPost = { staffId: 'E-01', date: MON, shift: 'D', unit: 'ER' };
+  assertEqual(rosterAssignments(er, erSlots, [noPost]), { assignments: [], unmapped: [{ row: noPost, reason: '多崗位單位須指明崗位' }] });
+  const badPost = { ...resus, post: 'ICU' };
+  assertEqual(rosterAssignments(er, erSlots, [badPost]).unmapped, [{ row: badPost, reason: '設定檔無此崗位' }]);
+  const hd = ok(HD_DRAFT);
+  const pm = { staffId: 'H-01', date: MON, shift: 'PM', unit: 'HD-1', post: 'GEN' };
+  const hdSlots = careDemand(hd, { dates: [MON], bookings: { [MON]: { PM: { GEN: 0, HBV: 0 } } } });
+  assertEqual(rosterAssignments(hd, hdSlots, [pm]).unmapped, [{ row: pm, reason: '該日此格無照護需求' }], '午場無病人，不需人力');
+});
+
+test('班表覆蓋：示範週內科 3A 只計有排人的 16 班——11 班缺 N3 以上帶班，8/04 白班 N-04 的 ACLS 已過期', () => {
+  const r = wardWeek(STAFF);
+  assertEqual(r.unmapped, []);
+  const t = r.tally;
+  assertEqual([t.profile, t.slots, t.staffed, t.empty, t.conflict, t.unrated], [wardProfile().fingerprint, 21, 16, 5, 0, []]);
+  assertEqual(t.atLeast.SENIOR, [
+    '2026-08-04|E|WARD', '2026-08-04|N|WARD', '2026-08-05|D|WARD', '2026-08-05|E|WARD', '2026-08-05|N|WARD',
+    '2026-08-06|E|WARD', '2026-08-07|E|WARD', '2026-08-07|N|WARD', '2026-08-08|E|WARD', '2026-08-08|N|WARD',
+    '2026-08-09|E|WARD',
+  ]);
+  assertEqual(t.allMust.ACLS, [{ slotId: '2026-08-04|D|WARD', staffId: 'N-04' }]);
+  assertEqual(r.summary, { met: 4, short: 17, conflict: 0, shortBySource: { baseline: 17 }, fragile: 15 },
+    'summary 照舊逐格計（空班的人數缺口也在內）；帶班計數另看 tally');
+  const empty = r.slots.filter((s) => !s.assigned.length).map((s) => s.slotId);
+  assertEqual(empty, ['2026-08-03|E|WARD', '2026-08-03|N|WARD', '2026-08-06|N|WARD', '2026-08-09|D|WARD', '2026-08-09|N|WARD']);
+  assert(empty.every((id) => !t.atLeast.SENIOR.includes(id)), '空班（如 8/06 大夜）是人數缺口，不算帶班缺口');
+
+  // rosterCoverage 照列對不上的列；名單外代號排進空班＝有人排入（計入已排、為衝突、算帶班缺口），不當成空班略過
+  const ward = wardProfile();
+  const odd = { staffId: 'N-03', date: '2026-08-03', shift: 'X', unit: 'MED-3A' };
+  const ghost = { staffId: 'Z-99', date: '2026-08-06', shift: 'N', unit: 'MED-3A' };
+  const r2 = rosterCoverage(ward, careDemand(ward, { dates: WEEK_DATES }), SHIFTS.concat([odd, ghost]), STAFF);
+  assertEqual(r2.unmapped, [{ row: odd, reason: '設定檔無此班別' }], '對不上的列原樣傳出，不默默丟棄');
+  const t2 = r2.tally;
+  assertEqual([t2.staffed, t2.empty, t2.conflict], [17, 4, 1], '8/06 大夜由空班變成有人排入的衝突班');
+  assertEqual(t2.atLeast.SENIOR, [...t.atLeast.SENIOR.slice(0, 6), '2026-08-06|N|WARD', ...t.atLeast.SENIOR.slice(6)],
+    '名單外代號無法確認能力，不算帶班');
+});
+
+test('班表覆蓋：帶班缺口與引擎能力分析逐班同判——示範週 11 班、8 月整月 54 班（有排人 85 班）', () => {
+  const ward = wardProfile();
+  const aug = Array.from({ length: 31 }, (_, i) => `2026-08-${String(i + 1).padStart(2, '0')}`);
+  const counts = [WEEK_DATES, aug].map((dates) => {
+    const t = rosterCoverage(ward, careDemand(ward, { dates }), SHIFTS, STAFF).tally;
+    const mine = t.atLeast.SENIOR.map((id) => id.split('|').slice(0, 2).join('|'));
+    const engine = platformEngine(null).capabilityAnalysis({ dates, unit: 'MED-3A' }).shiftMix
+      .filter((m) => !m.empty && !m.hasSenior)
+      .map((m) => `${m.date}|${m.shift}`);
+    assertEqual(mine, engine, `${dates[0]} 起 ${dates.length} 天：覆蓋檢核與引擎 shiftMix 應逐班一致`);
+    return [mine.length, t.staffed];
+  });
+  assertEqual(counts, [[11, 16], [54, 85]]);
+});
+
+test('能力覆蓋：效期無法判讀 fail closed——寫出原值、視同未具備，不再以字串比較放行', () => {
+  const ward = wardProfile();
+  const x1 = { id: 'X-01', ladder: 'N2', certs: { ACLS: '2026/1/5' } };
+  const r = assessCoverage(ward, careDemand(ward, { dates: ['2026-08-03'] }), [
+    { slotId: '2026-08-03|D|WARD', staffId: 'N-01' },
+    { slotId: '2026-08-03|D|WARD', staffId: 'X-01' },
+  ], STAFF.concat([x1]));
+  const day = r.slots.find((s) => s.slotId === '2026-08-03|D|WARD');
+  assertEqual(day.status, 'short', '舊版以字串比較，「2026/1/5」排在「2026-08-03」之後而被判為 met');
+  const all = day.issues.filter((i) => i.code === 'C-ALL');
+  assertEqual(all.map((i) => i.staffId), ['X-01']);
+  assert(all[0].text.includes('ACLS效期「2026/1/5」無法判讀，視同未具備'), all[0].text);
+
+  const er = ok(ER_DRAFT);
+  const x2 = { id: 'X-02', ladder: 'N2', certs: { ACLS: '2027/5/31' } };
+  const er2 = assessCoverage(er, careDemand(er, { dates: [MON] }), [
+    { slotId: `${MON}|D|RESUS`, staffId: 'E-01' },
+    { slotId: `${MON}|D|RESUS`, staffId: 'X-02' },
+  ], NURSES.concat([x2]));
+  const resus = er2.slots.find((s) => s.slotId === `${MON}|D|RESUS`);
+  assertEqual(resus.issues.map((i) => [i.code, i.short]), [['C-ATLEAST', 1]], 'X-02 的 ACLS 無法判讀，不算在具備者內');
+});
+
+test('班表覆蓋：臨床進階未登錄或無法辨識者不計為帶班且被點名——N-10 未登錄時，示範週缺口由 11 班變 13 班', () => {
+  const staff = STAFF.map((s) => (s.id === 'N-10' ? { ...s, ladder: null } : s));
+  const t = wardWeek(staff).tally;
+  assertEqual(t.unrated, ['N-10']);
+  assertEqual(t.atLeast.SENIOR.length, 13);
+  assert(['2026-08-07|D|WARD', '2026-08-08|D|WARD'].every((id) => t.atLeast.SENIOR.includes(id)),
+    'N-10 在 8/07、8/08 白班，未登錄即不算帶班');
+  assertEqual(STAFF.find((s) => s.id === 'N-10').ladder, 'N4', '測試用副本，不改示範資料');
+
+  const typo = wardWeek(STAFF.map((s) => (s.id === 'N-04' ? { ...s, ladder: 'n3' } : s))).tally;
+  assertEqual(typo.unrated, ['N-04'], '不在階梯內的值（小寫 n3）＝無法辨識，同樣點名');
+  assertEqual(typo.atLeast.SENIOR.length, 12, 'N-04 在 8/04 白班，登錄值無法辨識即不算帶班');
+  assert(typo.atLeast.SENIOR.includes('2026-08-04|D|WARD'), JSON.stringify(typo.atLeast.SENIOR));
 });
