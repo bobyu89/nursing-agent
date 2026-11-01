@@ -2823,6 +2823,22 @@ function rosterStaff() {
   return STAFF.filter((s) => s.unit === ROSTER_UNIT);
 }
 
+/** 本病房的單位設定檔（帶班／資格列用）：首次呼叫時編譯 UNIT_PROFILE_DRAFTS 一次並沿用。
+ *  設定檔模組（profile／demand／competence／coverage）未載入、無預設或編譯失敗時回 null——
+ *  該列不顯示，班表照常 */
+let ROSTER_PROFILE;   // undefined＝尚未編譯；null＝無可用設定檔
+function rosterProfile() {
+  if (ROSTER_PROFILE !== undefined) return ROSTER_PROFILE;
+  ROSTER_PROFILE = null;
+  if (typeof compileProfile === 'function' && typeof careDemand === 'function'
+    && typeof rosterCoverage === 'function' && typeof badgeOf === 'function'
+    && typeof UNIT_PROFILE_DRAFTS !== 'undefined' && UNIT_PROFILE_DRAFTS[ROSTER_UNIT]) {
+    const c = compileProfile(UNIT_PROFILE_DRAFTS[ROSTER_UNIT]);
+    if (c.ok) ROSTER_PROFILE = c.profile;
+  }
+  return ROSTER_PROFILE;
+}
+
 /** 目前顯示月份的所有日期（排班以月為單位；示範資料涵蓋 2026-08 整月） */
 function rosterDates() {
   const [y, m] = state.rosterMonth.split('-').map(Number);
@@ -2883,8 +2899,43 @@ function renderRoster() {
       + (total === 0 ? '；整日未排定——可用「班表生成」從源頭排補' : '');
     return `<td class="center foot-day${total < needTotal ? ' foot-short' : ''}" title="${esc(tip)}">${total}</td>`;
   }).join('');
+  // 帶班／資格列（護理長、督導／主任）：有排人的班逐格交能力判定核心檢核 N3 以上帶班與 ACLS 效期——
+  // 只標示、不改班表；每次重繪都重算，循環編輯格子後立即反映。
+  // 標示會點名同事的過期資格，護理師視角不顯示；班別間休息等合法性歸規則引擎，不在此列
+  let covRow = '';
+  const prof = CURRENT_ROLE !== 'staff' ? rosterProfile() : null;
+  if (prof) {
+    const COMPETENCE_ISSUES = ['C-ATLEAST', 'C-ALL', 'C-STAFF'];
+    const rc = rosterCoverage(prof, careDemand(prof, { dates }), SHIFTS, STAFF);
+    const t = rc.tally;
+    const staffed = rc.slots.filter((s) => s.assigned.length || s.issues.some((i) => i.code === 'C-STAFF'));
+    const flagged = staffed.filter((s) => s.issues.some((i) => COMPETENCE_ISSUES.includes(i.code)));
+    const covCells = dates.map((d) => {
+      const day = staffed.filter((s) => s.date === d);
+      if (!day.length) return '<td class="center" title="本日無人排班，不檢核帶班與資格">·</td>';
+      const bad = flagged.filter((s) => s.date === d);
+      if (!bad.length) return `<td class="center foot-day" title="${esc(`有排人的 ${day.length} 班帶班與資格皆無缺口`)}">✓</td>`;
+      const tip = bad.map((s) => {
+        const sh = SHIFT_TYPES[s.slotId.split('|')[1]];
+        return `${sh ? sh.name : s.label}：${s.issues.filter((i) => COMPETENCE_ISSUES.includes(i.code)).map((i) => i.text).join('；')}`;
+      }).join('\n');
+      return `<td class="center foot-day foot-short" title="${esc(tip)}">${bad.length}</td>`;
+    }).join('');
+    const label = (code) => (prof.competences[code] || {}).label || code;
+    const gaps = Object.keys(t.atLeast).map((code) => `${t.atLeast[code].length} 班缺 ${label(code)}`);
+    const must = Object.keys(t.allMust).map((code) => (t.allMust[code].length
+      ? `${label(code)}不符 ${t.allMust[code].length} 人次` : `每位在班者皆具 ${label(code)}`));
+    const sumTip = [
+      `單位設定檔 ${t.profile}：本月已排 ${t.staffed} 班${gaps.length ? `中 ${gaps.join('、')}` : ''}${must.map((x) => `；${x}`).join('')}`,
+      ...(t.unrated.length ? [`臨床進階未登錄、不計為帶班：${t.unrated.join('、')}`] : []),
+      ...(rc.unmapped.length ? [`班表列對不上設定檔 ${rc.unmapped.length} 筆：${rc.unmapped.map((u) => `${u.row.staffId} ${shortDate(u.row.date)} ${u.row.shift}（${u.reason}）`).join('、')}`] : []),
+      '生成器尚未把帶班列為排班條件——此處只標示、不改班表',
+    ].join('\n');
+    covRow = `<tr class="roster-foot roster-cov"><td>帶班／資格</td><td class="td-role" title="${esc(sumTip)}">${esc(`${flagged.length} 班待留意`)}<br>`
+      + `<small>${esc(t.profile)}${t.unrated.length ? esc(`｜進階未登錄 ${t.unrated.length} 人`) : ''}</small></td>${covCells}<td class="center">—</td></tr>`;
+  }
   // 首格不可用 colspan：凍結欄會比表身的凍結欄寬，橫向捲動時蓋住日期欄、數字對不上
-  const foot = `<tfoot><tr class="roster-foot"><td>日合計</td><td class="td-role">需 ${needTotal} 人／日</td>${footCells}<td class="center">—</td></tr></tfoot>`;
+  const foot = `<tfoot><tr class="roster-foot"><td>日合計</td><td class="td-role">需 ${needTotal} 人／日</td>${footCells}<td class="center">—</td></tr>${covRow}</tfoot>`;
 
   $('#roster-table').innerHTML = head + `<tbody>${body}</tbody>` + foot;
 }
@@ -3206,7 +3257,7 @@ function renderStaffTable() {
   const body = STAFF.map((s) => {
     const certs = Object.entries(s.certs).map(([k, exp]) => {
       const expired = exp < certRefDate;
-      return `<span class="${expired ? 'expired' : ''}">${CERTS[k].replace(/\s.*/, '')}${expired ? `（已於 ${exp} 到期）` : ''}</span>`;
+      return `<span class="${expired ? 'expired' : ''}">${esc((CERTS[k] || k).replace(/\s.*/, ''))}${expired ? `（已於 ${exp} 到期）` : ''}</span>`;
     }).join('、');
     const willing = s.willingShifts === null
       ? '<span style="color:var(--ink-faint)">未表態</span>'
@@ -3490,7 +3541,7 @@ function handleGenRun() {
       ${idle.length ? `<p class="fineprint">${idle.map((s) => esc(s.id)).join('、')} 整週未被排入——${
         idle.map((s) => {
           const expired = Object.entries(s.certs).find(([, exp]) => exp < sc.dates[0]);
-          return expired ? `${esc(s.id)} 的 ${esc(CERTS[expired[0]].replace(/\s.*/, ''))} 已於 ${expired[1]} 到期（H1，與替補同一份檢查）` : `${esc(s.id)} 受硬性約束限制`;
+          return expired ? `${esc(s.id)} 的 ${esc((CERTS[expired[0]] || expired[0]).replace(/\s.*/, ''))} 已於 ${expired[1]} 到期（H1，與替補同一份檢查）` : `${esc(s.id)} 受硬性約束限制`;
         }).join('；')}。</p>` : ''}
       ${r.uncovered.length ? `
         <h4 style="margin:14px 0 4px;font-size:13px;color:var(--ink-faint)">排不出的格子——系統不硬塞、不放寬，交主管決策</h4>
