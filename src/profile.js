@@ -3,7 +3,8 @@
  *
  * 通用人資系統的單位只有「班別 × 人數」；本模組把一個單位的護理知識
  * 表示為五類物件，編譯成其他模組共同使用的設定檔：
- *   需求 demand          照護需求如何換算為人力（透析：場次 × 床數 ÷ 每人病人數；急診：崗位 × 時段）
+ *   需求 demand          照護需求如何換算為人力（透析：場次 × 床數 ÷ 每人病人數；急診：崗位 × 時段；
+ *                        一般病房 ward：白班／小夜／大夜 × 崗位，人數取設定檔保底）
  *   能力 competences     資格（含效期）或臨床進階，例：透析資格、五級檢傷、N3 以上
  *   限制 constraints     休息、連續上班、週工時；全院法規底線共用，單位只能加嚴
  *   偏好 preferences     預假與意願的處理方式
@@ -18,7 +19,7 @@
  * 純函式、零依賴：瀏覽器、Node 測試與 Cloudflare Worker 共用同一份。
  */
 
-const PROFILE_KINDS = ['hemodialysis', 'emergency'];
+const PROFILE_KINDS = ['hemodialysis', 'emergency', 'ward'];
 const APPROVER_ROLES = ['head', 'exec'];   // 與 LINE 權責層級一致：head 護理長、exec 督導／主任
 const DEFAULT_LADDER = ['N1', 'N2', 'N3', 'N4', 'AHN'];
 
@@ -46,7 +47,7 @@ function compileProfile(draft, floor = DEFAULT_FLOOR) {
   const constraints = normalizeConstraints(d.constraints, fl, bad);
   const accountability = normalizeAccountability(d.accountability, bad);
   const demand = d.kind === 'hemodialysis' ? normalizeDialysisDemand(d.demand, fl, competences, bad)
-    : d.kind === 'emergency' ? normalizeEmergencyDemand(d.demand, competences, bad)
+    : d.kind === 'emergency' || d.kind === 'ward' ? normalizeEmergencyDemand(d.demand, competences, bad)
       : null;
   const preferences = {
     honorPrebook: !(d.preferences && d.preferences.honorPrebook === false),
@@ -139,7 +140,7 @@ function normalizeDialysisDemand(raw, fl, competences, bad) {
   return { patientsPerNurse: ppn, sessions, areas };
 }
 
-/* ── 需求：急診（班別 × 崗位，保底人數加上可選的時段預測換算） ── */
+/* ── 需求：急診與一般病房（班別 × 崗位，保底人數加上可選的時段預測換算） ── */
 function normalizeEmergencyDemand(raw, competences, bad) {
   const r = raw || {};
   const shifts = normalizeList(r.shifts, 'demand.shifts', bad, (s, path) => {

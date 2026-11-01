@@ -8,6 +8,9 @@
  *   forecast  急診預測 { [date]: { [shiftId]: { [postId]: 每小時就診人次 } } }
  *             預測從哪個模型來不是本模組的事——任何預測器只要給這個形狀即可
  *
+ * 一般病房（ward）與急診同走「班別 × 崗位」（emergencySlots）：目前的病房設定檔不設 visitsPerNurse、
+ * 呼叫端也不給 forecast，人數即設定檔保底、來源 baseline；這兩者保留給日後的占床／入院量預測換算。
+ *
  * 每一格（slot）回答三件事，並標明數字的來源：
  *   headcount { min, source, basis }  至少幾人
  *   allMust   每一位都須具備的能力
@@ -58,7 +61,7 @@ function dialysisSlots(profile, dates, bookings) {
   return out;
 }
 
-/* 急診：每班別每崗位一格；人數 = max(保底, 預測就診量 ÷ 每人可照護量) */
+/* 急診與一般病房：每班別每崗位一格；人數 = max(保底, 預測就診量 ÷ 每人可照護量) */
 function emergencySlots(profile, dates, forecast) {
   const { shifts, posts } = profile.demand;
   const out = [];

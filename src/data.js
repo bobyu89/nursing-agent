@@ -80,6 +80,28 @@ const LADDER_LEVELS = {
   AHN: { level: 5, name: 'AHN 副護理長' },
 };
 
+/* ── 單位設定檔草稿（compileProfile 的輸入；能力覆蓋檢核用）──────
+ * 內科 3A：一般病房（ward），班別取 SHIFT_TYPES 的白班／小夜／大夜，單一崗位「病房」每班至少 1 人。
+ * ACLS 每位在班者皆須具備＝對應生成器 requirementsFor 的院內政策；
+ * 每班至少一位 N3 以上帶班＝對應 docs/CONTEXT.md 的 seniorLevel 預設（N3）。
+ * 單位可用 D1 setting profile.<unit> 整份覆寫（全有或全無），見 docs/CONTEXT.md「共用核心」。
+ */
+const UNIT_PROFILE_DRAFTS = {
+  'MED-3A': {
+    unit: 'MED-3A', kind: 'ward', label: UNITS['MED-3A'],
+    competences: {
+      ACLS: { label: 'ACLS', cert: 'ACLS' },
+      SENIOR: { label: 'N3 以上帶班', ladderAtLeast: 'N3' },
+    },
+    demand: {
+      shifts: Object.values(SHIFT_TYPES).map((t) => ({ id: t.code, label: t.name, start: t.start, end: t.end })),
+      posts: [
+        { id: 'WARD', label: '病房', min: 1, allMust: ['ACLS'], atLeast: [{ competence: 'SENIOR', min: 1 }] },
+      ],
+    },
+  },
+};
+
 /* ── 本週範圍（用於週工時計算）─────────────────────────── */
 const WEEK = { start: '2026-08-03', end: '2026-08-09', label: '2026 年 8 月第 1 週（8/03 一 – 8/09 日）' };
 const WEEK_DATES = ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07', '2026-08-08', '2026-08-09'];
@@ -488,6 +510,6 @@ if (typeof module !== 'undefined' && module.exports) {
     SHIFT_TYPES, UNITS, CERTS, ROLE_LEVELS, LADDER_LEVELS, WEEK, WEEK_DATES,
     STAFF, SHIFTS, RAW_MESSAGE, GAP_EVENT, UNIT_MIN_STAFF, MULTI_GAP_SCENARIO,
     SAMPLE_MESSAGES, TASK_REALLOC_SCENARIO, GEN_SCENARIO, FLEX_CYCLE_ANCHOR,
-    HOSPITAL_LEVELS, ICU_RATIO, UNIT_CENSUS, DISPATCH_SCENARIO,
+    HOSPITAL_LEVELS, ICU_RATIO, UNIT_CENSUS, DISPATCH_SCENARIO, UNIT_PROFILE_DRAFTS,
   };
 }

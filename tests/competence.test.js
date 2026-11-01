@@ -82,8 +82,10 @@ test('能力判定核心：臨床進階與通用分級——未達、未登錄�
 /* K5 */
 test('能力判定核心：補位差異與後備深度——只篩不排；N-04 補得上帶班卻缺有效 ACLS', () => {
   const date = '2026-08-09';   // 與 LINE 缺班情境 GAP_P 同一格：8/09 白班，引擎前五名依序如下
+  const ward = compileProfile(UNIT_PROFILE_DRAFTS['MED-3A']).profile;   // 編譯後的設定檔本身就是 catalog
+  const needs = ward.demand.posts[0];                                     // 病房崗位＝一格的需求
   const people = ['N-04', 'N-02', 'N-08', 'N-10', 'N-01'].map(kStaff);
-  const b = benchFor(K_CAT, K_WARD_NEEDS, [], people, date);
+  const b = benchFor(ward, needs, [], people, date);
   assertEqual([b.depth, b.bench], [2, ['N-10', 'N-01']]);
   assertEqual(b.rows.map((r) => r.staffId), ['N-04', 'N-02', 'N-08', 'N-10', 'N-01'], 'rows 與輸入一一對應');
   const row = (id) => b.rows.find((r) => r.staffId === id);
@@ -95,9 +97,9 @@ test('能力判定核心：補位差異與後備深度——只篩不排；N-04 
     assertEqual([r.fills, r.still, r.lacks, r.restores], [[], ['SENIOR'], [], false], `${id} 是 N2，補上後仍缺帶班`);
   });
   ['N-10', 'N-01'].forEach((id) => assertEqual(row(id).restores, true, `${id} 可完整補回`));
-  assertEqual(benchFor(K_CAT, K_WARD_NEEDS, [], people.slice().reverse(), date).bench, ['N-01', 'N-10'],
+  assertEqual(benchFor(ward, needs, [], people.slice().reverse(), date).bench, ['N-01', 'N-10'],
     '只篩不排：輸入反轉，輸出跟著反轉');
-  const covered = candidateDelta(K_CAT, K_WARD_NEEDS, [kStaff('N-10')], kStaff('N-02'), date);
+  const covered = candidateDelta(ward, needs, [kStaff('N-10')], kStaff('N-02'), date);
   assertEqual([covered.fills, covered.still, covered.restores], [[], [], true], '班上已有 N4 帶班，N-02 補進即完整');
   assertEqual([0, 1, 2, 5].map((n) => benchLevel(n)), ['broken', 'thin', 'ok', 'ok']);
 });
