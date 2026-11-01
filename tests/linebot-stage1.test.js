@@ -1080,3 +1080,132 @@ test('admin：「我是 N-01 護理長」歸 switch；綁定與切換都回「�
   assertEqual(b.items.map((i) => i.text), ['通報缺班', '我的預假', '我的邀請']);
 });
 
+
+/* ══ Phase 4a：帶班與資格覆蓋（唯讀報告；docs/CONTEXT.md「共用核心」、LINEBOT-STAGE1.md §6 第 4a 列）══
+ * 釘住的是：預班草稿審核的「帶班與資格」段與 prebook.generated 留痕（指紋、來源、計數）、setting profile.<unit>
+ * 覆寫與全有或全無的回落、替班核准推播的表頭與每位候選標籤（引擎原序、略過／置頂／調序後照樣成立、候選詢問一字不改）、
+ * 沒有設定檔與 off 的單位一字不差。數字對示範資料：10 月 D2／E1／N1 草稿 93 班中 65 班缺 N3 以上帶班。 */
+async function closed4a(setting) {
+  const st = prebookStore();
+  if (setting !== undefined) st.settings.set('profile.MED-3A', setting);
+  const { head } = await opened(st);
+  await requirementFlow({ text: '設定需求 D2 E1 N1', actor: head, now: Q0, store: st });
+  const out = await closeCycleFlow({ actor: head, now: '2026-09-20T00:00:00.000Z', store: st });
+  return { st, text: out.pushes[0].text, gen: st.audit.find((a) => a.action === 'prebook.generated').payload };
+}
+const draft4a = (senior) => JSON.stringify({ ...UNIT_PROFILE_DRAFTS['MED-3A'],
+  competences: { ...UNIT_PROFILE_DRAFTS['MED-3A'].competences, SENIOR: senior } });
+
+test('phase4a：預班草稿審核加「帶班與資格」段——已排 93 班中 65 班缺 N3 以上帶班、每位在班者皆具 ACLS、舉例；留痕附設定檔指紋、來源與覆蓋計數', async () => {
+  const fp = compileProfile(UNIT_PROFILE_DRAFTS['MED-3A']).profile.fingerprint;
+  const { text, gen } = await closed4a();
+  assert(/帶班與資格（單位設定檔 p-[0-9a-f]{8}）：已排 93 班中 65 班缺 N3 以上帶班/.test(text), text);
+  assert(text.includes(`帶班與資格（單位設定檔 ${fp}）`), '訊息引用的是內建預設的指紋');
+  assert(text.includes('每位在班者皆具 ACLS') && text.includes('例：10/01 小夜、10/01 大夜、10/02 白班') && text.includes('（共 65 班）'), text);
+  assert(text.includes('（生成器尚未把帶班列為排班條件——此處只標示、不改草稿）'), '寫明生成器尚未把帶班列為條件');
+  assert(!/臨床進階未登錄/.test(text) && !/有誤/.test(text), '示範資料無未登錄者、設定無誤');
+  assert(/已排 \d+／124 格/.test(text), '原本的草稿摘要行不變（格＝人次，班＝班別）');
+  assertEqual([gen.profile, gen.profileSource, gen.profileProblems], [fp, 'default', []]);
+  assertEqual(gen.coverage, { staffed: 93, empty: 0, conflict: 0, atLeast: { SENIOR: 65 }, allMust: { ACLS: 0 }, unmapped: 0, unrated: 0 });
+  assertEqual(gen.requirements, { D: 2, E: 1, N: 1 }, '生成需求照舊');
+});
+
+test('phase4a：setting profile.<unit> 覆寫——可編譯即採用（N2 以上帶班 → 31 班）；壞 JSON 或不過編譯整份不採用、回落預設並列出代碼', async () => {
+  const fp = compileProfile(UNIT_PROFILE_DRAFTS['MED-3A']).profile.fingerprint;
+  const n2 = await closed4a(draft4a({ label: 'N2 以上帶班', ladderAtLeast: 'N2' }));
+  assertEqual(n2.gen.profileSource, 'setting');
+  assert(/^p-[0-9a-f]{8}$/.test(n2.gen.profile) && n2.gen.profile !== fp, '覆寫的指紋不同於預設');
+  assert(n2.text.includes(`帶班與資格（單位設定檔 ${n2.gen.profile}）：已排 93 班中 31 班缺 N2 以上帶班`), n2.text);
+  assert(!/有誤/.test(n2.text));
+  const bad = await closed4a('{bad');
+  assertEqual([bad.gen.profileSource, bad.gen.profile, bad.gen.profileProblems], ['default', fp, ['P-JSON']]);
+  assert(bad.text.includes('已排 93 班中 65 班缺 N3 以上帶班'), '回落預設，數字照舊');
+  assert(bad.text.includes('單位設定檔 profile.MED-3A 有誤，暫用預設') && bad.text.includes('P-JSON'), bad.text);
+  const n9 = await closed4a(draft4a({ label: 'N9 以上帶班', ladderAtLeast: 'N9' }));
+  assertEqual([n9.gen.profileSource, n9.gen.profile], ['default', fp], '任一欄位不過＝整份不採用，絕不套用半份');
+  assert(n9.text.includes('已排 93 班中 65 班缺 N3 以上帶班') && n9.text.includes('P-COMPETENCE'), n9.text);
+  assertEqual((await unitProfile(subStore(), 'MED-3A')).source, 'default', '宿主 store 沒有 getSetting → 內建預設');
+  assertEqual(await unitProfile(subStore(), 'SUR-5B'), { profile: null, source: 'none', problems: [] }, '沒有內建預設的單位');
+});
+
+test('phase4a：替班核准標籤——序列＝引擎原序、每位附凍結 cov；表頭列出此班缺什麼與可完整補回者，略過／置頂／調序後照樣成立；留痕 benchDepth 涵蓋全部合法候選；候選詢問一字不改', async () => {
+  const st = subStore();
+  const { out, id, head } = await reported(st);
+  const cands = JSON.parse(st.reqs.get(id).candidates_json);
+  const legal = platformEngine(null).evaluateGap({ ...buildGap(GAP_P), originalStaffId: 'N-05' }).candidates.map((c) => c.staff.id);
+  assertEqual(cands.map((c) => c.id), ['N-04', 'N-02', 'N-08', 'N-10', 'N-01'], '引擎排序不變');
+  assertEqual(cands.map((c) => c.id), legal.slice(0, SUB_TOP_N));
+  assertEqual(legal.length, 6, '合法候選 6 位');
+  const SEN = 'N3 以上帶班';
+  assertEqual(cands.map((c) => c.cov), [
+    { fills: [SEN], still: [], lacks: ['ACLS已於 2026-06-30 過期'], ok: false },
+    { fills: [], still: [SEN], lacks: [], ok: false },
+    { fills: [], still: [SEN], lacks: [], ok: false },
+    { fills: [SEN], still: [], lacks: [], ok: true },
+    { fills: [SEN], still: [], lacks: [], ok: true },
+  ]);
+  const text = out.pushes[0].text;
+  assert(text.includes('此班扣除通報人後缺 N3 以上帶班') && text.includes('序列中可完整補回者 N-10、N-01') && text.includes('（只標示，不改引擎排序）'), text);
+  const lines = text.split('\n');
+  const tagOf = (sid) => lines[lines.findIndex((l) => new RegExp(`^\\d\\. ${sid}　`).test(l)) + 1];
+  assert(tagOf('N-02').includes('⚠ 補上後仍缺 N3 以上帶班') && tagOf('N-02').includes('✓ 具備單位必備資格'), tagOf('N-02'));
+  assert(tagOf('N-10').includes('✓ 補上 N3 以上帶班'), tagOf('N-10'));
+  assert(tagOf('N-04').includes('✓ 補上 N3 以上帶班') && tagOf('N-04').includes('ACLS已於 2026-06-30 過期（單位必備）'), tagOf('N-04'));
+  const rep = st.audit.find((a) => a.action === 'sub.reported').payload;
+  assert(/^p-/.test(rep.profile) && rep.profileSource === 'default', JSON.stringify(rep));
+  assertEqual(rep.cov, { missing: ['SENIOR'], benchDepth: 2 }, '後備深度涵蓋全部 6 位合法候選');
+  assert(!/帶班|補上/.test(out.reply.text), '通報人的回覆不帶標籤');
+
+  const sk = await skipFlow({ rq: id, who: 'N-10', actor: head, now: P0, store: st });
+  assert(sk.reply.text.includes('序列中可完整補回者 N-01') && !sk.reply.text.includes('N-10、'), sk.reply.text);
+  const tp = await topFlow({ rq: id, who: 'N-01', actor: head, now: P0, store: st });
+  assert(/\n1\. N-01　.*\n　　✓ 補上 N3 以上帶班；✓ 具備單位必備資格/.test(tp.reply.text) && tp.reply.text.includes('此班扣除通報人後缺 N3 以上帶班；序列中可完整補回者 N-01'), tp.reply.text);
+  const ro = await reorderFlow({ rq: id, order: ['N-08', 'N-04'], actor: head, now: P0, store: st });
+  assert(ro.reply.text.includes('此班扣除通報人後缺 N3 以上帶班；序列中可完整補回者 N-01'), ro.reply.text);
+
+  const ok = await approveFlow({ rq: id, actor: head, now: P0, store: st });
+  const req = st.reqs.get(id);
+  const first = JSON.parse(req.candidates_json)[0];
+  assertEqual(ok.pushes[0].text, [
+    `【替班詢問｜${id}】${gapLabel({ date: req.date, shift: req.shift, unit: req.unit, requiredCerts: [] })}`,
+    `你符合資格，引擎排序第 1 位（${first.total}／${first.max} 分：${first.why}）。`,
+    `接嗎？請在 ${req.timeout_min} 分鐘內回覆；逾時會自動問下一位，不影響你的任何評分。`,
+  ].join('\n'), '候選詢問一字不改、不帶標籤');
+});
+
+test('phase4a：沒有設定檔與 off 的單位一字不差——SUR-5B 候選不帶 cov、核准訊息無帶班段；off 的審核訊息只少這一段、留痕 profileSource off；沒有 cov 的舊列照舊', async () => {
+  const st = subStore();
+  st.seed('Uh5', 'N-03', 'SUR-5B', 'head');
+  st.seed('Ur5', 'N-08', 'SUR-5B', 'staff');
+  const out = await reportFlow({ p: { ...GAP_P, u: 'SUR-5B' }, reporter: await st.getIdentityByUser('Ur5'), reasonType: '病假', now: P0, store: st, rand: rand6() });
+  const req = [...st.reqs.values()][0];
+  const cands = JSON.parse(req.candidates_json);
+  assert(cands.length > 0 && cands.every((c) => !('cov' in c)), '沒有設定檔的單位：候選不帶 cov');
+  assertEqual(out.pushes[0].staffId, 'N-03');
+  assert(!/帶班與資格|　　/.test(out.pushes[0].text), out.pushes[0].text);
+  assertEqual(out.pushes[0].text, approvalMessage(req).text);
+  assertEqual([st.audit.at(-1).payload.profile, st.audit.at(-1).payload.profileSource, st.audit.at(-1).payload.cov], [null, 'none', null]);
+
+  const so = prebookStore();
+  so.settings.set('profile.MED-3A', 'off');
+  const { out: offOut, id: offId } = await reported(so);
+  assert(JSON.parse(so.reqs.get(offId).candidates_json).every((c) => !('cov' in c)) && !/帶班與資格/.test(offOut.pushes[0].text), 'off：替班也不帶標籤');
+
+  const off = await closed4a('off');
+  const on = await closed4a();
+  assert(!/帶班/.test(off.text), off.text);
+  assertEqual([off.gen.profile, off.gen.profileSource, off.gen.coverage], [null, 'off', null]);
+  assertEqual(off.text, on.text.replace(/帶班與資格（[\s\S]*?\n\n(?=核准即)/, ''), 'off＝只少帶班與資格段，其餘一字不差');
+
+  const legacy = { id: 'RTEST01', unit: 'MED-3A', date: '2026-08-09', shift: 'D', required_certs_json: '[]', original_staff_id: 'N-05',
+    reporter_staff_id: 'N-05', reason_type: '病假', timeout_min: 60, candidates_json: JSON.stringify([{ id: 'N-04', total: 100, max: 100, why: 'x' }]) };
+  assertEqual(approvalMessage(legacy).text, [
+    '【待核准｜RTEST01】8/9（日）白班｜內科病房 3A',
+    '通報人：N-05（病假）',
+    '',
+    '合格候選 1 位（引擎排序，逐一詢問，每位等 60 分鐘）：',
+    '1. N-04　100／100 分　x',
+    '',
+    '核准後機器人才會開口，序列即凍結；要略過、置頂、改逾時，先按「調整」（每一步留痕）。',
+  ].join('\n'), '沒有 cov 的舊列（D1 既有資料）一字不改');
+});

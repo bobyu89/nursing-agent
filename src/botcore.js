@@ -965,16 +965,30 @@ function gapOf(req) {
 function approvalMessage(req) {
   const cands = JSON.parse(req.candidates_json || '[]');
   const gap = gapOf(req);
+  // Phase 4a：表頭由各候選凍結的 cov 推得（不另存），略過／置頂／調序後照樣成立；沒有 cov 的舊列一字不改
+  const tagged = cands.find((c) => c.cov);
+  const missing = tagged ? [...new Set([...(tagged.cov.fills || []), ...(tagged.cov.still || [])])] : [];
+  const restorers = cands.filter((c) => c.cov && c.cov.ok).map((c) => c.id);
   const lines = [
     `【待核准｜${req.id}】${gapLabel(gap)}`,
     `通報人：${req.reporter_staff_id}${req.reason_type ? `（${req.reason_type}）` : ''}`,
+    ...(tagged ? [`帶班與資格：此班扣除通報人後${missing.length ? `缺 ${missing.join('、')}` : '能力仍足'}；序列中可完整補回者 ${restorers.length ? restorers.join('、') : '無'}（只標示，不改引擎排序）`] : []),
     '',
   ];
   if (cands.length === 0) {
     lines.push('⚠ 引擎查無合格候選——核准後會直接標記無人可補，交人工處理。');
   } else {
     lines.push(`合格候選 ${cands.length} 位（引擎排序，逐一詢問，每位等 ${req.timeout_min} 分鐘）：`);
-    cands.forEach((c, i) => lines.push(`${i + 1}. ${c.id}　${c.total}／${c.max} 分　${c.why}`));
+    cands.forEach((c, i) => {
+      lines.push(`${i + 1}. ${c.id}　${c.total}／${c.max} 分　${c.why}`);
+      if (!c.cov) return;
+      const lacks = c.cov.lacks || [];
+      lines.push(`　　${[
+        ...(c.cov.fills || []).map((x) => `✓ 補上 ${x}`),
+        ...(c.cov.still || []).map((x) => `⚠ 補上後仍缺 ${x}`),
+        ...(lacks.length ? lacks.map((t) => `⚠ ${t}（單位必備）`) : ['✓ 具備單位必備資格']),
+      ].join('；')}`);
+    });
   }
   lines.push('', '核准後機器人才會開口，序列即凍結；要略過、置頂、改逾時，先按「調整」（每一步留痕）。');
   const items = [
@@ -1000,9 +1014,17 @@ async function reportFlow({ p, reporter, reasonType, now, store, db, rand }) {
     return { reply: { text: `這筆缺班已有進行中的請求（${dup.id}，狀態：${dup.state}），不重複建立。`, items: null }, pushes: [] };
   }
   const { candidates } = platformEngine(db).evaluateGap(gap);
-  const cands = candidates.slice(0, SUB_TOP_N).map((c) => ({
+  // Phase 4a：每位候選的帶班與資格標籤在通報當下凍結（只標示，不改引擎排序；出錯只留痕，不擋通報）
+  const prof = await unitProfile(store, gap.unit);
+  let cov = null;
+  let coverageError = null;
+  if (prof.profile) {
+    try { cov = gapCoverage(prof.profile, gap, candidates, db); } catch (err) { coverageError = String((err && err.message) || err); }
+  }
+  const cands = candidates.slice(0, SUB_TOP_N).map((c, i) => ({
     id: c.staff.id, total: c.score.total, max: c.score.maxTotal,
     why: [...c.score.breakdown].sort((a, b) => b.points - a.points).slice(0, 2).map((b) => `${b.name} ${b.points}`).join('、'),
+    ...(cov ? { cov: cov.perCand[i] } : {}),
   }));
   const req = {
     id: genRequestId(now, rand), unit: gap.unit, date: gap.date, shift: gap.shift,
@@ -1012,7 +1034,10 @@ async function reportFlow({ p, reporter, reasonType, now, store, db, rand }) {
   };
   await store.createSubRequest(req);
   await store.appendAudit({ ts: now, actor: reporter.staff_id, action: 'sub.reported',
-    payload: { id: req.id, unit: gap.unit, date: gap.date, shift: gap.shift, candidates: cands.map((c) => c.id), timeoutMin: req.timeout_min } });
+    payload: { id: req.id, unit: gap.unit, date: gap.date, shift: gap.shift, candidates: cands.map((c) => c.id), timeoutMin: req.timeout_min,
+      profile: prof.profile ? prof.profile.fingerprint : null, profileSource: prof.source,
+      cov: cov ? { missing: cov.missing, benchDepth: cov.benchDepth } : null,
+      ...(coverageError ? { coverageError } : {}) } });
 
   const heads = await headsOf(store, gap.unit);
   const msg = approvalMessage(req);
@@ -1755,6 +1780,98 @@ async function requirementFlow({ text, actor, now, store }) {
   return { reply: { text: `已設定 ${UNITS[unit] || unit} 的生成需求：${requirementLabel(counts)}（原 ${requirementLabel(cur.counts)}）。下次截止生成草稿即以此為準；已生成的草稿不變。`, items: null }, pushes: [] };
 }
 
+/* ══ Phase 4a 帶班與資格覆蓋（唯讀報告；docs/CONTEXT.md「共用核心」、LINEBOT-STAGE1.md §6 第 4a 列）══════
+ *
+ * 單位設定檔接進兩條迴路，「算不算具備」一律由共用核心 competence.js 判定：
+ *   ・預班：草稿審核訊息加「帶班與資格」段——有排人的班中幾班缺 N3 以上帶班、舉例、點名臨床進階未登錄者
+ *   ・替班：前 5 位候選各附凍結的 cov（補上／仍缺／不具備的單位必備資格／可完整補回），核准推播據此加表頭與標籤
+ * 只標示、不重排、不擋核准：引擎排序、生成草稿、候選詢問一字不改；標籤只進主管訊息。
+ * 設定檔來源：D1 setting `profile.<unit>`（草稿 JSON，整份編譯、全有或全無；'off'＝關閉）→ data.js 的 UNIT_PROFILE_DRAFTS。
+ * 宿主沒載入 profile／demand／competence／coverage 四個模組時一律略過，訊息與沒有設定檔的單位一字不差。
+ */
+
+/** 四個模組都掛在全域才啟用（Worker、run-node、tests.html 有；AWS 版目前沒有） */
+function coverageReady() {
+  return typeof compileProfile === 'function' && typeof careDemand === 'function'
+    && typeof rosterCoverage === 'function' && typeof benchFor === 'function';
+}
+
+/**
+ * 單位設定檔 → { profile, source, problems }。source：setting 採用 D1 覆寫／default 程式內建預設／
+ * off 該單位關閉／none 無可用設定檔／unavailable 宿主沒載入模組。
+ * 覆寫有誤（P-JSON 或編譯的 P-… 代碼）整份不採用、回落內建預設，problems 保留給審核訊息與留痕。
+ */
+async function unitProfile(store, unit) {
+  if (!coverageReady()) return { profile: null, source: 'unavailable', problems: [] };
+  let raw = null;
+  if (store && typeof store.getSetting === 'function') {
+    try { raw = await store.getSetting(`profile.${unit}`); } catch { raw = null; }
+  }
+  let problems = [];
+  if (typeof raw === 'string' && raw.trim().toLowerCase() === 'off') return { profile: null, source: 'off', problems };
+  if (typeof raw === 'string' && raw.trim()) {
+    let draft;
+    try { draft = JSON.parse(raw); } catch { problems = [{ path: `profile.${unit}`, code: 'P-JSON', message: '設定值不是合法的 JSON' }]; }
+    if (!problems.length) {
+      let c;
+      try { c = compileProfile(draft); } catch { c = { ok: false, problems: [{ path: `profile.${unit}`, code: 'P-SHAPE', message: '設定檔結構無法編譯' }] }; }
+      if (c.ok && c.profile.unit === unit) return { profile: c.profile, source: 'setting', problems: [] };
+      problems = c.ok ? [{ path: 'unit', code: 'P-UNIT', message: `設定檔單位 ${c.profile.unit} 與 ${unit} 不符` }] : c.problems;
+    }
+  }
+  const drafts = typeof UNIT_PROFILE_DRAFTS === 'object' && UNIT_PROFILE_DRAFTS ? UNIT_PROFILE_DRAFTS : {};
+  const def = Object.prototype.hasOwnProperty.call(drafts, unit) ? compileProfile(drafts[unit]) : null;
+  if (def && def.ok) return { profile: def.profile, source: 'default', problems };
+  return { profile: null, source: 'none', problems };
+}
+
+/** '2026-10-01|E|WARD' → '10/01 小夜' */
+function slotWhen(slotId) {
+  const [date, shift] = String(slotId).split('|');
+  return `${date.slice(5).replace('-', '/')} ${(SHIFT_TYPES[shift] || {}).name || shift}`;
+}
+
+/** 預班草稿審核的「帶班與資格」段；cov＝closeAndGenerate 的 gen.coverage，prof＝編譯後的設定檔 */
+function coverageReviewLines(cov, prof) {
+  const t = cov.tally;
+  const label = (code) => (prof.competences[code] || {}).label || code;
+  const gaps = Object.keys(t.atLeast).map((code) => `${t.atLeast[code].length} 班缺 ${label(code)}`);
+  const must = Object.keys(t.allMust).map((code) => (t.allMust[code].length
+    ? `${label(code)}不符 ${t.allMust[code].length} 人次` : `每位在班者皆具 ${label(code)}`));
+  const short = [...new Set(Object.keys(t.atLeast).flatMap((code) => t.atLeast[code]))];
+  return [
+    `帶班與資格（單位設定檔 ${cov.fp}）：已排 ${t.staffed} 班${gaps.length ? `中 ${gaps.join('、')}` : ''}${must.map((m) => `；${m}`).join('')}`,
+    ...(short.length ? [`　例：${short.slice(0, 6).map(slotWhen).join('、')}（共 ${short.length} 班）`] : []),
+    ...(t.unrated.length ? [`臨床進階未登錄、不計為帶班：${t.unrated.join('、')}`] : []),
+    ...(cov.problems.length ? [`⚠ 單位設定檔 profile.${prof.unit} 有誤，暫用預設（${[...new Set(cov.problems.map((p) => p.code))].join('、')}）`] : []),
+    '（生成器尚未把帶班列為排班條件——此處只標示、不改草稿）',
+  ];
+}
+
+/**
+ * 替班：此班扣除通報人後缺哪些「至少幾位」能力（missing）、前 SUB_TOP_N 位候選各自的標籤（凍結進 candidates_json）、
+ * 全部合法候選中可完整補回者幾位（benchDepth，0＝不斷班警訊）。設定檔有多個崗位、或該日此班沒有對應的格時回 null。
+ */
+function gapCoverage(profile, gap, candidates, db) {
+  const posts = (profile.demand && profile.demand.posts) || [];
+  if (posts.length !== 1) return null;
+  const slot = careDemand(profile, { dates: [gap.date] }).find((s) => s.id === `${gap.date}|${gap.shift}|${posts[0].id}`);
+  if (!slot) return null;
+  const live = liveData(db);
+  const byId = new Map(live.staff.map((s) => [s.id, s]));
+  const onShift = live.shifts
+    .filter((s) => s.date === gap.date && s.shift === gap.shift && s.unit === gap.unit && s.staffId !== gap.originalStaffId)
+    .map((s) => byId.get(s.staffId)).filter(Boolean);
+  const label = (code) => (profile.competences[code] || {}).label || code;
+  const top = benchFor(profile, slot, onShift, candidates.slice(0, SUB_TOP_N).map((c) => c.staff), gap.date);
+  const before = candidateDelta(profile, slot, onShift, null, gap.date);   // 對「無人」補位：fills ∪ still＝補人前就缺的
+  return {
+    perCand: top.rows.map((r) => ({ fills: r.fills.map(label), still: r.still.map(label), lacks: r.lacks.map((b) => b.text), ok: r.restores })),
+    missing: [...before.fills, ...before.still],
+    benchDepth: benchFor(profile, slot, onShift, candidates.map((c) => c.staff), gap.date).depth,
+  };
+}
+
 async function closeAndGenerate(cycle, now, store, actor) {
   const rows = await store.listPrebookRequests(cycle.id);
   const pending = rows.filter((r) => r.state === 'PENDING');
@@ -1773,12 +1890,29 @@ async function closeAndGenerate(cycle, now, store, actor) {
   const req = await unitRequirements(store, cycle.unit);
   const gen = platformEngine(db).generateSchedule({ unit: cycle.unit, dates, requirements: requirementsFor(cycle.unit, req.counts) });
   gen.requirementCounts = req.counts;
+  // Phase 4a：本月本單位既有班次＋草稿 → 帶班與資格覆蓋（唯讀；出錯只留痕，不擋生成與審核）
+  const prof = await unitProfile(store, cycle.unit);
+  let coverageError = null;
+  if (prof.profile) {
+    try {
+      const live = liveData(db);
+      const rows = [...live.shifts.filter((s) => s.unit === cycle.unit && String(s.date).startsWith(cycle.month)), ...gen.assignments];
+      const rc = rosterCoverage(prof.profile, careDemand(prof.profile, { dates }), rows, live.staff);
+      gen.coverage = { fp: prof.profile.fingerprint, source: prof.source, problems: prof.problems, tally: rc.tally, unmapped: rc.unmapped, profile: prof.profile };
+    } catch (err) { coverageError = String((err && err.message) || err); }
+  }
+  const lengths = (o) => Object.fromEntries(Object.keys(o).map((k) => [k, o[k].length]));
+  const ct = gen.coverage && gen.coverage.tally;
   await store.updateCycle(cycle.id, {
     state: 'REVIEW', generated_at: now,
     draft_json: JSON.stringify(gen.assignments), uncovered_json: JSON.stringify(gen.uncovered),
   });
   await store.appendAudit({ ts: now, actor: null, action: 'prebook.generated',
-    payload: { cycle: cycle.id, filled: gen.filled, slots: gen.slotCount, uncovered: gen.uncovered.length, requirements: req.counts, requirementSource: req.source } });
+    payload: { cycle: cycle.id, filled: gen.filled, slots: gen.slotCount, uncovered: gen.uncovered.length, requirements: req.counts, requirementSource: req.source,
+      profile: prof.profile ? prof.profile.fingerprint : null, profileSource: prof.source, profileProblems: prof.problems.map((p) => p.code),
+      coverage: ct ? { staffed: ct.staffed, empty: ct.empty, conflict: ct.conflict, atLeast: lengths(ct.atLeast), allMust: lengths(ct.allMust),
+        unmapped: gen.coverage.unmapped.length, unrated: ct.unrated.length } : null,
+      ...(coverageError ? { coverageError } : {}) } });
   const fresh = await store.getCycle(cycle.id);
   const heads = await headsOf(store, cycle.unit);
   const msg = reviewMessage(fresh, gen);
@@ -1796,6 +1930,7 @@ function reviewMessage(cycle, gen) {
     ...unc.slice(0, 8).map((u) => `　・${u.date.slice(5).replace('-', '/')} ${SHIFT_TYPES[u.shift] ? SHIFT_TYPES[u.shift].name : u.shift}——${(u.blockers || []).map((b) => `${b.code}×${b.count}`).join('、')}`),
     ...(unc.length > 8 ? [`　…另 ${unc.length - 8} 格`] : []),
     '',
+    ...(gen && gen.coverage ? [...coverageReviewLines(gen.coverage, gen.coverage.profile), ''] : []),
     '核准即寫入正式班表並公告全單位；要調整請先到平台改，改完再核准。',
   ];
   return {
@@ -1909,6 +2044,8 @@ if (typeof module !== 'undefined' && module.exports) {
     PLATFORM_LOGIN_RE, platformLoginMessage,
     // Phase 3d 平台編輯寫回
     SHIFT_SOURCES, shiftKey, shiftSourceOf, validateShiftRows, diffShifts, shiftRowForPlatform,
+    // Phase 4a 帶班與資格覆蓋（唯讀報告）
+    coverageReady, unitProfile, slotWhen, coverageReviewLines, gapCoverage,
     // 管理者：身分切換捷徑與綁定後引導
     ADMIN_SWITCH_RE, adminSwitchFlow, nextStepsFor, padStaffId,
   };

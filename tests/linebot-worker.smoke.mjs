@@ -195,6 +195,9 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   const row = db.prepare('SELECT * FROM sub_request WHERE id = ?').get(rq);
   step('D1 sub_request＝REPORTED、原班人員＝通報者、候選序列已凍結存檔', row && row.state === 'REPORTED' && row.original_staff_id === 'N-02' && JSON.parse(row.candidates_json).length > 1);
   const cands = JSON.parse(row.candidates_json);
+  // Phase 4a：Worker 載入了設定檔四模組，標籤才會在通報當下凍結進 D1（缺模組時靜默略過，這一步就會紅）
+  step('D1 候選序列每位附 cov（設定檔模組已載入 Worker）', cands.every((c) => c.cov && Array.isArray(c.cov.fills) && Array.isArray(c.cov.still)
+    && Array.isArray(c.cov.lacks) && typeof c.cov.ok === 'boolean'), row.candidates_json.slice(0, 200));
 
   await worker.fetch(signed([pb(OTHER, encodeParams({ rq, act: 'approve' }), 2)]), envD1);
   step('通報者（staff）自己按核准 → 權責閘擋下', /核准／調整替班.*護理長以上/.test(replyText()), replyText());
@@ -433,6 +436,7 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
   const reviewPushes = pushes().filter((p) => /11 月班表草稿/.test(p.messages[0].text));
   const headsMed = db.prepare("SELECT COUNT(*) AS n FROM identity WHERE unit = 'MED-3A' AND tier IN ('head','exec')").get().n;
   step(`草稿通知推給本單位護理長（${headsMed} 人），附核准／暫緩鍵`, reviewPushes.length === headsMed && reviewPushes.every((p) => p.messages[0].quickReply.items.length === 2), `got ${reviewPushes.length}`);
+  step('11 月草稿推播含「帶班與資格（單位設定檔 p-」', reviewPushes.length > 0 && reviewPushes.every((p) => p.messages[0].text.includes('帶班與資格（單位設定檔 p-')), reviewPushes[0]?.messages[0].text || 'no push');
   const publishData = reviewPushes[0].messages[0].quickReply.items[0].action.data;
   const holdData = reviewPushes[0].messages[0].quickReply.items[1].action.data;
 

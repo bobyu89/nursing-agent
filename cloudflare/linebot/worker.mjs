@@ -33,10 +33,15 @@ import rules from '../../src/rules.js';
 import engineMod from '../../src/engine.js';
 import llm from '../../src/llm.js';
 import botcore from '../../src/botcore.js';
+// Phase 4a 帶班與資格覆蓋：單位設定檔、每格需求、能力判定核心、覆蓋檢核（botcore 以全域呼叫；缺了就靜默略過）
+import profileMod from '../../src/profile.js';
+import demandMod from '../../src/demand.js';
+import competenceMod from '../../src/competence.js';
+import coverageMod from '../../src/coverage.js';
 import { createD1Store, userHash, sha256Hex } from './store-d1.mjs';
 
 // 依 index.html 的載入語義把全域掛回（與 tests/run-node.js 同一招）
-Object.assign(globalThis, data, rules, engineMod, llm, botcore);
+Object.assign(globalThis, data, rules, engineMod, llm, botcore, profileMod, demandMod, competenceMod, coverageMod);
 
 /* ── 濫用防護（偵測 → 應對 → 告警）────────────────────────
  * 白名單：ALLOWED_USERS（逗號分隔的 LINE userId）設定後，名單外的使用者
