@@ -366,7 +366,8 @@ step('cron 後已用的碼被清掉', !db.prepare('SELECT 1 FROM bind_code WHERE
 /* ── 8⅞. Phase 2 預班迴路：開啟 → 預假 → 進度 → cron 催繳 → cron 截止生成 → 暫緩 → 公告寫回 ── */
 {
   // worker 的 nowIso 來自 new Date()，只改 Date.now 跳不動時鐘；換成整個 Date（無參數建構＝假時間），段末還原
-  const RealDate = Date; let skew = 0; let jump = null;
+  // 起點釘在 2026-09-20（台北 9/20 08:00）：本段寫死「開啟預班 11月」、截止 10/25，若跟著真實時鐘走，過了截止日整段就會變紅
+  const RealDate = Date; let skew = 0; let jump = Date.parse('2026-09-20T00:00:00.000Z');
   class FakeDate extends RealDate {
     constructor(...a) { super(...(a.length ? a : [FakeDate.now()])); }
     static now() { return (jump ?? RealDate.now()) + (skew += 7000); }
